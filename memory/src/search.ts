@@ -19,7 +19,7 @@ export async function search(query: string, limit: number = 10): Promise<SearchR
        FROM memory_vec e
        JOIN memories m ON m.id = e.rowid
        ORDER BY distance ASC
-       LIMIT ?`
+       LIMIT CAST(? AS INTEGER)`
     )
     .all(buf, limit) as Array<{ content: string; category: string; created_at: string; distance: number }>;
 
