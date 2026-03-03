@@ -1,0 +1,39 @@
+# {{PROJECT_NAME}}
+
+## Overview
+{{DESCRIPTION}}
+
+## Stack
+- **Framework**: {{FRAMEWORK}}
+- **Language**: {{LANGUAGE}}
+- **Deployment**: {{DEPLOYMENT}}
+
+## Structure
+{{STRUCTURE}}
+
+## Development
+
+### Setup
+```bash
+{{SETUP_COMMANDS}}
+```
+
+### Dev Server
+```bash
+{{DEV_COMMAND}}
+```
+
+### Build
+```bash
+{{BUILD_COMMAND}}
+```
+
+## Key Files
+- {{KEY_FILES}}
+
+## Conventions
+- Follow existing patterns in the codebase
+- See ~/.claude/rules/ for global rules (defensive engineering, security, testing)
+
+## Known Issues
+- {{KNOWN_ISSUES}}

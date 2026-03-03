@@ -1,0 +1,6 @@
+node_modules/
+memory/db/*.sqlite
+memory/db/*.sqlite-*
+memory/dist/
+.DS_Store
+*.log

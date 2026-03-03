@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "75",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "64000"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "file=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r '.file_path // empty'); case \"$file\" in *.env*|*secrets/*|*.key|*.pem) echo 'BLOCKED: writes to secrets files not allowed' >&2; exit 2 ;; esac"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Glass.aiff &",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "showTurnDuration": true,
+  "statusLine": {
+    "type": "command",
+    "command": "bash /Users/keiy/.claude/statusline.sh"
+  },
+  "enabledPlugins": {
+    "ralph-loop@claude-plugins-official": false,
+    "playwright@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "vercel@claude-plugins-official": false,
+    "figma-to-code@claude-plugins-official": true,
+    "superpowers@superpowers-marketplace": true,
+    "static-analysis@trailofbits": true,
+    "semgrep-rule-creator@trailofbits": true,
+    "audit-context-building@trailofbits": true,
+    "insecure-defaults@trailofbits": true
+  },
+  "extraKnownMarketplaces": {
+    "superpowers-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "obra/superpowers-marketplace"
+      }
+    },
+    "trailofbits": {
+      "source": {
+        "source": "github",
+        "repo": "trailofbits/skills"
+      }
+    }
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "effortLevel": "low"
+}

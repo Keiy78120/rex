@@ -1,0 +1,3 @@
+-- Add to ~/.hammerspoon/init.lua:
+-- local rex = dofile(os.getenv("HOME") .. "/Documents/Developer/_config/rex/activity/init.lua")
+-- rex.start()
