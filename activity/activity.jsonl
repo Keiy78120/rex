@@ -117,3 +117,104 @@
 {"app":"Terminal","duration":3,"date":"2026-03-03 17:18:08","ended":1772554688,"started":1772554685}
 {"app":"Code","duration":2,"date":"2026-03-03 17:18:10","ended":1772554690,"started":1772554688}
 {"app":"‎WhatsApp","duration":98,"date":"2026-03-03 17:19:48","ended":1772554788,"started":1772554690}
+{"app":"Code","duration":63,"date":"2026-03-03 17:20:51","ended":1772554851,"started":1772554788}
+{"app":"Terminal","duration":30,"date":"2026-03-03 17:21:21","ended":1772554881,"started":1772554851}
+{"app":"Code","duration":1,"date":"2026-03-03 17:21:22","ended":1772554882,"started":1772554881}
+{"app":"Terminal","duration":151,"date":"2026-03-03 17:23:53","ended":1772555033,"started":1772554882}
+{"app":"Code","duration":14,"date":"2026-03-03 17:24:07","ended":1772555047,"started":1772555033}
+{"app":"Google Chrome","duration":2,"date":"2026-03-03 17:24:09","ended":1772555049,"started":1772555047}
+{"app":"Code","duration":1,"date":"2026-03-03 17:24:10","ended":1772555050,"started":1772555049}
+{"app":"Terminal","duration":19,"date":"2026-03-03 17:24:29","ended":1772555069,"started":1772555050}
+{"app":"Code","duration":8,"date":"2026-03-03 17:24:37","ended":1772555077,"started":1772555069}
+{"app":"UserNotificationCenter","duration":5,"date":"2026-03-03 17:24:42","ended":1772555082,"started":1772555077}
+{"app":"Code","duration":1,"date":"2026-03-03 17:24:43","ended":1772555083,"started":1772555082}
+{"app":"Terminal","duration":1,"date":"2026-03-03 17:24:44","ended":1772555084,"started":1772555083}
+{"app":"Code","duration":9,"date":"2026-03-03 17:24:53","ended":1772555093,"started":1772555084}
+{"app":"Terminal","duration":11,"date":"2026-03-03 17:25:04","ended":1772555104,"started":1772555093}
+{"app":"UserNotificationCenter","duration":0,"date":"2026-03-03 17:25:04","ended":1772555104,"started":1772555104}
+{"app":"Code","duration":5,"date":"2026-03-03 17:25:09","ended":1772555109,"started":1772555104}
+{"app":"Terminal","duration":5,"date":"2026-03-03 17:25:14","ended":1772555114,"started":1772555109}
+{"app":"Code","duration":17,"date":"2026-03-03 17:25:31","ended":1772555131,"started":1772555114}
+{"app":"Terminal","duration":2,"date":"2026-03-03 17:25:33","ended":1772555133,"started":1772555131}
+{"app":"‎WhatsApp","duration":25,"date":"2026-03-03 17:25:58","ended":1772555158,"started":1772555133}
+{"app":"Terminal","duration":7,"date":"2026-03-03 17:26:05","ended":1772555165,"started":1772555158}
+{"app":"Code","duration":167,"date":"2026-03-03 17:28:52","ended":1772555332,"started":1772555165}
+{"app":"Terminal","duration":5,"date":"2026-03-03 17:28:57","ended":1772555337,"started":1772555332}
+{"app":"Code","duration":31,"date":"2026-03-03 17:29:28","ended":1772555368,"started":1772555337}
+{"app":"Terminal","duration":8,"date":"2026-03-03 17:29:36","ended":1772555376,"started":1772555368}
+{"app":"Code","duration":47,"date":"2026-03-03 17:30:23","ended":1772555423,"started":1772555376}
+{"app":"Terminal","duration":2,"date":"2026-03-03 17:30:25","ended":1772555425,"started":1772555423}
+{"app":"Code","duration":135,"date":"2026-03-03 17:32:40","ended":1772555560,"started":1772555425}
+{"app":"Google Chrome","duration":30,"date":"2026-03-03 17:33:10","ended":1772555590,"started":1772555560}
+{"app":"Code","duration":105,"date":"2026-03-03 17:34:55","ended":1772555695,"started":1772555590}
+{"app":"Terminal","duration":4,"date":"2026-03-03 17:34:59","ended":1772555699,"started":1772555695}
+{"app":"Code","duration":25,"date":"2026-03-03 17:35:24","ended":1772555724,"started":1772555699}
+{"app":"Terminal","duration":1,"date":"2026-03-03 17:35:25","ended":1772555725,"started":1772555724}
+{"app":"Code","duration":32,"date":"2026-03-03 17:35:57","ended":1772555757,"started":1772555725}
+{"app":"Google Chrome","duration":15,"date":"2026-03-03 17:36:12","ended":1772555772,"started":1772555757}
+{"app":"Code","duration":3,"date":"2026-03-03 17:36:15","ended":1772555775,"started":1772555772}
+{"app":"Google Chrome","duration":32,"date":"2026-03-03 17:36:47","ended":1772555807,"started":1772555775}
+{"app":"Code","duration":21,"date":"2026-03-03 17:37:08","ended":1772555828,"started":1772555807}
+{"app":"Google Chrome","duration":15,"date":"2026-03-03 17:37:23","ended":1772555843,"started":1772555828}
+{"app":"Code","duration":38,"date":"2026-03-03 17:38:01","ended":1772555881,"started":1772555843}
+{"app":"Google Chrome","duration":3,"date":"2026-03-03 17:38:04","ended":1772555884,"started":1772555881}
+{"app":"Code","duration":14,"date":"2026-03-03 17:38:18","ended":1772555898,"started":1772555884}
+{"app":"Google Chrome","duration":51,"date":"2026-03-03 17:39:09","ended":1772555949,"started":1772555898}
+{"app":"Code","duration":3,"date":"2026-03-03 17:39:12","ended":1772555952,"started":1772555949}
+{"app":"Google Chrome","duration":10,"date":"2026-03-03 17:39:22","ended":1772555962,"started":1772555952}
+{"app":"Code","duration":73,"date":"2026-03-03 17:40:35","ended":1772556035,"started":1772555962}
+{"app":"Google Chrome","duration":1,"date":"2026-03-03 17:40:36","ended":1772556036,"started":1772556035}
+{"app":"Code","duration":5,"date":"2026-03-03 17:40:41","ended":1772556041,"started":1772556036}
+{"app":"Terminal","duration":15,"date":"2026-03-03 17:40:56","ended":1772556056,"started":1772556041}
+{"app":"Code","duration":244,"date":"2026-03-03 17:45:00","ended":1772556300,"started":1772556056}
+{"app":"‎WhatsApp","duration":84,"date":"2026-03-03 17:46:24","ended":1772556384,"started":1772556300}
+{"app":"Code","duration":1,"date":"2026-03-03 17:46:25","ended":1772556385,"started":1772556384}
+{"app":"‎WhatsApp","duration":7,"date":"2026-03-03 17:46:32","ended":1772556392,"started":1772556385}
+{"app":"Code","duration":4,"date":"2026-03-03 17:46:36","ended":1772556396,"started":1772556392}
+{"app":"loginwindow","duration":1752,"date":"2026-03-03 18:15:48","ended":1772558148,"started":1772556396}
+{"app":"Code","duration":10,"date":"2026-03-03 18:15:58","ended":1772558158,"started":1772558148}
+{"app":"Google Chrome","duration":3,"date":"2026-03-03 18:16:01","ended":1772558161,"started":1772558158}
+{"app":"Code","duration":85,"date":"2026-03-03 18:17:26","ended":1772558246,"started":1772558161}
+{"app":"Google Chrome","duration":9,"date":"2026-03-03 18:17:35","ended":1772558255,"started":1772558246}
+{"app":"Code","duration":11,"date":"2026-03-03 18:17:46","ended":1772558266,"started":1772558255}
+{"app":"Google Chrome","duration":4,"date":"2026-03-03 18:17:50","ended":1772558270,"started":1772558266}
+{"app":"Code","duration":4,"date":"2026-03-03 18:17:54","ended":1772558274,"started":1772558270}
+{"app":"Google Chrome","duration":0,"date":"2026-03-03 18:17:54","ended":1772558274,"started":1772558274}
+{"app":"Code","duration":1,"date":"2026-03-03 18:17:55","ended":1772558275,"started":1772558274}
+{"app":"Google Chrome","duration":2,"date":"2026-03-03 18:17:57","ended":1772558277,"started":1772558275}
+{"app":"Code","duration":119,"date":"2026-03-03 18:19:56","ended":1772558396,"started":1772558277}
+{"app":"Google Chrome","duration":6,"date":"2026-03-03 18:20:02","ended":1772558402,"started":1772558396}
+{"app":"Code","duration":6,"date":"2026-03-03 18:20:08","ended":1772558408,"started":1772558402}
+{"app":"Google Chrome","duration":3,"date":"2026-03-03 18:20:11","ended":1772558411,"started":1772558408}
+{"app":"Code","duration":29,"date":"2026-03-03 18:20:40","ended":1772558440,"started":1772558411}
+{"app":"Google Chrome","duration":3,"date":"2026-03-03 18:20:43","ended":1772558443,"started":1772558440}
+{"app":"Code","duration":14,"date":"2026-03-03 18:20:57","ended":1772558457,"started":1772558443}
+{"app":"Google Chrome","duration":4,"date":"2026-03-03 18:21:01","ended":1772558461,"started":1772558457}
+{"app":"DockDoor","duration":1,"date":"2026-03-03 18:21:02","ended":1772558462,"started":1772558461}
+{"app":"Google Chrome","duration":2,"date":"2026-03-03 18:21:04","ended":1772558464,"started":1772558462}
+{"app":"Google Chrome","duration":1,"date":"2026-03-03 18:21:05","ended":1772558465,"started":1772558464}
+{"app":"Code","duration":10,"date":"2026-03-03 18:21:15","ended":1772558475,"started":1772558465}
+{"app":"Google Chrome","duration":3,"date":"2026-03-03 18:21:18","ended":1772558478,"started":1772558475}
+{"app":"Code","duration":27,"date":"2026-03-03 18:21:45","ended":1772558505,"started":1772558478}
+{"app":"Google Chrome","duration":1,"date":"2026-03-03 18:21:46","ended":1772558506,"started":1772558505}
+{"app":"Code","duration":1,"date":"2026-03-03 18:21:47","ended":1772558507,"started":1772558506}
+{"app":"Terminal","duration":77,"date":"2026-03-03 18:23:04","ended":1772558584,"started":1772558507}
+{"app":"Code","duration":15,"date":"2026-03-03 18:23:19","ended":1772558599,"started":1772558584}
+{"app":"Terminal","duration":4,"date":"2026-03-03 18:23:23","ended":1772558603,"started":1772558599}
+{"app":"Code","duration":7,"date":"2026-03-03 18:23:30","ended":1772558610,"started":1772558603}
+{"app":"Terminal","duration":10,"date":"2026-03-03 18:23:40","ended":1772558620,"started":1772558610}
+{"app":"Code","duration":9,"date":"2026-03-03 18:23:49","ended":1772558629,"started":1772558620}
+{"app":"Google Chrome","duration":4,"date":"2026-03-03 18:23:53","ended":1772558633,"started":1772558629}
+{"app":"Code","duration":64,"date":"2026-03-03 18:24:57","ended":1772558697,"started":1772558633}
+{"app":"Google Chrome","duration":4,"date":"2026-03-03 18:25:01","ended":1772558701,"started":1772558697}
+{"app":"Code","duration":1,"date":"2026-03-03 18:25:02","ended":1772558702,"started":1772558701}
+{"app":"Google Chrome","duration":0,"date":"2026-03-03 18:25:02","ended":1772558702,"started":1772558702}
+{"app":"Code","duration":0,"date":"2026-03-03 18:25:02","ended":1772558702,"started":1772558702}
+{"app":"Google Chrome","duration":1,"date":"2026-03-03 18:25:03","ended":1772558703,"started":1772558702}
+{"app":"Code","duration":1,"date":"2026-03-03 18:25:04","ended":1772558704,"started":1772558703}
+{"app":"Terminal","duration":51,"date":"2026-03-03 18:25:55","ended":1772558755,"started":1772558704}
+{"app":"Code","duration":1,"date":"2026-03-03 18:25:56","ended":1772558756,"started":1772558755}
+{"app":"Terminal","duration":14,"date":"2026-03-03 18:26:10","ended":1772558770,"started":1772558756}
+{"app":"Code","duration":12,"date":"2026-03-03 18:26:22","ended":1772558782,"started":1772558770}
+{"app":"Terminal","duration":0,"date":"2026-03-03 18:26:22","ended":1772558782,"started":1772558782}
+{"app":"Code","duration":6,"date":"2026-03-03 18:26:28","ended":1772558788,"started":1772558782}

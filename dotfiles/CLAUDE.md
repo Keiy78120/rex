@@ -74,6 +74,13 @@ Avant d'écrire du code, cocher chacun de ces 7 points :
 
 See `~/.claude/rules/defensive-engineering.md` for full details.
 
+## Documentation-First (CRITICAL)
+
+Avant de coder avec un framework/lib, lire `~/.claude/docs/{framework}.md` si existant, sinon fetcher via Context7.
+Après chaque projet, sauvegarder les patterns/gotchas découverts dans `~/.claude/docs/`.
+IMPORTANT : ne JAMAIS lire les fichiers docs/ au démarrage — uniquement quand le framework est pertinent pour la tâche.
+See `~/.claude/rules/docs-first.md` for details.
+
 ## Optimisation tokens
 
 - Sous-agents pour la recherche lourde (garde le contexte principal propre)
@@ -122,3 +129,4 @@ Rules directory: `~/.claude/rules/`
 - `testing.md` — Test discipline, build verification, mocking
 - `git-workflow.md` — Commit conventions, branching, PR process
 - `never-assume.md` — What never to assume, alternatives, mistake tracking
+- `docs-first.md` — Documentation-first rule, local cache, Context7/SiteMCP usage
