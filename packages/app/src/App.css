@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+:root {
+  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: white;
+}

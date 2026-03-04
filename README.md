@@ -152,8 +152,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 - [x] Core checks engine
 - [x] CLI (`rex doctor`, `rex status`)
 - [ ] Menubar app (Tauri v2)
-- [ ] Voice transcription (Whisper)
-- [ ] Semantic search across sessions
+- [ ] Voice transcription (two-pass Whisper, local)
+- [ ] Audio logger — listen to all your meetings, WhatsApp calls, Discord on your Mac. Never forget anything. Everything is transcribed, summarized, and searchable.
+- [ ] Semantic search across sessions, transcriptions, and memory
+- [ ] Personal RAG — all your data indexed and ready for fine-tuning personal LLMs
 - [ ] `npx rex install` one-click setup
 - [ ] Homebrew cask
 
