@@ -1,19 +1,41 @@
 {
   "name": "rex-cli",
   "version": "0.1.0",
+  "description": "Claude Code sous steroides — guards, health checks, memory RAG",
   "type": "module",
   "bin": {
     "rex": "./dist/index.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
-    "dev": "tsup --watch"
+    "dev": "tsup --watch",
+    "postinstall": "node dist/index.js init 2>/dev/null || true"
   },
-  "dependencies": {
-    "@rex/core": "workspace:*"
+  "keywords": [
+    "claude",
+    "claude-code",
+    "llm",
+    "developer-tools",
+    "productivity",
+    "ai-assistant",
+    "guards",
+    "hooks"
+  ],
+  "author": "Kevin <kevin@dstudio.company>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Keiy78120/rex"
+  },
+  "homepage": "https://github.com/Keiy78120/rex#readme",
+  "engines": {
+    "node": ">=20"
   },
   "devDependencies": {
+    "@rex/core": "workspace:*",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",
     "@types/node": "^22.0.0"

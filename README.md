@@ -5,56 +5,67 @@
 <h1 align="center">REX</h1>
 
 <p align="center">
-  <strong>Claude Code productivity centralizer</strong><br>
-  Monitoring, voice transcription & semantic search in your menubar.
+  <strong>Claude Code sous steroides</strong><br>
+  Guards, health checks, memory RAG — zero config, one command.
 </p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/rex-cli"><img src="https://img.shields.io/npm/v/rex-cli?color=blue&label=npm" alt="npm" /></a>
-  <a href="https://github.com/Keiy78120/rex/releases"><img src="https://img.shields.io/github/v/release/Keiy78120/rex?label=app" alt="release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="license" /></a>
-  <a href="https://github.com/Keiy78120/rex/actions"><img src="https://img.shields.io/github/actions/workflow/status/Keiy78120/rex/ci.yml?label=CI" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/zero_dependencies-black" alt="zero deps" />
+  <img src="https://img.shields.io/badge/size-10KB-brightgreen" alt="size" />
 </p>
 
 ---
 
-## What is REX?
+## The Problem
 
-REX monitors your [Claude Code](https://docs.anthropic.com/en/docs/claude-code) setup and gives you instant visibility into your config health, MCP servers, plugins, hooks, memory, and more — all from your macOS menubar.
+Claude Code (Opus, Sonnet) makes the same mistakes over and over:
 
-It also includes a built-in **voice transcription** powered by Whisper, running 100% locally on your machine.
+- **70% problem** — declares "done" with TODOs and empty functions left behind
+- **Missing UI states** — generates the happy path, forgets loading/error/empty
+- **Test modification** — changes test assertions instead of fixing the code
+- **Scope creep** — touches 15+ files when you asked for one change
+- **Dangerous commands** — runs `rm -rf`, `git push --force main`, `--no-verify`
+- **Context loss** — forgets everything after compaction
 
-### Features
-
-- **Zero config** — auto-detects `~/.claude/`, starts monitoring immediately
-- **Health checks** — config, rules, memory, MCP servers, plugins, hooks, docs cache, environment
-- **Voice transcription** — press `Option+Space`, speak, get text in your clipboard
-- **Two-pass Whisper** — instant draft (tiny model) + accurate replacement (large model), automatic
-- **Code-aware** — detects `camelCase`, `snake_case`, keywords, and formats them as code
-- **Semantic search** — find anything across sessions, transcriptions, and memory
-- **Privacy-first** — everything runs locally, nothing leaves your machine
-- **One-click install** — `npx rex install` and you're done
+REX fixes all of this automatically via Claude Code hooks.
 
 ## Install
 
 ```bash
-# CLI + menubar app
-npx rex install
-
-# CLI only
 npm install -g rex-cli
-
-# Or download the .dmg from Releases
+rex init
 ```
 
-## CLI Usage
+That's it. Everything is automatic after `rex init`:
+
+- 6 guard hooks installed into `~/.claude/settings.json`
+- Session auto-save on exit
+- Context injection on session start
+- Health monitoring ready
+
+## What REX Does
+
+### Guard System (automatic, zero config)
+
+REX installs 6 shell-based hooks that run automatically during Claude Code sessions:
+
+| Guard | Hook | What it prevents |
+|-------|------|-----------------|
+| **Completion Guard** | `Stop` | Scans modified files for TODO/FIXME/empty functions before Claude stops |
+| **Dangerous Command Guard** | `PreToolUse` | Blocks `rm -rf /`, `git push --force main`, `--no-verify`, `DROP TABLE` |
+| **Test Protector** | `PostToolUse` | Warns when test assertions are modified (fix the code, not the tests) |
+| **UI Checklist** | `PostToolUse` | Checks `.tsx`/`.jsx` components for loading, error, and empty states |
+| **Scope Guard** | `PostToolUse` | Alerts when >8 files modified (scope creep detection) |
+| **Session Summary** | `Stop` | Auto-saves git state, branch, modified files to memory |
+
+Guards run in the background — you don't see them unless they catch something.
+
+### Health Checks (9 categories, 55+ checks)
 
 ```bash
-# Full health check
 rex doctor
-
-# Quick status
-rex status
 ```
 
 ```
@@ -62,102 +73,102 @@ rex status
         REX DOCTOR — Health Check
 ═════════════════════════════════════════════
 
-  ⚙ Config  3/3
-    ✓ CLAUDE.md — Present and non-empty
-    ✓ settings.json — Valid JSON
-    ✓ vault.md — Present
-
-  📏 Rules  8/8
-    ✓ api-design.md — Present and non-empty
-    ✓ defensive-engineering.md — Present and non-empty
-    ...
+  ⚙ Config       3/3
+  📏 Rules        8/8
+  🧠 Memory      16/16
+  🔌 MCP Servers  1/1
+  🧩 Plugins      3/3
+  🪝 Hooks        6/6
+  🛡 Guards       6/6
+  📚 Docs Cache   7/7
+  💻 Environment  5/5
 
 ─────────────────────────────────────────────
-  Summary: 42/42 checks passed
+  Summary: 55/55 checks passed
   Status:  HEALTHY
 ═════════════════════════════════════════════
 ```
 
-## Menubar App
+### Quick Status
 
-A lightweight macOS menubar app that shows your Claude Code health at a glance.
-
-```
-┌─────────────────────────────────┐
-│  ● REX              Healthy     │
-│  v0.1.0         last: 2m ago    │
-├─────────────────────────────────┤
-│  ▸ Config          8/8  ✓      │
-│  ▸ MCP Servers     3/3  ✓      │
-│  ▸ Plugins         3/3  ✓      │
-│  ▸ Hooks           3/3  ✓      │
-│  ▸ Docs Cache      7 files     │
-│  ▸ Memory          4 files     │
-│  ▸ Voice     ⌥Space to talk    │
-├─────────────────────────────────┤
-│  ⚙ Settings     Run Doctor      │
-└─────────────────────────────────┘
+```bash
+rex status
+# REX ● HEALTHY — 55/55 checks passed
 ```
 
-Built with [Tauri v2](https://v2.tauri.app/) — native macOS performance, tiny footprint (~15MB + models).
+### Memory & RAG (optional, requires Ollama)
+
+```bash
+# Sync all Claude Code sessions into vector DB
+rex ingest
+
+# Semantic search across past sessions
+rex search "cloudflare workers rate limiting"
+
+# Analyze CLAUDE.md with local LLM
+rex optimize
+```
+
+Requires [Ollama](https://ollama.ai) + `nomic-embed-text` model.
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `rex init` | One-click setup — installs guards, hooks, MCP server |
+| `rex doctor` | Full health check (9 categories) |
+| `rex status` | Quick one-line status |
+| `rex ingest` | Sync sessions to vector DB (requires Ollama) |
+| `rex search <query>` | Semantic search across memory (requires Ollama) |
+| `rex optimize` | Analyze CLAUDE.md with local LLM (requires Ollama) |
 
 ## Architecture
 
 ```
-rex/
-├── packages/
-│   ├── core/     # Shared checks engine (TypeScript)
-│   ├── cli/      # CLI tool — rex doctor, rex status
-│   └── app/      # Tauri v2 + React menubar app
-│       └── src-tauri/
-│           └── whisper/  # whisper.cpp embedded (Rust)
+rex-cli (npm)          — CLI tool, zero dependencies, 10KB
+├── Guards (6x)        — Shell scripts installed to ~/.claude/rex-guards/
+├── Health Engine      — 9 check categories, 55+ individual checks
+└── Hooks              — SessionStart, SessionEnd, Stop, PreToolUse, PostToolUse
 ```
 
-Monorepo powered by pnpm workspaces.
+The CLI is a single JavaScript file with all checks bundled. No runtime dependencies.
 
-| Component | Tech |
-|-----------|------|
-| App | Tauri v2, React 19, Tailwind CSS 4 |
-| Transcription | whisper.cpp via whisper-rs (local, CoreML on Apple Silicon) |
-| Storage | SQLite + sqlite-vec (vector search) |
-| CLI | TypeScript, npm |
-| Core | TypeScript shared library |
+Guard scripts are plain bash — readable, auditable, modifiable. Find them in `~/.claude/rex-guards/`.
 
-## Voice Transcription
+## How Guards Work
 
-REX includes a built-in SuperWhisper-like voice transcription:
+REX uses [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) — shell commands that run at specific lifecycle points:
 
-1. Press **`Option+Space`** anywhere
-2. Speak naturally
-3. Text is copied to your clipboard
+```
+User prompt → PreToolUse → [Claude works] → PostToolUse → Stop
+                  ↑                              ↑           ↑
+          dangerous-cmd-guard         test-protect-guard   completion-guard
+                                      ui-checklist-guard   session-summary
+                                      scope-guard
+```
 
-**Two-pass pipeline** (automatic, zero config):
-- **Pass 1** — Whisper Tiny (75MB, bundled): instant draft while you speak
-- **Pass 2** — Whisper Large V3 Turbo (auto-downloaded on first use): replaces with accurate text
-
-**Code detection**: automatically wraps `camelCase`, `snake_case`, and known programming keywords in backticks.
+Guards output warnings to Claude's context. They don't block Claude (except `dangerous-cmd-guard` which returns `{"decision": "block"}` for truly destructive commands).
 
 ## Requirements
 
-- macOS 13+ (Ventura or later)
-- Apple Silicon or Intel Mac
-- Node.js 20+ (for CLI)
+- Node.js 20+
+- Claude Code installed
+- macOS / Linux (bash required for guards)
 
-## Contributing
+**Optional (for memory features):**
+- [Ollama](https://ollama.ai) running locally
+- `ollama pull nomic-embed-text`
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+## Customization
 
-## Roadmap
+Guards live in `~/.claude/rex-guards/`. Edit any `.sh` file to customize behavior:
 
-- [x] Core checks engine
-- [x] CLI (`rex doctor`, `rex status`)
-- [ ] Menubar app (Tauri v2)
-- [ ] Voice transcription (two-pass Whisper, local)
-- [ ] Audio logger — listen to all your meetings, WhatsApp calls, Discord on your Mac. Never forget anything. Everything is transcribed, summarized, and searchable.
-- [ ] Semantic search across sessions, transcriptions, and memory
-- [ ] Personal RAG — all your data indexed and ready for fine-tuning personal LLMs
-- [ ] `npx rex install` one-click setup
-- [ ] Homebrew cask
+```bash
+# Example: change scope guard threshold from 8 to 15 files
+vim ~/.claude/rex-guards/scope-guard.sh
+```
+
+Hooks are registered in `~/.claude/settings.json` under the `hooks` key.
 
 ## License
 

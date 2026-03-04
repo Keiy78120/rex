@@ -6,6 +6,7 @@ import { checkMemory } from './checks/memory.js'
 import { checkMcpServers } from './checks/mcp-servers.js'
 import { checkPlugins } from './checks/plugins.js'
 import { checkHooks } from './checks/hooks.js'
+import { checkGuards } from './checks/guards.js'
 import { checkDocsCache } from './checks/docs-cache.js'
 import { checkEnvironment } from './checks/environment.js'
 import type { CheckGroup, HealthReport, OverallStatus } from './types.js'
@@ -22,6 +23,7 @@ export async function runAllChecks(claudeDir?: string): Promise<HealthReport> {
     checkMcpServers(dir),
     checkPlugins(dir),
     checkHooks(dir),
+    checkGuards(dir),
     checkDocsCache(dir),
     checkEnvironment(),
   ])

@@ -1,5 +1,7 @@
 import { runAllChecks } from '@rex/core'
 import type { HealthReport, CheckGroup } from '@rex/core'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -23,7 +25,6 @@ function statusIcon(status: string): string {
 function formatGroup(group: CheckGroup): string {
   const passed = group.results.filter(r => r.status === 'pass').length
   const total = group.results.length
-  const allPass = passed === total
 
   let out = `\n  ${COLORS.bold}${group.icon} ${group.name}${COLORS.reset}`
   out += `  ${COLORS.dim}${passed}/${total}${COLORS.reset}\n`
@@ -79,8 +80,8 @@ async function main() {
       const allResults = report.groups.flatMap(g => g.results)
       const passed = allResults.filter(r => r.status === 'pass').length
       const total = allResults.length
-      const statusEmoji = report.status === 'healthy' ? '●' : report.status === 'degraded' ? '●' : '○'
-      console.log(`REX ${statusEmoji} ${report.status.toUpperCase()} — ${passed}/${total} checks passed`)
+      const dot = report.status === 'healthy' ? `${COLORS.green}●${COLORS.reset}` : report.status === 'degraded' ? `${COLORS.yellow}●${COLORS.reset}` : `${COLORS.red}○${COLORS.reset}`
+      console.log(`REX ${dot} ${report.status.toUpperCase()} — ${passed}/${total} checks passed`)
       break
     }
 
@@ -91,30 +92,16 @@ async function main() {
     }
 
     case 'ingest': {
-      const { execSync } = await import('node:child_process')
-      const { join } = await import('node:path')
-      const { existsSync } = await import('node:fs')
-
-      // Find memory package
-      const thisDir = new URL('.', import.meta.url).pathname
-      const candidates = [
-        join(thisDir, '..', '..', 'memory'),
-        join(process.env.HOME || '~', '.rex-memory'),
-      ]
-      let memoryDir: string | null = null
-      for (const c of candidates) {
-        if (existsSync(join(c, 'src', 'ingest.ts'))) {
-          memoryDir = c
-          break
-        }
-      }
-      if (!memoryDir) {
-        console.error('Memory package not found. Run "rex init" first.')
-        process.exit(1)
-      }
-      console.log(`${COLORS.cyan}Ingesting sessions...${COLORS.reset}`)
       try {
-        execSync('npx tsx src/ingest.ts', { cwd: memoryDir, stdio: 'inherit' })
+        const { execSync } = await import('node:child_process')
+        const memDir = findMemoryPackage()
+        if (!memDir) {
+          console.log(`${COLORS.yellow}Memory package not found.${COLORS.reset} This feature requires @rex/memory.`)
+          console.log(`Run from the REX monorepo or install @rex/memory separately.`)
+          process.exit(1)
+        }
+        console.log(`${COLORS.cyan}Ingesting sessions...${COLORS.reset}`)
+        execSync('npx tsx src/ingest.ts', { cwd: memDir, stdio: 'inherit' })
       } catch {
         process.exit(1)
       }
@@ -127,23 +114,13 @@ async function main() {
         console.error('Usage: rex search <query>')
         process.exit(1)
       }
-      const { execSync } = await import('node:child_process')
-      const { join } = await import('node:path')
-      const { existsSync } = await import('node:fs')
-      const thisDir = new URL('.', import.meta.url).pathname
-      const memoryCandidates = [
-        join(thisDir, '..', '..', 'memory'),
-        join(process.env.HOME || '~', '.rex-memory'),
-      ]
-      let memDir: string | null = null
-      for (const c of memoryCandidates) {
-        if (existsSync(join(c, 'src', 'search.ts'))) { memDir = c; break }
-      }
-      if (!memDir) {
-        console.error('Memory package not found.')
-        process.exit(1)
-      }
       try {
+        const memDir = findMemoryPackage()
+        if (!memDir) {
+          console.log(`${COLORS.yellow}Memory package not found.${COLORS.reset} This feature requires @rex/memory + Ollama.`)
+          process.exit(1)
+        }
+        const { execSync } = await import('node:child_process')
         execSync(`npx tsx src/cli-search.ts ${query.split(' ').map(w => JSON.stringify(w)).join(' ')}`, { cwd: memDir, stdio: 'inherit' })
       } catch { process.exit(1) }
       break
@@ -155,21 +132,45 @@ async function main() {
       break
     }
 
+    case '--version':
+    case '-v':
+      console.log('rex-cli v0.1.0')
+      break
+
     case 'help':
     default:
       console.log(`
-${COLORS.bold}REX${COLORS.reset} — Claude Code boosted
+${COLORS.bold}REX${COLORS.reset} — Claude Code sous steroides
 
 ${COLORS.bold}Commands:${COLORS.reset}
-  rex init      Setup REX (MCP servers, memory, hooks)
-  rex doctor    Full health check
-  rex status    Quick status summary
-  rex ingest    Sync session history to memory
-  rex search    Semantic search across memory
-  rex optimize  Analyze & optimize CLAUDE.md with local LLM
-  rex help      Show this help
+  rex init        Setup REX (guards, hooks, MCP)
+  rex doctor      Full health check (9 categories)
+  rex status      Quick one-line status
+
+${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
+  rex ingest      Sync session history to vector DB
+  rex search      Semantic search across past sessions
+  rex optimize    Analyze CLAUDE.md with local LLM
+
+${COLORS.bold}Info:${COLORS.reset}
+  rex help        Show this help
+  rex --version   Show version
+
+${COLORS.dim}After install: rex init — everything else is automatic.${COLORS.reset}
 `)
   }
+}
+
+function findMemoryPackage(): string | null {
+  const thisDir = new URL('.', import.meta.url).pathname
+  const candidates = [
+    join(thisDir, '..', '..', 'memory'),
+    join(process.env.HOME || '~', '.rex-memory'),
+  ]
+  for (const c of candidates) {
+    if (existsSync(join(c, 'src', 'ingest.ts'))) return c
+  }
+  return null
 }
 
 main().catch(console.error)
