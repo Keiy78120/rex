@@ -98,11 +98,11 @@ fn transcribe(ctx: &WhisperContext, samples: &[f32]) -> Result<String, String> {
 
     state.full(params, samples).map_err(|e| e.to_string())?;
 
-    let n_segments = state.full_n_segments().map_err(|e| e.to_string())?;
+    let n_segments = state.full_n_segments();
     let mut text = String::new();
     for i in 0..n_segments {
-        if let Ok(segment) = state.full_get_segment_text(i) {
-            text.push_str(&segment);
+        if let Some(segment) = state.get_segment(i) {
+            text.push_str(&segment.to_string());
         }
     }
     Ok(text.trim().to_string())

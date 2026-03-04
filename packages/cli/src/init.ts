@@ -39,6 +39,117 @@ function ensureDir(dir: string) {
 }
 
 const PLIST_LABEL = 'com.dstudio.rex'
+const INGEST_PLIST_LABEL = 'com.dstudio.rex-ingest'
+
+export function installIngestAgent() {
+  if (process.platform !== 'darwin') {
+    info('Auto-ingest only supported on macOS')
+    return
+  }
+
+  const launchAgentsDir = join(homedir(), 'Library', 'LaunchAgents')
+  ensureDir(launchAgentsDir)
+  const plistPath = join(launchAgentsDir, `${INGEST_PLIST_LABEL}.plist`)
+
+  let rexBin = ''
+  try {
+    rexBin = execSync('which rex', { encoding: 'utf-8' }).trim()
+  } catch {}
+
+  if (!rexBin) {
+    info('rex binary not in PATH — skipping ingest LaunchAgent')
+    return
+  }
+
+  if (existsSync(plistPath)) {
+    skip('Ingest LaunchAgent already installed (auto-ingest every hour)')
+    return
+  }
+
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${INGEST_PLIST_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${rexBin}</string>
+    <string>ingest</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>StandardOutPath</key>
+  <string>${join(homedir(), '.claude', 'rex-ingest.log')}</string>
+  <key>StandardErrorPath</key>
+  <string>${join(homedir(), '.claude', 'rex-ingest.log')}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:${dirname(rexBin)}</string>
+  </dict>
+</dict>
+</plist>
+`
+  writeFileSync(plistPath, plist)
+
+  try {
+    execSync(`launchctl load ${plistPath}`, { stdio: 'ignore' })
+  } catch {}
+
+  ok('Ingest LaunchAgent installed — auto-ingest every hour')
+}
+
+export function uninstallIngestAgent() {
+  if (process.platform !== 'darwin') return
+
+  const plistPath = join(homedir(), 'Library', 'LaunchAgents', `${INGEST_PLIST_LABEL}.plist`)
+  if (!existsSync(plistPath)) {
+    info('Ingest LaunchAgent not installed')
+    return
+  }
+
+  try {
+    execSync(`launchctl unload ${plistPath}`, { stdio: 'ignore' })
+  } catch {}
+
+  try { unlinkSync(plistPath) } catch {}
+  ok('Ingest LaunchAgent removed')
+}
+
+export function installApp() {
+  if (process.platform !== 'darwin') return
+
+  // Find REX.app — check build output or /Applications
+  const thisDir = new URL('.', import.meta.url).pathname
+  const buildApp = join(thisDir, '..', '..', 'app', 'src-tauri', 'target', 'release', 'bundle', 'macos', 'REX.app')
+  const installedApp = '/Applications/REX.app'
+
+  if (existsSync(installedApp)) {
+    skip('REX.app already in /Applications')
+  } else if (existsSync(buildApp)) {
+    try {
+      execSync(`cp -R "${buildApp}" "${installedApp}"`, { stdio: 'ignore' })
+      ok('REX.app installed to /Applications')
+    } catch {
+      info('Could not copy REX.app to /Applications (try manually)')
+      return
+    }
+  } else {
+    info('REX.app not built — run `pnpm tauri build` in packages/app first')
+    return
+  }
+
+  // Add to Login Items
+  try {
+    execSync(`osascript -e 'tell application "System Events" to make login item at end with properties {path:"${installedApp}", hidden:false}'`, { stdio: 'ignore' })
+    ok('REX.app added to Login Items (auto-start on login)')
+  } catch {
+    skip('REX.app already in Login Items')
+  }
+}
 
 export function installStartup() {
   if (process.platform !== 'darwin') {
@@ -112,15 +223,13 @@ export function uninstallStartup() {
   const plistPath = join(homedir(), 'Library', 'LaunchAgents', `${PLIST_LABEL}.plist`)
   if (!existsSync(plistPath)) {
     info('LaunchAgent not installed')
-    return
+  } else {
+    try { execSync(`launchctl unload ${plistPath}`, { stdio: 'ignore' }) } catch {}
+    try { unlinkSync(plistPath) } catch {}
+    ok('LaunchAgent removed')
   }
 
-  try {
-    execSync(`launchctl unload ${plistPath}`, { stdio: 'ignore' })
-  } catch {}
-
-  try { unlinkSync(plistPath) } catch {}
-  ok('LaunchAgent removed')
+  uninstallIngestAgent()
 }
 
 export async function init() {
@@ -316,8 +425,12 @@ fi
     skip('All REX guards already installed')
   }
 
-  // 5. Install LaunchAgent (auto-start on login)
+  // 5. Install LaunchAgents (auto-start on login)
   installStartup()
+  installIngestAgent()
+
+  // 5b. Install REX.app to /Applications + Login Items (if built)
+  installApp()
 
   // 6. Check Ollama (required for embeddings)
   let ollamaOk = false
