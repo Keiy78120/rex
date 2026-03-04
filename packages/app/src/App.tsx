@@ -232,9 +232,10 @@ function VoiceTab({ isRecording, lastTranscript, voiceStatus }: {
   );
 }
 
-function AudioTab({ audioStatus, onToggle }: {
+function AudioTab({ audioStatus, onToggle, error }: {
   audioStatus: AudioLoggerStatus | null;
   onToggle: () => void;
+  error: string | null;
 }) {
   const capturing = audioStatus?.capturing ?? false;
 
@@ -283,6 +284,14 @@ function AudioTab({ audioStatus, onToggle }: {
           </div>
         </CardContent>
       </Card>
+
+      {error && (
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardContent className="p-3">
+            <p className="text-xs text-red-400">{error}</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -314,6 +323,7 @@ function App() {
   const [lastTranscript, setLastTranscript] = useState("");
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus | null>(null);
   const [audioStatus, setAudioStatus] = useState<AudioLoggerStatus | null>(null);
+  const [audioError, setAudioError] = useState<string | null>(null);
 
   const runChecks = useCallback(async () => {
     setLoading(true);
@@ -363,6 +373,7 @@ function App() {
   }, []);
 
   const toggleAudioLogger = useCallback(async () => {
+    setAudioError(null);
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       if (audioStatus?.capturing) {
@@ -372,7 +383,9 @@ function App() {
       }
       refreshStatuses();
     } catch (e) {
-      console.error("Audio logger toggle failed:", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      setAudioError(msg);
+      console.error("Audio logger toggle failed:", msg);
     }
   }, [audioStatus?.capturing, refreshStatuses]);
 
@@ -441,7 +454,7 @@ function App() {
           <VoiceTab isRecording={isRecording} lastTranscript={lastTranscript} voiceStatus={voiceStatus} />
         </TabsContent>
         <TabsContent value="audio" className="flex-1 overflow-auto mt-0">
-          <AudioTab audioStatus={audioStatus} onToggle={toggleAudioLogger} />
+          <AudioTab audioStatus={audioStatus} onToggle={toggleAudioLogger} error={audioError} />
         </TabsContent>
       </Tabs>
     </div>
