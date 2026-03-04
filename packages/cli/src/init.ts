@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, chmodSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, chmodSync, unlinkSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { execSync } from 'node:child_process'
@@ -36,6 +36,91 @@ function writeJson(path: string, data: any) {
 
 function ensureDir(dir: string) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+}
+
+const PLIST_LABEL = 'com.dstudio.rex'
+
+export function installStartup() {
+  if (process.platform !== 'darwin') {
+    info('Startup auto-launch only supported on macOS')
+    return
+  }
+
+  const launchAgentsDir = join(homedir(), 'Library', 'LaunchAgents')
+  ensureDir(launchAgentsDir)
+  const plistPath = join(launchAgentsDir, `${PLIST_LABEL}.plist`)
+
+  // Find rex binary
+  let rexBin = ''
+  try {
+    rexBin = execSync('which rex', { encoding: 'utf-8' }).trim()
+  } catch {
+    // Fallback: npx
+    rexBin = ''
+  }
+
+  if (!rexBin) {
+    info('rex binary not in PATH — skipping LaunchAgent (install globally first)')
+    return
+  }
+
+  if (existsSync(plistPath)) {
+    skip('LaunchAgent already installed (auto-start on login)')
+    return
+  }
+
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${PLIST_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${rexBin}</string>
+    <string>doctor</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>StandardOutPath</key>
+  <string>${join(homedir(), '.claude', 'rex-doctor.log')}</string>
+  <key>StandardErrorPath</key>
+  <string>${join(homedir(), '.claude', 'rex-doctor.log')}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:${dirname(rexBin)}</string>
+  </dict>
+</dict>
+</plist>
+`
+  writeFileSync(plistPath, plist)
+
+  // Load the agent
+  try {
+    execSync(`launchctl load ${plistPath}`, { stdio: 'ignore' })
+  } catch {}
+
+  ok('LaunchAgent installed — rex runs at login + every hour')
+}
+
+export function uninstallStartup() {
+  if (process.platform !== 'darwin') return
+
+  const plistPath = join(homedir(), 'Library', 'LaunchAgents', `${PLIST_LABEL}.plist`)
+  if (!existsSync(plistPath)) {
+    info('LaunchAgent not installed')
+    return
+  }
+
+  try {
+    execSync(`launchctl unload ${plistPath}`, { stdio: 'ignore' })
+  } catch {}
+
+  try { unlinkSync(plistPath) } catch {}
+  ok('LaunchAgent removed')
 }
 
 export async function init() {
@@ -231,7 +316,10 @@ fi
     skip('All REX guards already installed')
   }
 
-  // 5. Check Ollama (required for embeddings)
+  // 5. Install LaunchAgent (auto-start on login)
+  installStartup()
+
+  // 6. Check Ollama (required for embeddings)
   let ollamaOk = false
   try {
     const res = await fetch('http://localhost:11434/api/tags')
@@ -255,7 +343,7 @@ fi
     info('Ollama not running — needed for memory/RAG. Install: https://ollama.ai')
   }
 
-  // 5. Save settings
+  // 7. Save settings
   writeJson(settingsPath, settings)
 
   console.log(`\n${COLORS.dim}─────────────────────────────────────────────${COLORS.reset}`)

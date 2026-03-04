@@ -132,9 +132,21 @@ async function main() {
       break
     }
 
+    case 'startup': {
+      const { installStartup } = await import('./init.js')
+      installStartup()
+      break
+    }
+
+    case 'startup-remove': {
+      const { uninstallStartup } = await import('./init.js')
+      uninstallStartup()
+      break
+    }
+
     case '--version':
     case '-v':
-      console.log('rex-cli v0.1.0')
+      console.log('rex-claude v2.1.0')
       break
 
     case 'help':
@@ -143,9 +155,11 @@ async function main() {
 ${COLORS.bold}REX${COLORS.reset} — Claude Code sous steroides
 
 ${COLORS.bold}Commands:${COLORS.reset}
-  rex init        Setup REX (guards, hooks, MCP)
-  rex doctor      Full health check (9 categories)
-  rex status      Quick one-line status
+  rex init            Setup REX (guards, hooks, MCP, startup)
+  rex doctor          Full health check (9 categories)
+  rex status          Quick one-line status
+  rex startup         Install LaunchAgent (auto-start on login)
+  rex startup-remove  Remove LaunchAgent
 
 ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex ingest      Sync session history to vector DB
