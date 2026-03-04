@@ -8,6 +8,11 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
+  define: {
+    __APP_VERSION__: JSON.stringify(
+      (await import("./package.json", { with: { type: "json" } })).default.version
+    ),
+  },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

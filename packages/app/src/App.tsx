@@ -296,6 +296,166 @@ function AudioTab({ audioStatus, onToggle, error }: {
   );
 }
 
+function SettingsTab() {
+  const [checking, setChecking] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+  const [updateAvailable, setUpdateAvailable] = useState<{ version: string; body: string } | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const checkForUpdate = useCallback(async () => {
+    setChecking(true);
+    setUpdateStatus(null);
+    try {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const update = await check();
+      if (update) {
+        setUpdateAvailable({ version: update.version, body: update.body ?? "" });
+        setUpdateStatus(`v${update.version} available`);
+      } else {
+        setUpdateStatus("Up to date");
+        setUpdateAvailable(null);
+      }
+    } catch (e) {
+      setUpdateStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
+  const installUpdate = useCallback(async () => {
+    setDownloading(true);
+    setProgress(0);
+    try {
+      const { check } = await import("@tauri-apps/plugin-updater");
+      const { relaunch } = await import("@tauri-apps/plugin-process");
+      const update = await check();
+      if (!update) return;
+      let totalSize = 0;
+      let downloaded = 0;
+      await update.downloadAndInstall((event) => {
+        if (event.event === "Started" && event.data.contentLength) {
+          totalSize = event.data.contentLength;
+        } else if (event.event === "Progress") {
+          downloaded += event.data.chunkLength;
+          if (totalSize > 0) setProgress(Math.round((downloaded / totalSize) * 100));
+        }
+      });
+      await relaunch();
+    } catch (e) {
+      setUpdateStatus(`Install failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setDownloading(false);
+    }
+  }, []);
+
+  useEffect(() => { checkForUpdate(); }, [checkForUpdate]);
+
+  return (
+    <div className="p-3 space-y-3">
+      {/* Update */}
+      <Card className="border-border/50 bg-card/50">
+        <CardHeader className="p-3 pb-1">
+          <CardTitle className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
+            Updates
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-3 pt-1 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Current</span>
+            <Badge variant="outline" className="text-[9px] h-4 font-mono">v{__APP_VERSION__}</Badge>
+          </div>
+          <Separator className="opacity-30" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Status</span>
+            <span className="text-[10px] text-muted-foreground font-mono">
+              {checking ? "Checking..." : updateStatus ?? "—"}
+            </span>
+          </div>
+          {updateAvailable && !downloading && (
+            <>
+              <Separator className="opacity-30" />
+              <Button
+                size="sm"
+                className="w-full h-7 text-[11px]"
+                onClick={installUpdate}
+              >
+                Update to v{updateAvailable.version}
+              </Button>
+              {updateAvailable.body && (
+                <p className="text-[10px] text-muted-foreground leading-relaxed mt-1">{updateAvailable.body}</p>
+              )}
+            </>
+          )}
+          {downloading && (
+            <>
+              <Separator className="opacity-30" />
+              <div className="space-y-1">
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <span className="text-[9px] text-muted-foreground font-mono">Downloading... {progress}%</span>
+              </div>
+            </>
+          )}
+          {!updateAvailable && !checking && (
+            <>
+              <Separator className="opacity-30" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full h-7 text-[11px] text-muted-foreground"
+                onClick={checkForUpdate}
+                disabled={checking}
+              >
+                Check for updates
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* About */}
+      <Card className="border-border/50 bg-card/50">
+        <CardHeader className="p-3 pb-1">
+          <CardTitle className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
+            About
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-3 pt-1 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">App</span>
+            <span className="text-xs font-medium">REX</span>
+          </div>
+          <Separator className="opacity-30" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">By</span>
+            <span className="text-xs text-muted-foreground">D-Studio</span>
+          </div>
+          <Separator className="opacity-30" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Engine</span>
+            <span className="text-xs text-muted-foreground font-mono">Tauri v2 + whisper.cpp</span>
+          </div>
+          <Separator className="opacity-30" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Shortcuts</span>
+            <div className="flex items-center gap-1">
+              <kbd className="px-1 py-0.5 rounded bg-muted text-[9px] font-mono">⌥</kbd>
+              <span className="text-[9px] text-muted-foreground">+</span>
+              <kbd className="px-1 py-0.5 rounded bg-muted text-[9px] font-mono">Space</kbd>
+              <span className="text-[10px] text-muted-foreground ml-1">Voice</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function VoiceOverlay() {
   return (
     <div className="dark w-[200px] h-[48px] flex items-center justify-center bg-transparent">
@@ -331,26 +491,17 @@ function App() {
       const { invoke } = await import("@tauri-apps/api/core");
       const result = await invoke<string>("run_checks");
       setReport(JSON.parse(result));
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
       setReport({
         groups: [
-          { name: "Config", icon: "⚙", results: [
-            { name: "CLAUDE.md", status: "pass", message: "Present" },
-            { name: "settings.json", status: "pass", message: "Valid" },
-          ]},
-          { name: "Guards", icon: "🛡", results: [
-            { name: "completion-guard", status: "pass", message: "Installed" },
-            { name: "dangerous-cmd-guard", status: "pass", message: "Installed" },
-            { name: "test-protect-guard", status: "pass", message: "Installed" },
-          ]},
-          { name: "Hooks", icon: "🪝", results: [
-            { name: "PreToolUse", status: "pass", message: "2 handlers" },
-            { name: "PostToolUse", status: "pass", message: "3 handlers" },
+          { name: "Health Check", icon: "⚠", results: [
+            { name: "Node.js check", status: "fail", message: msg },
           ]},
         ],
-        status: "healthy",
+        status: "broken",
         timestamp: new Date().toISOString(),
-        version: "0.2.0",
+        version: "0.1.0",
       });
     } finally {
       setLoading(false);
@@ -429,7 +580,7 @@ function App() {
           <span className="text-sm font-semibold tracking-tight">REX</span>
         </div>
         <Badge variant="outline" className="text-[9px] h-4 text-muted-foreground font-mono">
-          v{report?.version ?? "0.2.0"}
+          v{__APP_VERSION__}
         </Badge>
       </div>
 
@@ -451,6 +602,12 @@ function App() {
               {audioStatus?.capturing && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />}
             </span>
           </TabsTrigger>
+          <TabsTrigger value="settings" className="text-[11px] h-6 data-[state=active]:bg-accent/50 rounded-md flex-1">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="health" className="flex-1 overflow-hidden mt-0">
@@ -461,6 +618,9 @@ function App() {
         </TabsContent>
         <TabsContent value="audio" className="flex-1 overflow-auto mt-0">
           <AudioTab audioStatus={audioStatus} onToggle={toggleAudioLogger} error={audioError} />
+        </TabsContent>
+        <TabsContent value="settings" className="flex-1 overflow-auto mt-0">
+          <SettingsTab />
         </TabsContent>
       </Tabs>
     </div>

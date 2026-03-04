@@ -124,6 +124,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState {
             whisper: Mutex::new(engine),
             recorder: AudioRecorder::new(),
@@ -219,7 +221,8 @@ pub fn run() {
                             return;
                         }
 
-                        let text = match engine.transcribe_tiny(&samples) {
+                        // Pass 1: fast draft with tiny model
+                        let draft = match engine.transcribe_tiny(&samples) {
                             Ok(t) if !t.is_empty() => whisper::code_detect(&t),
                             Ok(_) => {
                                 eprintln!("[Voice] Empty transcription");
@@ -231,10 +234,26 @@ pub fn run() {
                             }
                         };
 
-                        // Emit result to frontend
+                        // Emit draft immediately for instant feedback
                         if let Some(window) = app_handle.get_webview_window("main") {
-                            let _ = window.emit("voice-result", &text);
+                            let _ = window.emit("voice-result", &draft);
                         }
+
+                        // Pass 2: accurate with large model (replaces draft)
+                        let text = if engine.has_large_model() {
+                            match engine.transcribe_large(&samples) {
+                                Ok(t) if !t.is_empty() => {
+                                    let accurate = whisper::code_detect(&t);
+                                    if let Some(window) = app_handle.get_webview_window("main") {
+                                        let _ = window.emit("voice-result", &accurate);
+                                    }
+                                    accurate
+                                }
+                                _ => draft
+                            }
+                        } else {
+                            draft
+                        };
 
                         // Copy to clipboard + auto-paste
                         #[cfg(target_os = "macos")]
