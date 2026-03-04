@@ -121,6 +121,34 @@ async function main() {
       break
     }
 
+    case 'search': {
+      const query = process.argv.slice(3).join(' ')
+      if (!query) {
+        console.error('Usage: rex search <query>')
+        process.exit(1)
+      }
+      const { execSync } = await import('node:child_process')
+      const { join } = await import('node:path')
+      const { existsSync } = await import('node:fs')
+      const thisDir = new URL('.', import.meta.url).pathname
+      const memoryCandidates = [
+        join(thisDir, '..', '..', 'memory'),
+        join(process.env.HOME || '~', '.rex-memory'),
+      ]
+      let memDir: string | null = null
+      for (const c of memoryCandidates) {
+        if (existsSync(join(c, 'src', 'search.ts'))) { memDir = c; break }
+      }
+      if (!memDir) {
+        console.error('Memory package not found.')
+        process.exit(1)
+      }
+      try {
+        execSync(`npx tsx src/cli-search.ts ${query.split(' ').map(w => JSON.stringify(w)).join(' ')}`, { cwd: memDir, stdio: 'inherit' })
+      } catch { process.exit(1) }
+      break
+    }
+
     case 'optimize': {
       const { optimize } = await import('./optimize.js')
       await optimize()
@@ -137,6 +165,7 @@ ${COLORS.bold}Commands:${COLORS.reset}
   rex doctor    Full health check
   rex status    Quick status summary
   rex ingest    Sync session history to memory
+  rex search    Semantic search across memory
   rex optimize  Analyze & optimize CLAUDE.md with local LLM
   rex help      Show this help
 `)
