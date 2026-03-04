@@ -21,12 +21,22 @@
         "resizable": false,
         "skipTaskbar": true,
         "alwaysOnTop": true
+      },
+      {
+        "label": "voice-overlay",
+        "title": "",
+        "url": "index.html#voice-overlay",
+        "width": 200,
+        "height": 48,
+        "visible": false,
+        "decorations": false,
+        "resizable": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "transparent": true,
+        "shadow": false
       }
     ],
-    "trayIcon": {
-      "iconPath": "icons/32x32.png",
-      "iconAsTemplate": true
-    },
     "security": {
       "csp": null
     }
@@ -43,7 +53,7 @@
     ],
     "macOS": {
       "signingIdentity": null,
-      "entitlements": null
+      "entitlements": "./Entitlements.plist"
     }
   }
 }
