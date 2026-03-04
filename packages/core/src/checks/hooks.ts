@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CheckGroup, CheckResult } from '../types.js'
 
-const EXPECTED_HOOKS = ['UserPromptSubmit', 'PreToolUse', 'Stop']
+const EXPECTED_HOOKS = ['UserPromptSubmit', 'PreToolUse', 'Stop', 'SessionStart', 'SessionEnd']
 
 export async function checkHooks(claudeDir: string): Promise<CheckGroup> {
   const results: CheckResult[] = []

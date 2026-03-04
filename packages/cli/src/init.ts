@@ -83,23 +83,65 @@ export async function init() {
     info('Memory package not found — install @rex/memory or run from monorepo')
   }
 
-  // 3. Setup auto-ingest hook (post-session)
-  const hooksDir = join(claudeDir, 'hooks')
-  ensureDir(hooksDir)
-
-  // Claude Code hooks go in settings.json
+  // 3. Setup hooks
   if (!settings.hooks) settings.hooks = {}
 
-  const hasIngestHook = settings.hooks.PostToolUse?.some?.((h: any) =>
-    h.command?.includes('rex') && h.command?.includes('ingest')
+  // 3a. SessionEnd → auto-ingest transcript to memory
+  const hasIngestHook = settings.hooks.SessionEnd?.some?.((h: any) =>
+    h.hooks?.some?.((hh: any) => hh.command?.includes('rex') && hh.command?.includes('ingest'))
   )
 
   if (hasIngestHook) {
-    skip('Auto-ingest hook already configured')
+    skip('Auto-ingest hook (SessionEnd) already configured')
   } else {
-    // We'll add a lightweight hook that runs on session end
-    // For now, just note it — Claude Code hooks are event-based
-    info('Run "rex ingest" periodically to sync session history to memory')
+    if (!settings.hooks.SessionEnd) settings.hooks.SessionEnd = []
+    settings.hooks.SessionEnd.push({
+      hooks: [{
+        type: 'command',
+        command: 'npx rex-cli ingest 2>/dev/null &',
+        timeout: 5,
+      }],
+    })
+    ok('Auto-ingest hook configured (SessionEnd)')
+  }
+
+  // 3b. SessionStart → inject REX context
+  const hasContextHook = settings.hooks.SessionStart?.some?.((h: any) =>
+    h.hooks?.some?.((hh: any) => hh.command?.includes('rex-context'))
+  )
+
+  if (hasContextHook) {
+    skip('Context injection hook (SessionStart) already configured')
+  } else {
+    // Create the context script
+    const contextScript = join(claudeDir, 'rex-context.sh')
+    if (!existsSync(contextScript)) {
+      writeFileSync(contextScript, `#!/bin/bash
+# REX Context Injection — runs at session start
+# Outputs relevant memory context to CLAUDE_ENV_FILE
+
+if [ -z "$CLAUDE_ENV_FILE" ]; then
+  exit 0
+fi
+
+# Quick check if rex-memory MCP is available
+if command -v npx &>/dev/null; then
+  # Context will be loaded via MCP rex_context tool
+  # This hook just ensures the env is ready
+  echo "REX_MEMORY_AVAILABLE=true" >> "$CLAUDE_ENV_FILE"
+fi
+`, { mode: 0o755 })
+    }
+
+    if (!settings.hooks.SessionStart) settings.hooks.SessionStart = []
+    settings.hooks.SessionStart.push({
+      hooks: [{
+        type: 'command',
+        command: `bash ${contextScript}`,
+        timeout: 5,
+      }],
+    })
+    ok('Context injection hook configured (SessionStart)')
   }
 
   // 4. Check Ollama (required for embeddings)
