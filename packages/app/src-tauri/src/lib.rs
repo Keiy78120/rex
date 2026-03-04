@@ -1,6 +1,8 @@
+mod audio_logger;
 mod recorder;
 mod whisper;
 
+use audio_logger::AudioLogger;
 use recorder::AudioRecorder;
 use std::sync::Mutex;
 use tauri::{
@@ -13,6 +15,7 @@ use whisper::WhisperEngine;
 struct AppState {
     whisper: Mutex<WhisperEngine>,
     recorder: AudioRecorder,
+    audio_logger: AudioLogger,
 }
 
 #[tauri::command]
@@ -78,6 +81,31 @@ fn voice_status(state: tauri::State<'_, AppState>) -> Result<serde_json::Value, 
     }))
 }
 
+#[tauri::command]
+fn audio_logger_start(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.audio_logger.start_capture()
+}
+
+#[tauri::command]
+fn audio_logger_stop(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let samples = state.audio_logger.stop_capture();
+    if samples.is_empty() {
+        return Ok("No audio captured".to_string());
+    }
+    let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
+    let path = state.audio_logger.save_recording(&samples, &timestamp)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn audio_logger_status(state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "capturing": state.audio_logger.is_capturing(),
+        "recordings_dir": state.audio_logger.recordings_dir().to_string_lossy(),
+        "recordings_count": state.audio_logger.list_recordings().len(),
+    }))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut engine = WhisperEngine::new();
@@ -91,6 +119,7 @@ pub fn run() {
         .manage(AppState {
             whisper: Mutex::new(engine),
             recorder: AudioRecorder::new(),
+            audio_logger: AudioLogger::new(),
         })
         .setup(|app| {
             // Build tray menu
@@ -158,7 +187,10 @@ pub fn run() {
             run_checks,
             voice_start,
             voice_stop,
-            voice_status
+            voice_status,
+            audio_logger_start,
+            audio_logger_stop,
+            audio_logger_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
