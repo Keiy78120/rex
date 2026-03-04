@@ -396,13 +396,19 @@ function App() {
     const setupListeners = async () => {
       try {
         const { listen } = await import("@tauri-apps/api/event");
-        const unlisten1 = await listen<boolean>("voice-recording", () => setIsRecording(true));
+        const unlisten1 = await listen<boolean>("voice-recording", (event) => {
+          setIsRecording(event.payload);
+        });
         const unlisten2 = await listen<string>("voice-result", (event) => {
           setIsRecording(false);
           setLastTranscript(event.payload);
           navigator.clipboard.writeText(event.payload).catch(() => {});
         });
-        return () => { unlisten1(); unlisten2(); };
+        const unlisten3 = await listen<string>("voice-error", (event) => {
+          setIsRecording(false);
+          setLastTranscript(`Error: ${event.payload}`);
+        });
+        return () => { unlisten1(); unlisten2(); unlisten3(); };
       } catch { /* dev mode */ }
     };
     setupListeners();
