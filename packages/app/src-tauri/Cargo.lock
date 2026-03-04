@@ -3220,6 +3220,7 @@ dependencies = [
  "cpal",
  "dirs",
  "hound",
+ "objc2",
  "screencapturekit",
  "serde",
  "serde_json",

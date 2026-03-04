@@ -122,6 +122,14 @@ pub fn run() {
             audio_logger: AudioLogger::new(),
         })
         .setup(|app| {
+            // Hide dock icon — menubar-only app
+            #[cfg(target_os = "macos")]
+            {
+                // NSApplicationActivationPolicyAccessory = 1
+                let cls = objc2::runtime::AnyClass::get(c"NSApplication").unwrap();
+                let app: *mut objc2::runtime::AnyObject = unsafe { objc2::msg_send![cls, sharedApplication] };
+                let _: () = unsafe { objc2::msg_send![app, setActivationPolicy: 1i64] };
+            }
             // Build tray menu
             let quit = MenuItem::with_id(app, "quit", "Quit REX", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;
@@ -162,7 +170,15 @@ pub fn run() {
                     let state = app_handle.state::<AppState>();
                     let is_recording = state.recorder.is_recording();
                     if is_recording {
+                        // Stop recording → transcribe → paste
                         let samples = state.recorder.stop();
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.emit("voice-recording", false);
+                        }
+                        // Hide voice overlay
+                        if let Some(overlay) = app_handle.get_webview_window("voice-overlay") {
+                            let _ = overlay.hide();
+                        }
                         if !samples.is_empty() {
                             let engine = state.whisper.lock().unwrap();
                             if let Ok(text) = engine.transcribe_tiny(&samples) {
@@ -170,12 +186,50 @@ pub fn run() {
                                 if let Some(window) = app_handle.get_webview_window("main") {
                                     let _ = window.emit("voice-result", &text);
                                 }
+                                // Copy to clipboard and auto-paste via Cmd+V
+                                #[cfg(target_os = "macos")]
+                                {
+                                    let text_clone = text.clone();
+                                    std::thread::spawn(move || {
+                                        // Set clipboard via pbcopy
+                                        use std::io::Write;
+                                        if let Ok(mut child) = std::process::Command::new("pbcopy")
+                                            .stdin(std::process::Stdio::piped())
+                                            .spawn()
+                                        {
+                                            if let Some(stdin) = child.stdin.as_mut() {
+                                                let _ = stdin.write_all(text_clone.as_bytes());
+                                            }
+                                            let _ = child.wait();
+                                        }
+                                        // Small delay then simulate Cmd+V
+                                        std::thread::sleep(std::time::Duration::from_millis(100));
+                                        let _ = std::process::Command::new("osascript")
+                                            .args(["-e", "tell application \"System Events\" to keystroke \"v\" using command down"])
+                                            .output();
+                                    });
+                                }
                             }
                         }
                     } else {
+                        // Start recording
                         let _ = state.recorder.start();
                         if let Some(window) = app_handle.get_webview_window("main") {
                             let _ = window.emit("voice-recording", true);
+                        }
+                        // Show voice overlay at bottom center of screen
+                        if let Some(overlay) = app_handle.get_webview_window("voice-overlay") {
+                            // Position at bottom center
+                            if let Ok(monitor) = overlay.current_monitor() {
+                                if let Some(monitor) = monitor {
+                                    let screen = monitor.size();
+                                    let x = (screen.width as i32 / 2) - 100; // half of 200px width
+                                    let y = screen.height as i32 - 120; // 120px from bottom
+                                    let _ = overlay.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+                                }
+                            }
+                            let _ = overlay.show();
+                            let _ = overlay.set_focus();
                         }
                     }
                 }
