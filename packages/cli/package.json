@@ -1,0 +1,21 @@
+{
+  "name": "rex-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "rex": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch"
+  },
+  "dependencies": {
+    "@rex/core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}

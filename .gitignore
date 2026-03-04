@@ -1,0 +1,8 @@
+node_modules/
+dist/
+target/
+.DS_Store
+*.tsbuildinfo
+.env
+.env.*
+*.dmg
