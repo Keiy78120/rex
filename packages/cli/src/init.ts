@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, chmodSync } from 'node:fs'
+import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { execSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -144,7 +145,93 @@ fi
     ok('Context injection hook configured (SessionStart)')
   }
 
-  // 4. Check Ollama (required for embeddings)
+  // 4. Install REX Guards (hooks that prevent common LLM mistakes)
+  const guardsDir = join(claudeDir, 'rex-guards')
+  ensureDir(guardsDir)
+
+  const thisDir = dirname(fileURLToPath(import.meta.url))
+  const srcGuardsDir = join(thisDir, 'guards')
+
+  const GUARDS = [
+    {
+      file: 'completion-guard.sh',
+      event: 'Stop',
+      desc: 'Completion verifier (prevents 70% problem)',
+      matcher: undefined,
+    },
+    {
+      file: 'dangerous-cmd-guard.sh',
+      event: 'PreToolUse',
+      desc: 'Dangerous command blocker',
+      matcher: 'Bash',
+    },
+    {
+      file: 'test-protect-guard.sh',
+      event: 'PostToolUse',
+      desc: 'Test assertion protector',
+      matcher: 'Edit|Write',
+    },
+    {
+      file: 'session-summary.sh',
+      event: 'Stop',
+      desc: 'Auto session summary',
+      matcher: undefined,
+    },
+    {
+      file: 'ui-checklist-guard.sh',
+      event: 'PostToolUse',
+      desc: 'UI states checklist (loading/error/empty)',
+      matcher: 'Edit|Write',
+    },
+    {
+      file: 'scope-guard.sh',
+      event: 'PostToolUse',
+      desc: 'Scope creep detector',
+      matcher: 'Edit|Write',
+    },
+  ]
+
+  let guardsInstalled = 0
+  for (const guard of GUARDS) {
+    const destPath = join(guardsDir, guard.file)
+    const srcPath = join(srcGuardsDir, guard.file)
+
+    // Copy guard script to ~/.claude/rex-guards/
+    if (existsSync(srcPath)) {
+      writeFileSync(destPath, readFileSync(srcPath, 'utf-8'), { mode: 0o755 })
+    } else if (!existsSync(destPath)) {
+      continue
+    }
+
+    // Check if this guard is already hooked
+    const event = guard.event as string
+    if (!settings.hooks[event]) settings.hooks[event] = []
+
+    const alreadyInstalled = settings.hooks[event].some((h: any) =>
+      h.hooks?.some?.((hh: any) => hh.command?.includes(guard.file))
+    )
+
+    if (!alreadyInstalled) {
+      const hookEntry: any = {
+        hooks: [{
+          type: 'command',
+          command: `bash ${destPath}`,
+          timeout: 10,
+        }],
+      }
+      if (guard.matcher) hookEntry.matcher = guard.matcher
+      settings.hooks[event].push(hookEntry)
+      guardsInstalled++
+    }
+  }
+
+  if (guardsInstalled > 0) {
+    ok(`${guardsInstalled} REX guards installed (completion, safety, UI, scope)`)
+  } else {
+    skip('All REX guards already installed')
+  }
+
+  // 5. Check Ollama (required for embeddings)
   let ollamaOk = false
   try {
     const res = await fetch('http://localhost:11434/api/tags')
