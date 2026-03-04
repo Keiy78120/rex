@@ -36,8 +36,8 @@
   },
   "devDependencies": {
     "@rex/core": "workspace:*",
-    "tsup": "^8.0.0",
-    "typescript": "^5.7.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^25.3.3",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   }
 }
