@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import "./App.css";
 
 interface CheckResult {
@@ -20,14 +20,15 @@ interface HealthReport {
   version: string;
 }
 
-function StatusDot({ status }: { status: string }) {
+function StatusDot({ status, size = "sm" }: { status: string; size?: "sm" | "md" }) {
+  const s = size === "md" ? "w-2.5 h-2.5" : "w-1.5 h-1.5";
   const color =
     status === "healthy" || status === "pass"
-      ? "bg-green-500"
+      ? "bg-green-400"
       : status === "degraded" || status === "warn"
-        ? "bg-yellow-500"
-        : "bg-gray-400";
-  return <span className={`inline-block w-2 h-2 rounded-full ${color}`} />;
+        ? "bg-amber-400"
+        : "bg-red-400";
+  return <span className={`inline-block ${s} rounded-full ${color}`} />;
 }
 
 function CheckSection({ group }: { group: CheckGroup }) {
@@ -37,43 +38,41 @@ function CheckSection({ group }: { group: CheckGroup }) {
   const allPass = passed === total;
 
   return (
-    <div className="border-b border-gray-100 last:border-b-0">
+    <div className="border-b border-white/5 last:border-b-0">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors text-left"
+        className="w-full flex items-center justify-between px-3 py-2 hover:bg-white/5 transition-colors text-left"
       >
-        <div className="flex items-center gap-2.5">
-          <span className="text-sm">{group.icon}</span>
-          <span className="text-[13px] font-medium text-gray-900">
-            {group.name}
-          </span>
-        </div>
         <div className="flex items-center gap-2">
-          <span className="text-[12px] text-gray-400">
+          <span className="text-xs opacity-70">{group.icon}</span>
+          <span className="text-[12px] font-medium text-white/90">{group.name}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-white/30 tabular-nums">
             {passed}/{total}
           </span>
           {allPass ? (
-            <span className="text-green-500 text-[12px]">&#10003;</span>
+            <span className="text-green-400 text-[10px]">&#10003;</span>
           ) : (
             <StatusDot status="warn" />
           )}
           <span
-            className={`text-[10px] text-gray-400 transition-transform ${open ? "rotate-90" : ""}`}
+            className={`text-[9px] text-white/20 transition-transform ${open ? "rotate-90" : ""}`}
           >
             &#9656;
           </span>
         </div>
       </button>
       {open && (
-        <div className="px-4 pb-2">
+        <div className="px-3 pb-1.5">
           {group.results.map((r, i) => (
             <div
               key={i}
-              className="flex items-center gap-2 py-1 text-[12px] text-gray-600"
+              className="flex items-center gap-1.5 py-0.5 text-[11px] text-white/50"
             >
               <StatusDot status={r.status} />
               <span className="truncate flex-1">{r.name}</span>
-              <span className="text-gray-400 truncate max-w-[140px]">
+              <span className="text-white/20 truncate max-w-[120px] text-[10px]">
                 {r.message}
               </span>
             </div>
@@ -87,52 +86,66 @@ function CheckSection({ group }: { group: CheckGroup }) {
 function App() {
   const [report, setReport] = useState<HealthReport | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lastCheck, setLastCheck] = useState<string>("");
   const [isRecording, setIsRecording] = useState(false);
   const [lastTranscript, setLastTranscript] = useState<string>("");
 
-  const runChecks = async () => {
+  const runChecks = useCallback(async () => {
     setLoading(true);
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       const result = await invoke<string>("run_checks");
       const parsed: HealthReport = JSON.parse(result);
       setReport(parsed);
-      setLastCheck("just now");
     } catch {
-      // Fallback mock for dev
+      // Dev fallback
       setReport({
         groups: [
           {
-            name: "Config",
-            icon: "\u2699\uFE0F",
+            name: "Config", icon: "⚙",
             results: [
-              { name: "CLAUDE.md", status: "pass", message: "Present and non-empty" },
+              { name: "CLAUDE.md", status: "pass", message: "Present" },
               { name: "settings.json", status: "pass", message: "Valid JSON" },
               { name: "vault.md", status: "pass", message: "Present" },
             ],
           },
           {
-            name: "MCP Servers",
-            icon: "\uD83D\uDD0C",
+            name: "Rules", icon: "📏",
+            results: [
+              { name: "api-design.md", status: "pass", message: "OK" },
+              { name: "security.md", status: "pass", message: "OK" },
+              { name: "testing.md", status: "pass", message: "OK" },
+            ],
+          },
+          {
+            name: "Guards", icon: "🛡",
+            results: [
+              { name: "completion-guard", status: "pass", message: "Installed" },
+              { name: "dangerous-cmd-guard", status: "pass", message: "Installed" },
+              { name: "test-protect-guard", status: "pass", message: "Installed" },
+              { name: "ui-checklist-guard", status: "pass", message: "Installed" },
+              { name: "scope-guard", status: "pass", message: "Installed" },
+              { name: "session-summary", status: "pass", message: "Installed" },
+            ],
+          },
+          {
+            name: "Hooks", icon: "🪝",
+            results: [
+              { name: "PreToolUse", status: "pass", message: "2 handlers" },
+              { name: "PostToolUse", status: "pass", message: "3 handlers" },
+              { name: "Stop", status: "pass", message: "3 handlers" },
+            ],
+          },
+          {
+            name: "MCP Servers", icon: "🔌",
             results: [
               { name: "rex-memory", status: "pass", message: "node found" },
             ],
           },
           {
-            name: "Plugins",
-            icon: "\uD83E\uDDE9",
+            name: "Environment", icon: "💻",
             results: [
-              { name: "superpowers", status: "pass", message: "Installed" },
-            ],
-          },
-          {
-            name: "Hooks",
-            icon: "\uD83E\uDE9D",
-            results: [
-              { name: "UserPromptSubmit", status: "pass", message: "1 handler(s)" },
-              { name: "PreToolUse", status: "pass", message: "1 handler(s)" },
-              { name: "Stop", status: "pass", message: "1 handler(s)" },
+              { name: "Claude Code", status: "pass", message: "v2.1.68" },
+              { name: "Node.js", status: "pass", message: "v22.20.0" },
             ],
           },
         ],
@@ -140,16 +153,14 @@ function App() {
         timestamp: new Date().toISOString(),
         version: "0.1.0",
       });
-      setLastCheck("just now");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     runChecks();
 
-    // Listen for voice events from Rust
     const setupListeners = async () => {
       try {
         const { listen } = await import("@tauri-apps/api/event");
@@ -159,7 +170,6 @@ function App() {
         const unlisten2 = await listen<string>("voice-result", (event) => {
           setIsRecording(false);
           setLastTranscript(event.payload);
-          // Copy to clipboard
           navigator.clipboard.writeText(event.payload).catch(() => {});
         });
         return () => {
@@ -171,38 +181,56 @@ function App() {
       }
     };
     setupListeners();
-  }, []);
+
+    // Auto-refresh every 60s
+    const interval = setInterval(runChecks, 60_000);
+    return () => clearInterval(interval);
+  }, [runChecks]);
+
+  const allResults = report?.groups.flatMap((g) => g.results) ?? [];
+  const passed = allResults.filter((r) => r.status === "pass").length;
+  const total = allResults.length;
 
   const statusColor =
     report?.status === "healthy"
-      ? "text-green-600"
+      ? "text-green-400"
       : report?.status === "degraded"
-        ? "text-yellow-600"
-        : "text-red-600";
+        ? "text-amber-400"
+        : "text-red-400";
+
+  const dotStyle =
+    report?.status === "healthy"
+      ? "bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.5)]"
+      : report?.status === "degraded"
+        ? "bg-amber-400"
+        : "bg-red-400";
 
   return (
-    <div className="w-[360px] bg-white rounded-xl overflow-hidden select-none">
+    <div className="w-[340px] bg-[#1e1e1e] rounded-xl overflow-hidden select-none text-white border border-white/10">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+      <div className="px-3 py-2.5 border-b border-white/10 flex items-center justify-between bg-[#252525]">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-green-500" />
-          <span className="text-[14px] font-semibold text-gray-900">REX</span>
-        </div>
-        <div className="text-right">
-          <span className={`text-[13px] font-medium ${statusColor} capitalize`}>
-            {report?.status ?? "checking..."}
+          <div className={`w-2 h-2 rounded-full ${dotStyle}`} />
+          <span className="text-[13px] font-semibold tracking-tight">REX</span>
+          <span className={`text-[11px] font-medium ${statusColor} uppercase tracking-wider`}>
+            {report?.status ?? "..."}
           </span>
-          <div className="text-[11px] text-gray-400">
-            v{report?.version ?? "0.1.0"} &middot; {lastCheck || "..."}
-          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-white/25 tabular-nums">
+            {passed}/{total}
+          </span>
+          <span className="text-[10px] text-white/20">
+            v{report?.version ?? "0.1.0"}
+          </span>
         </div>
       </div>
 
       {/* Checks */}
-      <div className="max-h-[400px] overflow-y-auto">
+      <div className="max-h-[380px] overflow-y-auto">
         {loading && !report ? (
           <div className="flex items-center justify-center py-8">
-            <div className="w-5 h-5 border-2 border-gray-200 border-t-gray-600 rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-white/10 border-t-white/50 rounded-full animate-spin" />
           </div>
         ) : (
           report?.groups.map((group, i) => (
@@ -211,37 +239,30 @@ function App() {
         )}
       </div>
 
-      {/* Voice Section */}
-      <div className="px-4 py-2.5 border-t border-gray-100">
+      {/* Voice */}
+      <div className="px-3 py-2 border-t border-white/10 bg-[#252525]">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className={`text-sm ${isRecording ? "animate-pulse" : ""}`}>
+          <div className="flex items-center gap-1.5">
+            <span className={`text-xs ${isRecording ? "animate-pulse" : "opacity-50"}`}>
               {isRecording ? "🔴" : "🎙"}
             </span>
-            <span className="text-[13px] font-medium text-gray-900">Voice</span>
+            <span className="text-[11px] text-white/60">
+              {isRecording ? "Recording..." : "⌥Space"}
+            </span>
           </div>
-          <span className="text-[12px] text-gray-400">
-            {isRecording ? "Recording..." : "⌥Space to talk"}
-          </span>
+          <button
+            onClick={runChecks}
+            disabled={loading}
+            className="text-[11px] text-white/30 hover:text-white/60 transition-colors disabled:opacity-30"
+          >
+            {loading ? "..." : "↻ Refresh"}
+          </button>
         </div>
         {lastTranscript && (
-          <div className="mt-1.5 text-[11px] text-gray-500 bg-gray-50 rounded px-2 py-1 truncate">
+          <div className="mt-1 text-[10px] text-white/40 bg-white/5 rounded px-2 py-1 truncate">
             {lastTranscript}
           </div>
         )}
-      </div>
-
-      {/* Footer */}
-      <div className="px-4 py-2.5 border-t border-gray-200 flex items-center justify-between">
-        <button className="text-[12px] text-gray-500 hover:text-gray-700 transition-colors">
-          Settings
-        </button>
-        <button
-          onClick={runChecks}
-          className="text-[12px] text-blue-600 hover:text-blue-700 font-medium transition-colors"
-        >
-          Run Doctor
-        </button>
       </div>
     </div>
   );
