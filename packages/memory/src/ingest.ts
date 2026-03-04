@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
-import { readFileSync, readdirSync, existsSync, statSync } from "fs";
+import { readFileSync, readdirSync, existsSync, statSync, mkdirSync } from "fs";
 import { join, basename } from "path";
 import { embed, embeddingToBuffer, EMBEDDING_DIM } from "./embed.js";
 
@@ -20,7 +20,6 @@ export function getDb(): Database.Database {
 
   const dbDir = join(import.meta.dirname, "..", "db");
   if (!existsSync(dbDir)) {
-    const { mkdirSync } = require("fs");
     mkdirSync(dbDir, { recursive: true });
   }
 

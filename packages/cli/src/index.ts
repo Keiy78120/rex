@@ -64,13 +64,14 @@ function formatReport(report: HealthReport): string {
 }
 
 async function main() {
-  const command = process.argv[2] ?? 'doctor'
+  const command = process.argv[2] ?? 'help'
 
   switch (command) {
     case 'doctor': {
       const report = await runAllChecks()
       console.log(formatReport(report))
       process.exit(report.status === 'broken' ? 1 : 0)
+      break
     }
 
     case 'status': {
@@ -83,15 +84,53 @@ async function main() {
       break
     }
 
+    case 'init': {
+      const { init } = await import('./init.js')
+      await init()
+      break
+    }
+
+    case 'ingest': {
+      const { execSync } = await import('node:child_process')
+      const { join } = await import('node:path')
+      const { existsSync } = await import('node:fs')
+
+      // Find memory package
+      const thisDir = new URL('.', import.meta.url).pathname
+      const candidates = [
+        join(thisDir, '..', '..', 'memory'),
+        join(process.env.HOME || '~', '.rex-memory'),
+      ]
+      let memoryDir: string | null = null
+      for (const c of candidates) {
+        if (existsSync(join(c, 'src', 'ingest.ts'))) {
+          memoryDir = c
+          break
+        }
+      }
+      if (!memoryDir) {
+        console.error('Memory package not found. Run "rex init" first.')
+        process.exit(1)
+      }
+      console.log(`${COLORS.cyan}Ingesting sessions...${COLORS.reset}`)
+      try {
+        execSync('npx tsx src/ingest.ts', { cwd: memoryDir, stdio: 'inherit' })
+      } catch {
+        process.exit(1)
+      }
+      break
+    }
+
     case 'help':
     default:
       console.log(`
-${COLORS.bold}REX${COLORS.reset} — Claude Code productivity centralizer
+${COLORS.bold}REX${COLORS.reset} — Claude Code boosted
 
 ${COLORS.bold}Commands:${COLORS.reset}
+  rex init      Setup REX (MCP servers, memory, hooks)
   rex doctor    Full health check
   rex status    Quick status summary
-  rex install   Install menubar app
+  rex ingest    Sync session history to memory
   rex help      Show this help
 `)
   }
