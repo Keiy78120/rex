@@ -121,6 +121,12 @@ async function main() {
       break
     }
 
+    case 'optimize': {
+      const { optimize } = await import('./optimize.js')
+      await optimize()
+      break
+    }
+
     case 'help':
     default:
       console.log(`
@@ -131,6 +137,7 @@ ${COLORS.bold}Commands:${COLORS.reset}
   rex doctor    Full health check
   rex status    Quick status summary
   rex ingest    Sync session history to memory
+  rex optimize  Analyze & optimize CLAUDE.md with local LLM
   rex help      Show this help
 `)
   }
