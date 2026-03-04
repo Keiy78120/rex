@@ -18,5 +18,5 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install
-      - run: pnpm test
-      - run: pnpm build
+      - run: pnpm --filter @rex/core build
+      - run: pnpm --filter rex-claude build

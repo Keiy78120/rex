@@ -49,11 +49,10 @@ importers:
         version: 7.3.1(@types/node@22.19.13)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)
 
   packages/cli:
-    dependencies:
+    devDependencies:
       '@rex/core':
         specifier: workspace:*
         version: link:../core
-    devDependencies:
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.13

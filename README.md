@@ -1,174 +1,102 @@
-<p align="center">
-  <img src=".github/assets/rex-banner.png" alt="REX" width="600" />
-</p>
-
 <h1 align="center">REX</h1>
 
 <p align="center">
   <strong>Claude Code sous steroides</strong><br>
-  Guards, health checks, memory RAG — zero config, one command.
+  Installe, oublie, Claude Code fait moins de conneries.
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/rex-cli"><img src="https://img.shields.io/npm/v/rex-cli?color=blue&label=npm" alt="npm" /></a>
+  <a href="https://www.npmjs.com/package/rex-claude"><img src="https://img.shields.io/npm/v/rex-claude?color=blue&label=npm" alt="npm" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="license" /></a>
-  <img src="https://img.shields.io/badge/zero_dependencies-black" alt="zero deps" />
-  <img src="https://img.shields.io/badge/size-10KB-brightgreen" alt="size" />
+  <img src="https://img.shields.io/badge/zero_deps-black" alt="zero deps" />
 </p>
 
 ---
 
-## The Problem
+## C'est quoi ?
 
-Claude Code (Opus, Sonnet) makes the same mistakes over and over:
+Claude Code est puissant mais fait toujours les memes erreurs. REX ajoute des **gardes automatiques** qui surveillent Claude en arriere-plan et l'empechent de faire n'importe quoi.
 
-- **70% problem** — declares "done" with TODOs and empty functions left behind
-- **Missing UI states** — generates the happy path, forgets loading/error/empty
-- **Test modification** — changes test assertions instead of fixing the code
-- **Scope creep** — touches 15+ files when you asked for one change
-- **Dangerous commands** — runs `rm -rf`, `git push --force main`, `--no-verify`
-- **Context loss** — forgets everything after compaction
-
-REX fixes all of this automatically via Claude Code hooks.
+**En une phrase :** REX = un filet de securite pour Claude Code.
 
 ## Install
 
 ```bash
-npm install -g rex-cli
+npm install -g rex-claude
 rex init
 ```
 
-That's it. Everything is automatic after `rex init`:
+C'est tout. Tout est automatique apres ca.
 
-- 6 guard hooks installed into `~/.claude/settings.json`
-- Session auto-save on exit
-- Context injection on session start
-- Health monitoring ready
+## Ce que REX fait
 
-## What REX Does
+### Il empeche Claude de faire des betises
 
-### Guard System (automatic, zero config)
+| Garde | Ce qu'il fait |
+|-------|--------------|
+| **Completion** | Empeche Claude de dire "done" quand il reste des TODO ou des fonctions vides |
+| **Dangerous Command** | Bloque les commandes dangereuses (`rm -rf`, `git push --force main`) |
+| **Test Protector** | Alerte quand Claude modifie les tests au lieu de fixer le code |
+| **UI Checklist** | Verifie que chaque composant gere le loading, l'erreur et le vide |
+| **Scope Guard** | Alerte quand Claude touche trop de fichiers (> 8) |
+| **Session Summary** | Sauvegarde l'etat du travail a chaque fin de session |
 
-REX installs 6 shell-based hooks that run automatically during Claude Code sessions:
-
-| Guard | Hook | What it prevents |
-|-------|------|-----------------|
-| **Completion Guard** | `Stop` | Scans modified files for TODO/FIXME/empty functions before Claude stops |
-| **Dangerous Command Guard** | `PreToolUse` | Blocks `rm -rf /`, `git push --force main`, `--no-verify`, `DROP TABLE` |
-| **Test Protector** | `PostToolUse` | Warns when test assertions are modified (fix the code, not the tests) |
-| **UI Checklist** | `PostToolUse` | Checks `.tsx`/`.jsx` components for loading, error, and empty states |
-| **Scope Guard** | `PostToolUse` | Alerts when >8 files modified (scope creep detection) |
-| **Session Summary** | `Stop` | Auto-saves git state, branch, modified files to memory |
-
-Guards run in the background — you don't see them unless they catch something.
-
-### Health Checks (9 categories, 55+ checks)
+### Il surveille ta config
 
 ```bash
-rex doctor
+rex doctor    # 55 checks, 9 categories
+rex status    # une ligne rapide
 ```
 
-```
-═════════════════════════════════════════════
-        REX DOCTOR — Health Check
-═════════════════════════════════════════════
+### Il se souvient de tout (optionnel)
 
-  ⚙ Config       3/3
-  📏 Rules        8/8
-  🧠 Memory      16/16
-  🔌 MCP Servers  1/1
-  🧩 Plugins      3/3
-  🪝 Hooks        6/6
-  🛡 Guards       6/6
-  📚 Docs Cache   7/7
-  💻 Environment  5/5
-
-─────────────────────────────────────────────
-  Summary: 55/55 checks passed
-  Status:  HEALTHY
-═════════════════════════════════════════════
-```
-
-### Quick Status
+Avec [Ollama](https://ollama.ai), REX transforme tes sessions Claude Code en base de connaissances searchable :
 
 ```bash
-rex status
-# REX ● HEALTHY — 55/55 checks passed
+rex ingest                              # indexe tes sessions
+rex search "comment j'ai fix le bug X"  # recherche semantique
 ```
 
-### Memory & RAG (optional, requires Ollama)
+### Il tourne tout seul
 
-```bash
-# Sync all Claude Code sessions into vector DB
-rex ingest
+- Health check toutes les heures (LaunchAgent macOS)
+- Auto-ingest des sessions toutes les heures
+- App menubar au demarrage du Mac
 
-# Semantic search across past sessions
-rex search "cloudflare workers rate limiting"
+## Commandes
 
-# Analyze CLAUDE.md with local LLM
-rex optimize
-```
-
-Requires [Ollama](https://ollama.ai) + `nomic-embed-text` model.
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `rex init` | One-click setup — installs guards, hooks, MCP server |
-| `rex doctor` | Full health check (9 categories) |
-| `rex status` | Quick one-line status |
-| `rex ingest` | Sync sessions to vector DB (requires Ollama) |
-| `rex search <query>` | Semantic search across memory (requires Ollama) |
-| `rex optimize` | Analyze CLAUDE.md with local LLM (requires Ollama) |
+| Commande | Description |
+|----------|-------------|
+| `rex init` | Setup complet (gardes, hooks, LaunchAgents) |
+| `rex doctor` | Health check detaille |
+| `rex status` | Status en une ligne |
+| `rex startup` | Installer le demarrage auto |
+| `rex startup-remove` | Retirer le demarrage auto |
+| `rex ingest` | Indexer les sessions (Ollama) |
+| `rex search <query>` | Recherche semantique (Ollama) |
+| `rex optimize` | Analyser CLAUDE.md (Ollama) |
 
 ## Architecture
 
 ```
-rex-cli (npm)          — CLI tool, zero dependencies, 10KB
-├── Guards (6x)        — Shell scripts installed to ~/.claude/rex-guards/
-├── Health Engine      — 9 check categories, 55+ individual checks
-└── Hooks              — SessionStart, SessionEnd, Stop, PreToolUse, PostToolUse
+rex-claude (npm, 12KB, zero deps)
+├── 6 gardes bash          ~/.claude/rex-guards/
+├── 9 categories de checks  rex doctor
+├── 2 LaunchAgents          health + ingest auto
+└── hooks Claude Code       SessionStart/End, Stop, PreToolUse, PostToolUse
+
+rex-app (Tauri, optionnel)
+├── menubar macOS           status en temps reel
+└── voice transcription     whisper.cpp
 ```
 
-The CLI is a single JavaScript file with all checks bundled. No runtime dependencies.
-
-Guard scripts are plain bash — readable, auditable, modifiable. Find them in `~/.claude/rex-guards/`.
-
-## How Guards Work
-
-REX uses [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) — shell commands that run at specific lifecycle points:
-
-```
-User prompt → PreToolUse → [Claude works] → PostToolUse → Stop
-                  ↑                              ↑           ↑
-          dangerous-cmd-guard         test-protect-guard   completion-guard
-                                      ui-checklist-guard   session-summary
-                                      scope-guard
-```
-
-Guards output warnings to Claude's context. They don't block Claude (except `dangerous-cmd-guard` which returns `{"decision": "block"}` for truly destructive commands).
-
-## Requirements
+## Prerequis
 
 - Node.js 20+
-- Claude Code installed
-- macOS / Linux (bash required for guards)
+- Claude Code
+- macOS ou Linux
 
-**Optional (for memory features):**
-- [Ollama](https://ollama.ai) running locally
-- `ollama pull nomic-embed-text`
-
-## Customization
-
-Guards live in `~/.claude/rex-guards/`. Edit any `.sh` file to customize behavior:
-
-```bash
-# Example: change scope guard threshold from 8 to 15 files
-vim ~/.claude/rex-guards/scope-guard.sh
-```
-
-Hooks are registered in `~/.claude/settings.json` under the `hooks` key.
+**Optionnel :** Ollama + `nomic-embed-text` pour la memoire
 
 ## License
 
