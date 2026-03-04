@@ -6,3 +6,4 @@ target/
 .env
 .env.*
 *.dmg
+packages/memory/package-lock.json

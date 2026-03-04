@@ -5,5 +5,6 @@ export default defineConfig({
   format: ['esm'],
   noExternal: ['@rex/core'],
   banner: { js: '#!/usr/bin/env node' },
-  onSuccess: 'cp -r src/guards dist/guards',
+  clean: true,
+  onSuccess: 'mkdir -p dist/guards && cp src/guards/*.sh dist/guards/',
 })
