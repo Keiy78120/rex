@@ -146,7 +146,7 @@ async function main() {
 
     case '--version':
     case '-v':
-      console.log('rex-claude v2.1.0')
+      console.log('rex-claude v2.2.0')
       break
 
     case 'help':
