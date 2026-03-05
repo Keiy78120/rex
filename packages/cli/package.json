@@ -1,6 +1,6 @@
 {
   "name": "rex-claude",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Claude Code sous steroides — guards, health checks, memory RAG",
   "type": "module",
   "bin": {
