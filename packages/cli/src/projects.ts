@@ -3,6 +3,9 @@ import { join } from 'node:path'
 import { execSync } from 'node:child_process'
 import { PROJECTS_DIR, SUMMARIES_DIR, ensureRexDirs } from './paths.js'
 import { loadConfig } from './config.js'
+import { createLogger } from './logger.js'
+
+const log = createLogger('projects')
 
 export interface ProjectEntry {
   name: string
@@ -136,6 +139,7 @@ export function scanProjects(): ProjectEntry[] {
     }
   }
 
+  log.info(`Scanned ${projects.length} projects across ${config.ingest.scanPaths.length} paths`)
   return projects.sort((a, b) => b.lastActive.localeCompare(a.lastActive))
 }
 

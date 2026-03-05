@@ -1,7 +1,9 @@
 import { runAllChecks } from '@rex/core'
 import type { HealthReport, CheckGroup } from '@rex/core'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { createLogger, configureLogger } from './logger.js'
+import { DAEMON_LOG_PATH } from './paths.js'
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -66,14 +68,19 @@ function formatReport(report: HealthReport): string {
 
 async function main() {
   const command = process.argv[2] ?? 'help'
+  const verbose = process.argv.includes('--verbose')
+  if (verbose) configureLogger({ level: 'debug' })
+  const log = createLogger('cli')
 
   switch (command) {
     case 'doctor': {
       const fixMode = process.argv.includes('--fix')
       if (fixMode) {
+        log.info('Doctor --fix started')
         console.log(`\n${COLORS.bold}REX Doctor — Auto-fix mode${COLORS.reset}\n`)
         const { ensureRexDirs } = await import('./paths.js')
         ensureRexDirs()
+        log.info('Directory structure ensured')
         console.log(`  ${COLORS.green}✓${COLORS.reset} Directory structure ensured`)
         // Run migrate if needed
         try {
@@ -86,6 +93,7 @@ async function main() {
         const { execSync } = await import('node:child_process')
         try { execSync('rex ingest', { stdio: 'inherit', timeout: 120_000 }) } catch {}
         try { execSync('rex recategorize --batch=50', { stdio: 'inherit', timeout: 180_000 }) } catch {}
+        log.info('Auto-fix complete, running doctor')
         console.log(`\n${COLORS.green}Auto-fix complete.${COLORS.reset} Running doctor...\n`)
       }
       const report = await runAllChecks()
@@ -321,6 +329,27 @@ async function main() {
       break
     }
 
+    case 'logs': {
+      const lines = process.argv.find(a => a.startsWith('--lines='))
+      const n = lines ? parseInt(lines.split('=')[1]) : 50
+      const follow = process.argv.includes('--follow') || process.argv.includes('-f')
+      if (!existsSync(DAEMON_LOG_PATH)) {
+        console.log(`${COLORS.dim}No log file found at ${DAEMON_LOG_PATH}${COLORS.reset}`)
+        break
+      }
+      if (follow) {
+        const { execSync: execSyncLocal } = await import('node:child_process')
+        try { execSyncLocal(`tail -f "${DAEMON_LOG_PATH}"`, { stdio: 'inherit' }) } catch {}
+      } else {
+        const content = readFileSync(DAEMON_LOG_PATH, 'utf-8')
+        const logLines = content.split('\n').filter(Boolean)
+        const tail = logLines.slice(-n)
+        for (const line of tail) console.log(line)
+        console.log(`\n${COLORS.dim}Showing last ${tail.length} of ${logLines.length} lines. Use --follow/-f for live tail.${COLORS.reset}`)
+      }
+      break
+    }
+
     case '--version':
     case '-v':
       console.log('rex-claude v5.0.0')
@@ -363,6 +392,7 @@ ${COLORS.bold}LLM & Context:${COLORS.reset}
 
 ${COLORS.bold}Background:${COLORS.reset}
   rex daemon           Start persistent background daemon
+  rex logs             Show recent daemon/CLI logs (--lines=N, --follow/-f)
 
 ${COLORS.bold}Telegram Gateway:${COLORS.reset}
   rex gateway          Start Telegram bot (long-polling, interactive)

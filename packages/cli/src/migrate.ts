@@ -2,10 +2,14 @@ import { existsSync, copyFileSync, mkdirSync, symlinkSync, renameSync, readdirSy
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
 import { MEMORY_DIR, MEMORY_DB_PATH, PENDING_DIR, BACKUPS_DIR, LEGACY_MEMORY_DIR, LEGACY_DB_PATH, ensureRexDirs } from './paths.js'
+import { createLogger } from './logger.js'
+
+const log = createLogger('migrate')
 
 const COLORS = { green: '\x1b[32m', yellow: '\x1b[33m', dim: '\x1b[2m', reset: '\x1b[0m' }
 
 export async function migrate(): Promise<void> {
+  log.info('Migration started')
   ensureRexDirs()
 
   // 1. Migrate DB if legacy exists and new doesn't
@@ -74,5 +78,6 @@ export async function migrate(): Promise<void> {
     }
   }
 
+  log.info('Migration complete')
   console.log(`\n${COLORS.green}Migration complete.${COLORS.reset} REX hub at ~/.claude/rex/`)
 }

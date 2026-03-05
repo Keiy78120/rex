@@ -1,18 +1,13 @@
 // packages/cli/src/daemon.ts
-import { existsSync, readFileSync, writeFileSync, readdirSync, unlinkSync, copyFileSync, statSync, appendFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, readdirSync, unlinkSync, copyFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
 import { MEMORY_DB_PATH, PENDING_DIR, BACKUPS_DIR, DAEMON_LOG_PATH, ensureRexDirs } from './paths.js'
 import { loadConfig } from './config.js'
+import { createLogger, rotateLog } from './logger.js'
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
-
-function log(msg: string): void {
-  const ts = new Date().toISOString()
-  const line = `[${ts}] ${msg}`
-  console.log(line)
-  try { appendFileSync(DAEMON_LOG_PATH, line + '\n') } catch {}
-}
+const log = createLogger('daemon')
 
 async function checkOllama(): Promise<boolean> {
   try {
@@ -50,7 +45,7 @@ function backupDb(): void {
   const backupPath = join(BACKUPS_DIR, `rex-${date}.sqlite`)
   if (existsSync(backupPath)) return // already backed up today
   copyFileSync(MEMORY_DB_PATH, backupPath)
-  log(`Backup: ${backupPath}`)
+  log.info(`Backup: ${backupPath}`)
 }
 
 function pruneBackups(retainDays: number = 7): void {
@@ -61,7 +56,7 @@ function pruneBackups(retainDays: number = 7): void {
     try {
       if (statSync(fPath).mtimeMs < cutoff) {
         unlinkSync(fPath)
-        log(`Pruned backup: ${f}`)
+        log.debug(`Pruned backup: ${f}`)
       }
     } catch {}
   }
@@ -76,7 +71,7 @@ function runCmd(cmd: string, timeout: number = 120_000): void {
   try {
     execSync(cmd, { timeout, encoding: 'utf-8', stdio: 'pipe' })
   } catch (e: any) {
-    log(`Command error (${cmd.slice(0, 30)}): ${e.message?.slice(0, 200)}`)
+    log.error(`Command error (${cmd.slice(0, 30)}): ${e.message?.slice(0, 200)}`)
   }
 }
 
@@ -99,27 +94,28 @@ async function healthCheck(): Promise<void> {
   const ollamaUp = await checkOllama()
 
   if (!ollamaUp) {
-    log('Ollama down — attempting restart')
+    log.warn('Ollama down — attempting restart')
     const restarted = await restartOllama()
-    log(restarted ? 'Ollama restarted successfully' : 'Ollama restart failed')
+    if (restarted) log.info('Ollama restarted successfully')
+    else log.error('Ollama restart failed')
   }
 
   // Process pending if Ollama is now up
   if (await checkOllama()) {
     const pending = countPending()
     if (pending > 0) {
-      log(`Processing ${pending} pending files`)
+      log.info(`Processing ${pending} pending files`)
       runCmd('rex ingest')
     }
   }
 
   // Check DB integrity
   if (!checkDbIntegrity()) {
-    log('DB integrity check FAILED')
+    log.error('DB integrity check FAILED')
     const backups = existsSync(BACKUPS_DIR) ? readdirSync(BACKUPS_DIR).filter(f => f.endsWith('.sqlite')).sort().reverse() : []
     if (backups.length) {
       copyFileSync(join(BACKUPS_DIR, backups[0]), MEMORY_DB_PATH)
-      log(`Restored DB from ${backups[0]}`)
+      log.warn(`Restored DB from ${backups[0]}`)
       await sendTelegramNotify('⚠️ REX: DB integrity fail — restored from backup')
     }
   }
@@ -127,7 +123,7 @@ async function healthCheck(): Promise<void> {
   // Check disk space
   const freeGb = checkDiskSpace()
   if (freeGb < 1) {
-    log(`Disk low: ${freeGb}GB free`)
+    log.warn(`Disk low: ${freeGb}GB free`)
     pruneBackups(3)
     await sendTelegramNotify(`⚠️ REX: Disk low (${freeGb}GB free)`)
   }
@@ -135,36 +131,27 @@ async function healthCheck(): Promise<void> {
 
 // ─── Ingest Cycle (every 30 min) ──────────────────────────
 async function ingestCycle(): Promise<void> {
-  log('Ingest cycle start')
+  log.info('Ingest cycle start')
   runCmd('rex ingest')
   runCmd('rex categorize --batch=100', 180_000)
   runCmd('rex recategorize --batch=20', 180_000)
-  log('Ingest cycle done')
+  log.info('Ingest cycle done')
 }
 
 // ─── Maintenance (every 60 min) ───────────────────────────
 async function maintenanceCycle(): Promise<void> {
-  log('Maintenance cycle start')
+  log.info('Maintenance cycle start')
   backupDb()
   pruneBackups(7)
   runCmd('rex projects', 30_000)
 
-  // Rotate daemon log (keep last 10000 lines)
-  if (existsSync(DAEMON_LOG_PATH)) {
-    try {
-      const content = readFileSync(DAEMON_LOG_PATH, 'utf-8')
-      const lines = content.split('\n')
-      if (lines.length > 10000) {
-        writeFileSync(DAEMON_LOG_PATH, lines.slice(-5000).join('\n'))
-      }
-    } catch {}
-  }
-  log('Maintenance cycle done')
+  rotateLog()
+  log.info('Maintenance cycle done')
 }
 
 // ─── Self-Review (every 24h) ──────────────────────────────
 async function selfReviewCycle(): Promise<void> {
-  log('Self-review cycle start')
+  log.info('Self-review cycle start')
   runCmd('rex self-review')
 
   const config = loadConfig()
@@ -183,7 +170,7 @@ async function selfReviewCycle(): Promise<void> {
     } catch {}
   }
 
-  log('Self-review cycle done')
+  log.info('Self-review cycle done')
 }
 
 // ─── Main Loop ────────────────────────────────────────────
@@ -191,8 +178,8 @@ export async function daemon(): Promise<void> {
   ensureRexDirs()
   const config = loadConfig()
 
-  log('REX Daemon started')
-  log(`Health: ${config.daemon.healthCheckInterval}s | Ingest: ${config.daemon.ingestInterval}s | Maintenance: ${config.daemon.maintenanceInterval}s | Self-review: ${config.daemon.selfReviewInterval}s`)
+  log.info('REX Daemon started')
+  log.info(`Health: ${config.daemon.healthCheckInterval}s | Ingest: ${config.daemon.ingestInterval}s | Maintenance: ${config.daemon.maintenanceInterval}s | Self-review: ${config.daemon.selfReviewInterval}s`)
 
   // Initial health check
   await healthCheck()

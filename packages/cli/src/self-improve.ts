@@ -7,6 +7,9 @@ import { SELF_IMPROVEMENT_DIR, MEMORY_DB_PATH } from './paths.js'
 import { loadConfig } from './config.js'
 import { llm } from './llm.js'
 import { pickModel } from './router.js'
+import { createLogger } from './logger.js'
+
+const log = createLogger('self-improve')
 
 interface Lesson {
   id: string
@@ -51,10 +54,12 @@ export async function selfReview(): Promise<{ newLessons: number; ruleCandidates
   const COLORS = { green: '\x1b[32m', yellow: '\x1b[33m', dim: '\x1b[2m', reset: '\x1b[0m', bold: '\x1b[1m' }
   const config = loadConfig()
   if (!config.selfImprovement.enabled) {
+    log.info('Self-improvement disabled in config')
     console.log(`${COLORS.dim}Self-improvement disabled in config.${COLORS.reset}`)
     return { newLessons: 0, ruleCandidates: 0 }
   }
   if (!existsSync(MEMORY_DB_PATH)) {
+    log.warn(`No memory DB found at ${MEMORY_DB_PATH}`)
     console.log(`${COLORS.yellow}No memory DB found at ${MEMORY_DB_PATH}${COLORS.reset}`)
     return { newLessons: 0, ruleCandidates: 0 }
   }
@@ -99,6 +104,7 @@ export async function selfReview(): Promise<{ newLessons: number; ruleCandidates
   }
 
   saveLessons(existingLessons)
+  log.info(`Lessons: ${existingLessons.length} total, ${newCount} new`)
   console.log(`  Lessons: ${existingLessons.length} total, ${newCount} new`)
 
   // Check error patterns
@@ -143,6 +149,7 @@ export async function selfReview(): Promise<{ newLessons: number; ruleCandidates
         }
       }
     } catch (e: any) {
+      log.warn(`Pattern analysis skipped: ${e.message?.slice(0, 100)}`)
       console.log(`  ${COLORS.yellow}Pattern analysis skipped (LLM unavailable)${COLORS.reset}`)
     }
   } else {
@@ -162,6 +169,7 @@ export async function selfReview(): Promise<{ newLessons: number; ruleCandidates
 
   db.close()
 
+  log.info(`Self-review done: ${newCount} new lessons, ${ruleCandidates} rule candidates`)
   console.log(`\n${COLORS.green}Done.${COLORS.reset} ${newCount} new lessons, ${ruleCandidates} rule candidates\n`)
   return { newLessons: newCount, ruleCandidates }
 }

@@ -3,11 +3,17 @@ import * as sqliteVec from 'sqlite-vec'
 import { existsSync } from 'node:fs'
 import { MEMORY_DB_PATH } from './paths.js'
 import { findProject } from './projects.js'
+import { createLogger } from './logger.js'
+
+const log = createLogger('preload')
 
 const MAX_TOKENS = 200  // Hard limit for pre-loaded context
 
 export async function preload(cwd: string): Promise<string> {
-  if (!existsSync(MEMORY_DB_PATH)) return ''
+  if (!existsSync(MEMORY_DB_PATH)) {
+    log.debug('No memory DB found, skipping preload')
+    return ''
+  }
 
   const project = findProject(cwd)
   const sections: string[] = []
@@ -17,7 +23,8 @@ export async function preload(cwd: string): Promise<string> {
     db = new Database(MEMORY_DB_PATH, { readonly: true })
     sqliteVec.load(db)
     db.pragma('journal_mode = WAL')
-  } catch {
+  } catch (e: any) {
+    log.error(`Failed to open memory DB: ${e.message?.slice(0, 100)}`)
     return ''
   }
 
@@ -64,6 +71,7 @@ export async function preload(cwd: string): Promise<string> {
   }
 
   const output = sections.join('\n')
+  log.info(`Preloaded ${sections.length} sections for ${project?.name || cwd} (${output.length} chars)`)
   // Rough token estimate: ~4 chars per token
   if (output.length > MAX_TOKENS * 4) {
     return output.slice(0, MAX_TOKENS * 4)

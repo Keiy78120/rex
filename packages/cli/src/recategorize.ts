@@ -5,6 +5,9 @@ import { MEMORY_DB_PATH } from './paths.js'
 import { loadConfig } from './config.js'
 import { pickModel } from './router.js'
 import { llm } from './llm.js'
+import { createLogger } from './logger.js'
+
+const log = createLogger('recategorize')
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 const VALID_CATEGORIES = ['debug', 'fix', 'pattern', 'lesson', 'architecture', 'config', 'project', 'reference', 'session'] as const
@@ -96,6 +99,7 @@ export async function recategorize(options: { batch?: number; dryRun?: boolean }
     "SELECT id, content FROM memories WHERE category IN ('session', 'general') OR needs_reprocess = 1 LIMIT ?"
   ).all(batchSize) as Array<{ id: number; content: string }>
 
+  log.info(`Starting recategorize: ${rows.length} memories to process (batch: ${batchSize})`)
   console.log(`\n${COLORS.bold}REX Recategorize${COLORS.reset}`)
   console.log(`${COLORS.dim}Found ${rows.length} memories to process (batch: ${batchSize})${COLORS.reset}\n`)
 
@@ -124,11 +128,13 @@ export async function recategorize(options: { batch?: number; dryRun?: boolean }
       processed++
       process.stdout.write(`\r  ${COLORS.cyan}${processed}/${rows.length}${COLORS.reset} processed`)
     } else {
+      log.warn(`Failed to classify memory id=${row.id}, flagged for retry`)
       db.prepare("UPDATE memories SET needs_reprocess = 1 WHERE id = ?").run(row.id)
       failed++
     }
   }
 
+  log.info(`Done: ${processed} categorized, ${failed} failed`)
   console.log(`\n\n${COLORS.green}Done:${COLORS.reset} ${processed} categorized, ${failed} failed (flagged for retry)\n`)
   for (const [cat, count] of Object.entries(stats).sort((a, b) => b[1] - a[1])) {
     console.log(`  ${cat.padEnd(15)} ${count}`)

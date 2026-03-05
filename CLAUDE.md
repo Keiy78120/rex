@@ -1,5 +1,10 @@
 # REX — Contexte projet pour agents
 
+## Source Of Truth
+- `CLAUDE.md` principal = celui du root de ce repo.
+- Repo principal: `/Users/keiy/Documents/Developer/keiy/rex`
+- Tout clone miroir (ex: `/_config/rex`) doit être synchronisé depuis ce root pour éviter la dérive.
+
 Ce fichier est le point d'entree rapide pour tout agent (Claude, Codex, Garry) qui travaille sur ce repo.
 **Mettre a jour la section "En cours / Terminé" a chaque changement significatif.**
 
@@ -37,7 +42,8 @@ packages/
 │       ├── preload.ts     Smart SessionStart context injection
 │       ├── self-improve.ts Lesson extraction + rule promotion
 │       ├── daemon.ts      Unified background daemon
-│       └── router.ts      Task-aware model routing
+│       ├── router.ts      Task-aware model routing
+│       └── logger.ts      Centralized logging (console + file, levels, rotation)
 ├── core/        Checks partagés (rex doctor)
 ├── memory/      Embed + search (nomic-embed-text + SQLite)
 ├── flutter_app/ App macOS native
@@ -120,6 +126,14 @@ rex doctor --fix     # Auto-fix then health check
 - Rate limit Telegram editMessageText : 1 edit / 600ms minimum
 - Credentials lus depuis `~/.claude/settings.json` ET depuis `process.env` (fallback)
 
+### Logging
+- Tous les modules CLI utilisent `createLogger(source)` de `logger.ts`
+- Logs dual : console (coloré) + fichier persistant `~/.claude/rex/daemon.log`
+- Niveaux : debug, info, warn, error — configurable via `configureLogger({ level })`
+- `rex logs` pour voir les logs, `rex logs -f` pour tail live
+- `--verbose` sur n'importe quelle commande → passe en debug level
+- Rotation auto dans le daemon (10k lignes max, garde 5k)
+
 ### Memoire
 - SQLite dans `~/.rex-memory/rex-memory.db`
 - Embeddings via `nomic-embed-text` Ollama
@@ -192,6 +206,10 @@ rex doctor --fix     # Auto-fix then health check
 | Self-improvement engine (lessons, error patterns, rule promotion) | `packages/cli/src/self-improve.ts` |
 | Unified daemon replacing 3 LaunchAgents | `packages/cli/src/daemon.ts`, `packages/cli/src/init.ts` |
 | `rex doctor --fix` auto-repair | `packages/cli/src/index.ts` |
+| Centralized logger (`createLogger(source)`) across all modules | `packages/cli/src/logger.ts` |
+| Logger integration: daemon, recategorize, preload, self-improve, projects, migrate, index | all `src/*.ts` files |
+| `rex logs` command (--lines=N, --follow/-f) to view daemon/CLI logs | `packages/cli/src/index.ts` |
+| `--verbose` flag for debug-level logging on any command | `packages/cli/src/index.ts` |
 
 ### 🔄 En cours / A faire
 
@@ -200,7 +218,7 @@ rex doctor --fix     # Auto-fix then health check
 | Training pipeline research approfondie | BASSE | Benchmarks reels mlx-lm vs unsloth + eval dataset interne |
 | Rex daemon LaunchAgent (com.dstudio.rex-daemon) | HAUTE | `rex init` installs, KeepAlive, replaces 3 old agents |
 | Flutter Settings: Model Router section | BASSE | Afficher task→model mapping depuis getRouterSnapshot() |
-| Flutter app rebuild requis | HAUTE | `cd packages/flutter_app && flutter build macos --debug` pour gateway stop/start fix |
+| Flutter app rebuild requis | HAUTE | `cd packages/flutter_app && flutter build macos --debug` — inclure tous les derniers changements CLI (logger, daemon, recategorize, preload, self-improve, projects, logs command) |
 
 **Plan complet :** `docs/plans/2026-03-05-rex-gateway-qwen-streaming-training.md`
 
