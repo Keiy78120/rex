@@ -113,9 +113,11 @@ impl AudioLogger {
         {
             self.current_samples.lock().unwrap().clear();
 
+            eprintln!("[AudioLogger] Getting shareable content...");
             let content = SCShareableContent::try_current()
-                .map_err(|e| format!("Failed to get shareable content: {e}"))?;
+                .map_err(|e| format!("Failed to get shareable content (need Screen Recording permission in System Settings > Privacy & Security > Screen Recording): {e}"))?;
 
+            eprintln!("[AudioLogger] Found {} displays", content.displays.len());
             let display = content
                 .displays
                 .into_iter()
@@ -140,13 +142,17 @@ impl AudioLogger {
                 is_capturing: Arc::clone(&self.is_capturing),
             };
 
+            eprintln!("[AudioLogger] Creating stream...");
             let mut stream = SCStream::new(filter, config, ErrorHandler);
             stream.add_output(handler, SCStreamOutputType::Audio);
+
+            eprintln!("[AudioLogger] Starting capture...");
             stream.start_capture().map_err(|e| format!("Failed to start capture: {e}"))?;
 
             self.is_capturing.store(true, Ordering::SeqCst);
             *self.stream.lock().unwrap() = Some(stream);
 
+            eprintln!("[AudioLogger] Capture started successfully");
             return Ok(());
         }
 

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, chmodSync, unlinkSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, chmodSync, unlinkSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { execSync } from 'node:child_process'
@@ -40,6 +40,7 @@ function ensureDir(dir: string) {
 
 const PLIST_LABEL = 'com.dstudio.rex'
 const INGEST_PLIST_LABEL = 'com.dstudio.rex-ingest'
+const GATEWAY_PLIST_LABEL = 'com.dstudio.rex-gateway'
 
 export function installIngestAgent() {
   if (process.platform !== 'darwin') {
@@ -117,6 +118,109 @@ export function uninstallIngestAgent() {
 
   try { unlinkSync(plistPath) } catch {}
   ok('Ingest LaunchAgent removed')
+}
+
+export function installGatewayAgent() {
+  if (process.platform !== 'darwin') {
+    info('Gateway LaunchAgent only supported on macOS')
+    return
+  }
+
+  // Check if Telegram is configured
+  const settingsPath = join(homedir(), '.claude', 'settings.json')
+  let hasTelegram = false
+  try {
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+    hasTelegram = !!(settings.env?.REX_TELEGRAM_BOT_TOKEN && settings.env?.REX_TELEGRAM_CHAT_ID)
+  } catch {}
+  if (!hasTelegram) {
+    info('Telegram not configured — skipping gateway LaunchAgent (run rex setup first)')
+    return
+  }
+
+  const launchAgentsDir = join(homedir(), 'Library', 'LaunchAgents')
+  ensureDir(launchAgentsDir)
+  const plistPath = join(launchAgentsDir, `${GATEWAY_PLIST_LABEL}.plist`)
+
+  let rexBin = ''
+  try {
+    rexBin = execSync('which rex', { encoding: 'utf-8' }).trim()
+  } catch {}
+
+  if (!rexBin) {
+    info('rex binary not in PATH — skipping gateway LaunchAgent')
+    return
+  }
+
+  if (existsSync(plistPath)) {
+    skip('Gateway LaunchAgent already installed (Telegram bot always-on)')
+    return
+  }
+
+  // Read env vars from settings to inject into plist
+  let botToken = ''
+  let chatIdVal = ''
+  try {
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+    botToken = settings.env?.REX_TELEGRAM_BOT_TOKEN || ''
+    chatIdVal = settings.env?.REX_TELEGRAM_CHAT_ID || ''
+  } catch {}
+
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${GATEWAY_PLIST_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${rexBin}</string>
+    <string>gateway</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>${join(homedir(), '.claude', 'rex-gateway.log')}</string>
+  <key>StandardErrorPath</key>
+  <string>${join(homedir(), '.claude', 'rex-gateway.log')}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:${dirname(rexBin)}</string>
+    <key>REX_TELEGRAM_BOT_TOKEN</key>
+    <string>${botToken}</string>
+    <key>REX_TELEGRAM_CHAT_ID</key>
+    <string>${chatIdVal}</string>
+  </dict>
+</dict>
+</plist>
+`
+  writeFileSync(plistPath, plist)
+
+  try {
+    execSync(`launchctl load ${plistPath}`, { stdio: 'ignore' })
+  } catch {}
+
+  ok('Gateway LaunchAgent installed — Telegram bot always-on (auto-restart)')
+}
+
+export function uninstallGatewayAgent() {
+  if (process.platform !== 'darwin') return
+
+  const plistPath = join(homedir(), 'Library', 'LaunchAgents', `${GATEWAY_PLIST_LABEL}.plist`)
+  if (!existsSync(plistPath)) {
+    info('Gateway LaunchAgent not installed')
+    return
+  }
+
+  try {
+    execSync(`launchctl unload ${plistPath}`, { stdio: 'ignore' })
+  } catch {}
+
+  try { unlinkSync(plistPath) } catch {}
+  ok('Gateway LaunchAgent removed')
 }
 
 export function installApp() {
@@ -230,6 +334,7 @@ export function uninstallStartup() {
   }
 
   uninstallIngestAgent()
+  uninstallGatewayAgent()
 }
 
 export async function init() {
@@ -383,6 +488,18 @@ fi
       desc: 'Scope creep detector',
       matcher: 'Edit|Write',
     },
+    {
+      file: 'error-pattern-guard.sh',
+      event: 'PostToolUse',
+      desc: 'Recurring error pattern detector',
+      matcher: 'Bash',
+    },
+    {
+      file: 'notify-telegram.sh',
+      event: 'Stop',
+      desc: 'Telegram notification on task completion',
+      matcher: undefined,
+    },
   ]
 
   let guardsInstalled = 0
@@ -428,6 +545,7 @@ fi
   // 5. Install LaunchAgents (auto-start on login)
   installStartup()
   installIngestAgent()
+  installGatewayAgent()
 
   // 5b. Install REX.app to /Applications + Login Items (if built)
   installApp()
@@ -456,7 +574,52 @@ fi
     info('Ollama not running — needed for memory/RAG. Install: https://ollama.ai')
   }
 
-  // 7. Save settings
+  // 7. Sync bundled skills to ~/.claude/skills/
+  const bundledSkillsDir = join(thisDir, '..', 'skills')
+  if (existsSync(bundledSkillsDir)) {
+    const skillsTargetDir = join(claudeDir, 'skills')
+    ensureDir(skillsTargetDir)
+    let skillsSynced = 0
+    try {
+      const skillDirs = readdirSync(bundledSkillsDir).filter(d => {
+        try { return statSync(join(bundledSkillsDir, d)).isDirectory() } catch { return false }
+      })
+      for (const skill of skillDirs) {
+        const srcSkill = join(bundledSkillsDir, skill, 'SKILL.md')
+        const destSkillDir = join(skillsTargetDir, skill)
+        const destSkill = join(destSkillDir, 'SKILL.md')
+        if (existsSync(srcSkill)) {
+          const srcContent = readFileSync(srcSkill, 'utf-8')
+          const destContent = existsSync(destSkill) ? readFileSync(destSkill, 'utf-8') : ''
+          if (srcContent !== destContent) {
+            ensureDir(destSkillDir)
+            writeFileSync(destSkill, srcContent)
+            skillsSynced++
+          }
+        }
+      }
+    } catch {}
+    if (skillsSynced > 0) {
+      ok(`${skillsSynced} skills synced from rex-claude`)
+    } else {
+      skip('All skills up to date')
+    }
+  }
+
+  // 8. Sync @rex/memory to ~/.rex-memory/ if not present
+  const memoryMonorepoDir = join(thisDir, '..', '..', 'memory')
+  const memoryTargetDir = join(homedir(), '.rex-memory')
+  if (existsSync(join(memoryMonorepoDir, 'package.json')) && !existsSync(join(memoryTargetDir, 'package.json'))) {
+    try {
+      execSync(`cp -R "${memoryMonorepoDir}" "${memoryTargetDir}"`, { stdio: 'ignore' })
+      execSync('npm install --production 2>/dev/null', { cwd: memoryTargetDir, stdio: 'ignore' })
+      ok('@rex/memory synced to ~/.rex-memory/')
+    } catch {
+      info('Could not sync @rex/memory — install manually')
+    }
+  }
+
+  // 9. Save settings
   writeJson(settingsPath, settings)
 
   console.log(`\n${COLORS.dim}─────────────────────────────────────────────${COLORS.reset}`)

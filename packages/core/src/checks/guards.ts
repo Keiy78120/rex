@@ -9,6 +9,8 @@ const EXPECTED_GUARDS = [
   'session-summary.sh',
   'ui-checklist-guard.sh',
   'scope-guard.sh',
+  'error-pattern-guard.sh',
+  'notify-telegram.sh',
 ]
 
 export async function checkGuards(claudeDir: string): Promise<CheckGroup> {

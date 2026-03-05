@@ -1,10 +1,11 @@
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
-import { readFileSync, readdirSync, existsSync, statSync, mkdirSync } from "fs";
+import { readFileSync, readdirSync, existsSync, statSync, mkdirSync, unlinkSync, writeFileSync as writeFS } from "fs";
 import { join, basename } from "path";
 import { embed, embeddingToBuffer, EMBEDDING_DIM } from "./embed.js";
 
 const DB_PATH = join(import.meta.dirname, "..", "db", "rex.sqlite");
+const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 const MAX_CHUNKS_PER_FILE = 50;
 const CHUNK_SIZE = 1000;
 const MAX_CHUNK_LENGTH = 2000;
@@ -12,6 +13,65 @@ const MIN_TEXT_LENGTH = 50;
 const MIN_FINAL_CHUNK = 100;
 const EMBED_RETRY_DELAY = 2000;
 const EMBED_MAX_RETRIES = 3;
+const SMART_INGEST = process.env.REX_SMART_INGEST !== "0";
+
+const VALID_CATEGORIES = ["debug", "fix", "idea", "architecture", "pattern", "lesson", "config", "session"] as const;
+type Category = (typeof VALID_CATEGORIES)[number];
+
+const PREFERRED_MODELS = ["qwen3.5:9b", "qwen3.5:4b", "qwen2.5:1.5b", "llama3.2", "mistral"];
+
+async function detectModel(): Promise<string> {
+  if (process.env.REX_LLM_MODEL) return process.env.REX_LLM_MODEL;
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/tags`);
+    const data = (await res.json()) as { models: Array<{ name: string }> };
+    const available = data.models.map((m: any) => m.name);
+    for (const pref of PREFERRED_MODELS) {
+      const base = pref.split(":")[0];
+      const match = available.find((a: string) => a.includes(base));
+      if (match) return match;
+    }
+    return available.find((a: string) => !a.includes("embed")) || available[0];
+  } catch {
+    return "qwen3.5:4b";
+  }
+}
+
+async function classifyAndSummarize(chunk: string): Promise<{ category: Category; summary: string }> {
+  const fallback = { category: "session" as Category, summary: chunk };
+  try {
+    const model = await detectModel();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        prompt: `Classify this developer session chunk and summarize it. Output ONLY valid JSON, no markdown.\n\nCategories: debug, fix, idea, architecture, pattern, lesson, config, session\n\nChunk:\n${chunk.slice(0, 1500)}\n\nJSON output with "category" (one of the categories above) and "summary" (1-2 sentence summary of the key insight/action):`,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return fallback;
+
+    const data = (await res.json()) as { response: string };
+    // Extract JSON from response (handle markdown code blocks)
+    const jsonMatch = data.response.match(/\{[\s\S]*?\}/);
+    if (!jsonMatch) return fallback;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const category = VALID_CATEGORIES.includes(parsed.category) ? parsed.category : "session";
+    const summary = typeof parsed.summary === "string" && parsed.summary.length > 10 ? parsed.summary : chunk;
+
+    return { category, summary };
+  } catch {
+    return fallback;
+  }
+}
 
 let _db: Database.Database | null = null;
 
@@ -154,18 +214,49 @@ function chunkText(lines: string[]): string[] {
 
 async function checkOllama(): Promise<boolean> {
   try {
-    const res = await fetch(`${process.env.OLLAMA_URL || "http://localhost:11434"}/api/tags`);
+    const res = await fetch(`${OLLAMA_URL}/api/tags`);
     return res.ok;
   } catch {
     return false;
   }
 }
 
+const PENDING_DIR = join(process.env.HOME || "~", ".rex-memory", "pending");
+
+async function savePending(chunks: Array<{ text: string; source: string; project: string }>) {
+  if (!existsSync(PENDING_DIR)) mkdirSync(PENDING_DIR, { recursive: true });
+  const filename = `pending-${Date.now()}.json`;
+  writeFS(join(PENDING_DIR, filename), JSON.stringify(chunks, null, 2));
+  console.log(`  Saved ${chunks.length} chunks to pending/ (Ollama offline)`);
+}
+
+async function processPending() {
+  if (!existsSync(PENDING_DIR)) return;
+  const files = readdirSync(PENDING_DIR).filter((f) => f.endsWith(".json"));
+  if (files.length === 0) return;
+
+  console.log(`  Processing ${files.length} pending file(s)...`);
+  for (const file of files) {
+    const filePath = join(PENDING_DIR, file);
+    try {
+      const chunks: Array<{ text: string; source: string; project: string }> = JSON.parse(readFileSync(filePath, "utf-8"));
+      for (const chunk of chunks) {
+        await learn(chunk.text, "session", chunk.source, chunk.project);
+      }
+      unlinkSync(filePath);
+      console.log(`  ${file}: ${chunks.length} chunks processed`);
+    } catch (err) {
+      console.error(`  Error processing ${file}: ${(err as Error).message}`);
+    }
+  }
+}
+
 async function ingestSessions() {
-  // Pre-flight: check Ollama
-  if (!(await checkOllama())) {
-    console.error("ERROR: Ollama is not running. Start it with: ollama serve");
-    process.exit(1);
+  const ollamaUp = await checkOllama();
+
+  // If Ollama is up, process any pending backlog first
+  if (ollamaUp) {
+    await processPending();
   }
 
   const sessionsDir = join(process.env.HOME || "~", ".claude", "projects");
@@ -228,9 +319,23 @@ async function ingestSessions() {
           continue;
         }
 
+        if (!ollamaUp) {
+          // Save to pending for later processing
+          const pendingChunks = chunks.map(c => ({ text: c, source: filePath, project: projectDir }));
+          await savePending(pendingChunks);
+          totalIngested += chunks.length;
+          continue;
+        }
+
         let fileIngested = 0;
         for (const chunk of chunks) {
-          await learn(chunk, "session", filePath, projectDir);
+          if (SMART_INGEST) {
+            const { category, summary } = await classifyAndSummarize(chunk);
+            await learn(summary, category, filePath, projectDir);
+            console.log(`    [${category}] ${summary.slice(0, 80)}...`);
+          } else {
+            await learn(chunk, "session", filePath, projectDir);
+          }
           fileIngested++;
         }
 
