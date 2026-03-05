@@ -296,6 +296,12 @@ async function main() {
       break
     }
 
+    case 'daemon': {
+      const { daemon } = await import('./daemon.js')
+      await daemon()
+      break
+    }
+
     case '--version':
     case '-v':
       console.log('rex-claude v4.0.1')
@@ -334,6 +340,9 @@ ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex preload [path]   Show pre-loaded context for a path
   rex context [path]   Analyze project, recommend MCP/skills
   rex projects         Scan and index all dev projects
+
+${COLORS.bold}Background:${COLORS.reset}
+  rex daemon           Start persistent background daemon
 
 ${COLORS.bold}Telegram Gateway:${COLORS.reset}
   rex gateway          Start Telegram bot (long-polling, interactive)

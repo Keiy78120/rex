@@ -41,6 +41,7 @@ function ensureDir(dir: string) {
 const PLIST_LABEL = 'com.dstudio.rex'
 const INGEST_PLIST_LABEL = 'com.dstudio.rex-ingest'
 const GATEWAY_PLIST_LABEL = 'com.dstudio.rex-gateway'
+const DAEMON_PLIST_LABEL = 'com.dstudio.rex-daemon'
 
 export function installIngestAgent() {
   if (process.platform !== 'darwin') {
@@ -206,6 +207,81 @@ export function installGatewayAgent() {
   ok('Gateway LaunchAgent installed — Telegram bot always-on (auto-restart)')
 }
 
+export function installDaemonAgent() {
+  if (process.platform !== 'darwin') {
+    info('Daemon LaunchAgent only supported on macOS')
+    return
+  }
+
+  const launchAgentsDir = join(homedir(), 'Library', 'LaunchAgents')
+  ensureDir(launchAgentsDir)
+  const plistPath = join(launchAgentsDir, `${DAEMON_PLIST_LABEL}.plist`)
+
+  let rexBin = ''
+  try {
+    rexBin = execSync('which rex', { encoding: 'utf-8' }).trim()
+  } catch {}
+
+  if (!rexBin) {
+    info('rex binary not in PATH — skipping daemon LaunchAgent')
+    return
+  }
+
+  if (existsSync(plistPath)) {
+    skip('Daemon LaunchAgent already installed (unified background daemon)')
+    return
+  }
+
+  // Read Telegram credentials from settings
+  const settingsPath = join(homedir(), '.claude', 'settings.json')
+  let botToken = ''
+  let chatIdVal = ''
+  try {
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+    botToken = settings.env?.REX_TELEGRAM_BOT_TOKEN || ''
+    chatIdVal = settings.env?.REX_TELEGRAM_CHAT_ID || ''
+  } catch {}
+
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${DAEMON_PLIST_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${rexBin}</string>
+    <string>daemon</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>${join(homedir(), '.claude', 'rex', 'daemon.log')}</string>
+  <key>StandardErrorPath</key>
+  <string>${join(homedir(), '.claude', 'rex', 'daemon.log')}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:${dirname(rexBin)}</string>
+    <key>REX_TELEGRAM_BOT_TOKEN</key>
+    <string>${botToken}</string>
+    <key>REX_TELEGRAM_CHAT_ID</key>
+    <string>${chatIdVal}</string>
+  </dict>
+</dict>
+</plist>
+`
+  writeFileSync(plistPath, plist)
+
+  try {
+    execSync(`launchctl load ${plistPath}`, { stdio: 'ignore' })
+  } catch {}
+
+  ok('Daemon LaunchAgent installed — unified background daemon (KeepAlive)')
+}
+
 export function uninstallGatewayAgent() {
   if (process.platform !== 'darwin') return
 
@@ -242,7 +318,7 @@ export function installApp() {
       return
     }
   } else {
-    info('REX.app not built — run `pnpm tauri build` in packages/app first')
+    info('REX.app not built — run: cd packages/flutter_app && flutter build macos')
     return
   }
 
@@ -252,6 +328,226 @@ export function installApp() {
     ok('REX.app added to Login Items (auto-start on login)')
   } catch {
     skip('REX.app already in Login Items')
+  }
+}
+
+export function installHammerspoonCallWatcher() {
+  if (process.platform !== 'darwin') return
+
+  const hsDir = join(homedir(), '.hammerspoon')
+  ensureDir(hsDir)
+  ensureDir(join(homedir(), '.rex-memory', 'runtime'))
+
+  const watcherPath = join(hsDir, 'rex-call-watcher.lua')
+  const watcherLua = `-- REX Call Watcher
+-- Detects known voice apps (Discord/Zoom/Meet/Slack/Teams/WhatsApp/FaceTime)
+-- and writes a machine-readable state for local automations.
+
+local M = {}
+
+local HOME = os.getenv("HOME") or ""
+local STATE_PATH = HOME .. "/.rex-memory/runtime/call-state.json"
+local EVENTS_PATH = HOME .. "/.rex-memory/runtime/call-events.jsonl"
+
+local VOICE_APPS = {
+  ["Discord"] = true,
+  ["zoom.us"] = true,
+  ["Microsoft Teams"] = true,
+  ["Slack"] = true,
+  ["WhatsApp"] = true,
+  ["FaceTime"] = true,
+  ["Telegram"] = true,
+}
+
+local BROWSER_APPS = {
+  ["Google Chrome"] = true,
+  ["Arc"] = true,
+  ["Brave Browser"] = true,
+  ["Safari"] = true,
+  ["Microsoft Edge"] = true,
+}
+
+local BROWSER_KEYWORDS = {
+  "google meet",
+  " meet",
+  " huddle",
+  "slack call",
+  "discord",
+  "voice",
+  "call",
+}
+
+local watcher = nil
+local heartbeat = nil
+
+local current = {
+  active = false,
+  app = "",
+  reason = "",
+  title = "",
+  startedAt = 0,
+  updatedAt = 0,
+}
+
+local function ensureRuntimeDir()
+  os.execute('mkdir -p "' .. HOME .. '/.rex-memory/runtime"')
+end
+
+local function writeState(state)
+  ensureRuntimeDir()
+  local f = io.open(STATE_PATH, "w")
+  if not f then return end
+  f:write(hs.json.encode(state))
+  f:close()
+end
+
+local function appendEvent(ev)
+  ensureRuntimeDir()
+  local f = io.open(EVENTS_PATH, "a")
+  if not f then return end
+  f:write(hs.json.encode(ev) .. "\\n")
+  f:close()
+end
+
+local function titleLooksLikeCall(title)
+  if not title then return false end
+  local t = string.lower(title)
+  for _, kw in ipairs(BROWSER_KEYWORDS) do
+    if string.find(t, kw, 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
+local function detectCall(appName)
+  if VOICE_APPS[appName] then
+    return true, "voice_app"
+  end
+
+  if BROWSER_APPS[appName] then
+    local win = hs.window.frontmostWindow()
+    local title = win and win:title() or ""
+    if titleLooksLikeCall(title) then
+      return true, "browser_title", title
+    end
+  end
+
+  return false, "", ""
+end
+
+local function updateFromFrontmost()
+  local app = hs.application.frontmostApplication()
+  local appName = app and app:name() or ""
+  local now = os.time()
+  local active, reason, title = detectCall(appName)
+
+  if active and not current.active then
+    current.active = true
+    current.app = appName
+    current.reason = reason
+    current.title = title or ""
+    current.startedAt = now
+    current.updatedAt = now
+
+    appendEvent({
+      type = "call_start",
+      app = current.app,
+      reason = current.reason,
+      title = current.title,
+      timestamp = now,
+      iso = os.date("!%Y-%m-%dT%H:%M:%SZ", now),
+    })
+  elseif active and current.active then
+    current.updatedAt = now
+    if current.app ~= appName then
+      current.app = appName
+      current.reason = reason
+      current.title = title or ""
+    end
+  elseif (not active) and current.active then
+    local duration = math.max(0, now - (current.startedAt or now))
+    appendEvent({
+      type = "call_end",
+      app = current.app,
+      reason = current.reason,
+      title = current.title,
+      duration = duration,
+      startedAt = current.startedAt,
+      endedAt = now,
+      iso = os.date("!%Y-%m-%dT%H:%M:%SZ", now),
+    })
+
+    current.active = false
+    current.app = ""
+    current.reason = ""
+    current.title = ""
+    current.startedAt = 0
+    current.updatedAt = now
+  end
+
+  writeState({
+    active = current.active,
+    app = current.app,
+    reason = current.reason,
+    title = current.title,
+    startedAt = current.startedAt,
+    updatedAt = current.updatedAt,
+    iso = os.date("!%Y-%m-%dT%H:%M:%SZ", now),
+  })
+end
+
+function M.start()
+  if watcher then return end
+
+  watcher = hs.application.watcher.new(function(_, eventType, _)
+    if eventType == hs.application.watcher.activated then
+      updateFromFrontmost()
+    end
+  end)
+  watcher:start()
+
+  -- Keep state fresh even if app title changes without app switch (browser tabs).
+  heartbeat = hs.timer.doEvery(5, updateFromFrontmost)
+  updateFromFrontmost()
+  hs.printf("REX Call Watcher started")
+end
+
+function M.stop()
+  if watcher then
+    watcher:stop()
+    watcher = nil
+  end
+  if heartbeat then
+    heartbeat:stop()
+    heartbeat = nil
+  end
+end
+
+return M
+`
+
+  writeFileSync(watcherPath, watcherLua)
+  ok('Hammerspoon call watcher script installed (~/.hammerspoon/rex-call-watcher.lua)')
+
+  const hsInitPath = join(hsDir, 'init.lua')
+  const marker = 'rex-call-watcher.lua'
+  const block = `
+-- REX Call Watcher (installed by rex init)
+do
+  local ok_rex_call, rex_call = pcall(dofile, os.getenv("HOME") .. "/.hammerspoon/rex-call-watcher.lua")
+  if ok_rex_call and rex_call and rex_call.start then
+    rex_call.start()
+  end
+end
+`
+
+  const currentInit = existsSync(hsInitPath) ? readFileSync(hsInitPath, 'utf-8') : ''
+  if (!currentInit.includes(marker)) {
+    writeFileSync(hsInitPath, currentInit + block)
+    ok('Hammerspoon init.lua updated with REX call watcher bootstrap')
+  } else {
+    skip('Hammerspoon init.lua already includes REX call watcher')
   }
 }
 
@@ -383,6 +679,32 @@ export async function init() {
     info('Memory package not found — install @rex/memory or run from monorepo')
   }
 
+  // 2b. Sync optional MCP registry into settings (auto-bootstrap)
+  const registryPath = join(homedir(), '.rex-memory', 'mcp-registry.json')
+  if (existsSync(registryPath)) {
+    try {
+      const registry = readJson(registryPath)
+      const registryServers = registry?.servers as Record<string, any> | undefined
+      if (registryServers && typeof registryServers === 'object') {
+        let added = 0
+        for (const [name, cfg] of Object.entries(registryServers)) {
+          if (!settings.mcpServers[name]) {
+            settings.mcpServers[name] = cfg
+            added++
+          }
+        }
+        if (added > 0) {
+          writeJson(settingsPath, settings)
+          ok(`MCP registry synced (${added} server${added > 1 ? 's' : ''} added)`)
+        } else {
+          skip('MCP registry already synced')
+        }
+      }
+    } catch {
+      info('MCP registry exists but could not be parsed')
+    }
+  }
+
   // 3. Setup hooks
   if (!settings.hooks) settings.hooks = {}
 
@@ -410,13 +732,9 @@ export async function init() {
     h.hooks?.some?.((hh: any) => hh.command?.includes('rex-context'))
   )
 
-  if (hasContextHook) {
-    skip('Context injection hook (SessionStart) already configured')
-  } else {
-    // Create the context script
-    const contextScript = join(claudeDir, 'rex-context.sh')
-    if (!existsSync(contextScript)) {
-      writeFileSync(contextScript, `#!/bin/bash
+  // Always refresh context script so new automation logic is applied.
+  const contextScript = join(claudeDir, 'rex-context.sh')
+  writeFileSync(contextScript, `#!/bin/bash
 # REX Context Injection — runs at session start
 # Outputs relevant memory context to CLAUDE_ENV_FILE
 
@@ -424,21 +742,32 @@ if [ -z "$CLAUDE_ENV_FILE" ]; then
   exit 0
 fi
 
+PROJECT_PATH="\${CLAUDE_PROJECT_DIR:-$PWD}"
+
 # Quick check if rex-memory MCP is available
 if command -v npx &>/dev/null; then
   # Context will be loaded via MCP rex_context tool
   # This hook just ensures the env is ready
   echo "REX_MEMORY_AVAILABLE=true" >> "$CLAUDE_ENV_FILE"
 fi
-`, { mode: 0o755 })
-    }
 
+# Auto tool/skill recommendations (LLM-assisted)
+if command -v rex &>/dev/null; then
+  rex agents recommend "$PROJECT_PATH" --quiet --env-file "$CLAUDE_ENV_FILE" >/dev/null 2>&1 || true
+elif command -v npx &>/dev/null; then
+  npx rex-cli agents recommend "$PROJECT_PATH" --quiet --env-file "$CLAUDE_ENV_FILE" >/dev/null 2>&1 || true
+fi
+`, { mode: 0o755 })
+
+  if (hasContextHook) {
+    skip('Context injection hook (SessionStart) already configured')
+  } else {
     if (!settings.hooks.SessionStart) settings.hooks.SessionStart = []
     settings.hooks.SessionStart.push({
       hooks: [{
         type: 'command',
         command: `bash ${contextScript}`,
-        timeout: 5,
+        timeout: 20,
       }],
     })
     ok('Context injection hook configured (SessionStart)')
@@ -546,6 +875,8 @@ fi
   installStartup()
   installIngestAgent()
   installGatewayAgent()
+  installDaemonAgent()
+  installHammerspoonCallWatcher()
 
   // 5b. Install REX.app to /Applications + Login Items (if built)
   installApp()
