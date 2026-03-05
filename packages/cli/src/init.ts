@@ -389,6 +389,12 @@ fi
       desc: 'Recurring error pattern detector',
       matcher: 'Bash',
     },
+    {
+      file: 'notify-telegram.sh',
+      event: 'Stop',
+      desc: 'Telegram notification on task completion',
+      matcher: undefined,
+    },
   ]
 
   let guardsInstalled = 0
