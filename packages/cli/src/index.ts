@@ -69,6 +69,25 @@ async function main() {
 
   switch (command) {
     case 'doctor': {
+      const fixMode = process.argv.includes('--fix')
+      if (fixMode) {
+        console.log(`\n${COLORS.bold}REX Doctor — Auto-fix mode${COLORS.reset}\n`)
+        const { ensureRexDirs } = await import('./paths.js')
+        ensureRexDirs()
+        console.log(`  ${COLORS.green}✓${COLORS.reset} Directory structure ensured`)
+        // Run migrate if needed
+        try {
+          const { migrate } = await import('./migrate.js')
+          await migrate()
+        } catch (e: any) {
+          console.log(`  ${COLORS.yellow}!${COLORS.reset} Migration: ${e.message?.slice(0, 100)}`)
+        }
+        // Process pending
+        const { execSync } = await import('node:child_process')
+        try { execSync('rex ingest', { stdio: 'inherit', timeout: 120_000 }) } catch {}
+        try { execSync('rex recategorize --batch=50', { stdio: 'inherit', timeout: 180_000 }) } catch {}
+        console.log(`\n${COLORS.green}Auto-fix complete.${COLORS.reset} Running doctor...\n`)
+      }
       const report = await runAllChecks()
       console.log(formatReport(report))
       process.exit(report.status === 'broken' ? 1 : 0)
@@ -315,6 +334,7 @@ ${COLORS.bold}REX${COLORS.reset} — Claude Code sous steroides
 ${COLORS.bold}Commands:${COLORS.reset}
   rex init            Setup REX (guards, hooks, MCP, startup)
   rex doctor          Full health check (9 categories)
+  rex doctor --fix    Auto-fix common issues then check
   rex status          Quick one-line status
   rex startup         Install LaunchAgent (auto-start on login)
   rex startup-remove  Remove LaunchAgent
