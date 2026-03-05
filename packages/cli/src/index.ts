@@ -251,6 +251,19 @@ async function main() {
       break
     }
 
+    case 'projects': {
+      const { scanProjects, saveProjectIndex } = await import('./projects.js')
+      console.log(`${COLORS.cyan}Scanning projects...${COLORS.reset}`)
+      const projects = scanProjects()
+      saveProjectIndex(projects)
+      console.log(`\n${COLORS.bold}${projects.length} projects found${COLORS.reset}\n`)
+      for (const p of projects) {
+        const dot = p.status === 'active' ? `${COLORS.green}●${COLORS.reset}` : `${COLORS.dim}○${COLORS.reset}`
+        console.log(`  ${dot} ${COLORS.bold}${p.name.padEnd(20)}${COLORS.reset} ${p.stack.join(', ').padEnd(30)} ${COLORS.dim}${p.lastActive}${COLORS.reset}`)
+      }
+      break
+    }
+
     case '--version':
     case '-v':
       console.log('rex-claude v4.0.1')
@@ -284,6 +297,7 @@ ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex llm <prompt>     Query local LLM directly
   rex models           Show task-aware model routing table
   rex context [path]   Analyze project, recommend MCP/skills
+  rex projects         Scan and index all dev projects
 
 ${COLORS.bold}Telegram Gateway:${COLORS.reset}
   rex gateway          Start Telegram bot (long-polling, interactive)
