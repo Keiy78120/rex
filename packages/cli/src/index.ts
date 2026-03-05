@@ -158,6 +158,12 @@ async function main() {
       break
     }
 
+    case 'gateway': {
+      const { gateway } = await import('./gateway.js')
+      await gateway()
+      break
+    }
+
     case 'startup': {
       const { installStartup } = await import('./init.js')
       installStartup()
@@ -169,6 +175,7 @@ async function main() {
       uninstallStartup()
       break
     }
+
 
     case '--version':
     case '-v':
@@ -194,9 +201,12 @@ ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex optimize --apply Apply optimizations (with backup)
 
 ${COLORS.bold}LLM & Context:${COLORS.reset}
-  rex setup            Install Ollama + models (auto hardware detect)
+  rex setup            Install Ollama + models + Telegram gateway
   rex llm <prompt>     Query local LLM directly
   rex context [path]   Analyze project, recommend MCP/skills
+
+${COLORS.bold}Telegram Gateway:${COLORS.reset}
+  rex gateway          Start Telegram bot (long-polling, interactive)
 
 ${COLORS.bold}Info:${COLORS.reset}
   rex help             Show this help

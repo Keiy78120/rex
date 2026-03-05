@@ -3,7 +3,7 @@
 # Hook: PostToolUse (matcher: Edit|Write)
 # Prevents the "missing states" anti-pattern: LLMs generate happy path only
 
-INPUT="$TOOL_INPUT"
+INPUT="${CLAUDE_TOOL_INPUT:-$TOOL_INPUT}"
 
 # Only check UI component files
 if ! echo "$INPUT" | grep -qE '\.(tsx|jsx|vue|svelte)'; then

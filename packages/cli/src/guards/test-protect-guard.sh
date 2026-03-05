@@ -3,8 +3,8 @@
 # Hook: PostToolUse (matcher: Edit|Write)
 # Prevents the #1 LLM anti-pattern: modifying tests to match broken code
 
-# $TOOL_INPUT contains the file path and changes
-INPUT="$TOOL_INPUT"
+# $CLAUDE_TOOL_INPUT contains the file path and changes
+INPUT="${CLAUDE_TOOL_INPUT:-$TOOL_INPUT}"
 
 # Check if a test file was modified
 if echo "$INPUT" | grep -qE '\.(test|spec)\.(ts|tsx|js|jsx|py)'; then

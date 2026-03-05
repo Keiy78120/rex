@@ -242,6 +242,24 @@ async fn optimize_apply(app: tauri::AppHandle) -> Result<String, String> {
     Ok(serde_json::json!({ "before": before, "after": after, "saved": saved }).to_string())
 }
 
+/// Runs `rex ingest` to process session logs into memory
+#[tauri::command]
+async fn memory_ingest(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_shell::ShellExt;
+    let output = app
+        .shell()
+        .command("rex")
+        .args(["ingest"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run rex ingest: {e}"))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
 /// Calls `rex setup` to install Ollama + models
 #[tauri::command]
 async fn run_setup(app: tauri::AppHandle) -> Result<String, String> {
@@ -477,6 +495,7 @@ pub fn run() {
             memory_search,
             memory_learn,
             memory_status,
+            memory_ingest,
             ollama_status,
             optimize_analyze,
             optimize_apply,

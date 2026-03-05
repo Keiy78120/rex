@@ -360,7 +360,11 @@ function MemoryTab() {
       case "session": return "text-blue-400 border-blue-500/30";
       case "pattern": return "text-amber-400 border-amber-500/30";
       case "debug": return "text-red-400 border-red-500/30";
+      case "fix": return "text-orange-400 border-orange-500/30";
+      case "idea": return "text-pink-400 border-pink-500/30";
+      case "architecture": return "text-indigo-400 border-indigo-500/30";
       case "lesson": return "text-emerald-400 border-emerald-500/30";
+      case "config": return "text-cyan-400 border-cyan-500/30";
       default: return "text-muted-foreground border-border/50";
     }
   };
@@ -645,6 +649,72 @@ function OllamaStatus() {
   );
 }
 
+function MemoryIngestCard() {
+  const [ingesting, setIngesting] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [stats, setStats] = useState<MemoryStats | null>(null);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const raw = await invoke<string>("memory_status");
+      setStats(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  const runIngest = useCallback(async () => {
+    setIngesting(true);
+    setResult(null);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const raw = await invoke<string>("memory_ingest");
+      setResult(raw);
+      await loadStats();
+    } catch (e) {
+      setResult(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setIngesting(false);
+    }
+  }, [loadStats]);
+
+  useEffect(() => { loadStats(); }, [loadStats]);
+
+  return (
+    <Card className="border-border/50 bg-card/50">
+      <CardHeader className="p-3 pb-1">
+        <CardTitle className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
+          Memory & Ingest
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 pt-1 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Total memories</span>
+          <span className="text-xs font-mono font-medium">{stats?.total ?? "—"}</span>
+        </div>
+        <Separator className="opacity-30" />
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Smart Ingest</span>
+          <Badge variant="outline" className="text-[9px] h-4 text-emerald-400 border-emerald-500/30">
+            auto
+          </Badge>
+        </div>
+        <p className="text-[9px] text-muted-foreground leading-relaxed">
+          Sessions are auto-classified (debug, fix, idea, pattern, lesson...) and summarized by local LLM before embedding.
+        </p>
+        <Separator className="opacity-30" />
+        <Button size="sm" className="w-full h-7 text-[11px]" onClick={runIngest} disabled={ingesting}>
+          {ingesting ? "Ingesting..." : "Run Ingest Now"}
+        </Button>
+        {result && (
+          <pre className="text-[9px] text-muted-foreground font-mono whitespace-pre-wrap max-h-20 overflow-y-auto mt-1">
+            {result}
+          </pre>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function SettingsTab() {
   const [checking, setChecking] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
@@ -766,6 +836,9 @@ function SettingsTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* Memory & Ingest */}
+      <MemoryIngestCard />
 
       {/* Ollama */}
       <OllamaStatus />

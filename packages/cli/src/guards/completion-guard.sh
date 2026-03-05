@@ -14,6 +14,8 @@ if [ -z "$ALL_FILES" ]; then
   exit 0
 fi
 
+ISSUES=""
+
 # Warn about untracked files that should probably be committed
 if [ -n "$UNTRACKED_FILES" ]; then
   UNTRACKED_CODE=$(echo "$UNTRACKED_FILES" | grep -E '\.(ts|tsx|js|jsx|py|rs|go|sh|css|html|vue|svelte)$' | head -5)
@@ -21,8 +23,6 @@ if [ -n "$UNTRACKED_FILES" ]; then
     ISSUES="${ISSUES}\n⚠ Untracked code files (forgot to git add?):\n${UNTRACKED_CODE}\n"
   fi
 fi
-
-ISSUES=""
 
 # Check for incomplete implementation markers
 for file in $ALL_FILES; do
