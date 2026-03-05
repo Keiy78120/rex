@@ -1,5 +1,8 @@
 import { execSync } from 'node:child_process'
-import { platform, totalmem } from 'node:os'
+import { platform, totalmem, homedir } from 'node:os'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { createInterface } from 'node:readline'
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -81,10 +84,110 @@ async function testGenerate(model: string): Promise<boolean> {
   }
 }
 
+function prompt(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  return new Promise(resolve => {
+    rl.question(`  ${COLORS.cyan}?${COLORS.reset} ${question} `, answer => {
+      rl.close()
+      resolve(answer.trim())
+    })
+  })
+}
+
+async function setupTelegram() {
+  console.log(`\n  ${COLORS.bold}Telegram Gateway${COLORS.reset}`)
+
+  const settingsPath = join(homedir(), '.claude', 'settings.json')
+  let settings: any = {}
+  try { settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) } catch {}
+  if (!settings.env) settings.env = {}
+
+  const existingToken = settings.env.REX_TELEGRAM_BOT_TOKEN
+  const existingChat = settings.env.REX_TELEGRAM_CHAT_ID
+
+  if (existingToken && existingChat) {
+    // Test existing config
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${existingToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: existingChat, text: '🔔 REX Setup — Telegram gateway verified', parse_mode: 'Markdown' }),
+      })
+      if (res.ok) {
+        ok('Telegram gateway already configured and working')
+        return
+      }
+    } catch {}
+    info('Existing Telegram config found but not working — reconfiguring')
+  }
+
+  const botToken = await prompt('Telegram Bot Token (from @BotFather):')
+  if (!botToken) {
+    info('Skipped Telegram setup')
+    return
+  }
+
+  // Validate token by calling getMe
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/getMe`)
+    const data = await res.json() as { ok: boolean; result?: { username: string } }
+    if (!data.ok) {
+      fail('Invalid bot token')
+      return
+    }
+    ok(`Bot: @${data.result?.username}`)
+  } catch {
+    fail('Could not validate bot token')
+    return
+  }
+
+  console.log(`\n  ${COLORS.dim}Send /start to your bot on Telegram, then press Enter...${COLORS.reset}`)
+  await prompt('Press Enter when done')
+
+  // Get chat_id from updates
+  let chatId = ''
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates`)
+    const data = await res.json() as { result: Array<{ message?: { chat: { id: number }; from?: { username?: string } } }> }
+    const msg = data.result?.find(u => u.message)
+    if (msg?.message) {
+      chatId = String(msg.message.chat.id)
+      ok(`Chat ID: ${chatId} (from @${msg.message.from?.username ?? '?'})`)
+    }
+  } catch {}
+
+  if (!chatId) {
+    chatId = await prompt('Chat ID (could not auto-detect):')
+  }
+
+  if (!chatId) {
+    fail('No chat ID — Telegram setup aborted')
+    return
+  }
+
+  // Save to settings.json
+  settings.env.REX_TELEGRAM_BOT_TOKEN = botToken
+  settings.env.REX_TELEGRAM_CHAT_ID = chatId
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n')
+  ok('Telegram credentials saved to settings.json')
+
+  // Test send
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: '✅ *REX Setup Complete*\nTelegram gateway is active.', parse_mode: 'Markdown' }),
+    })
+    ok('Test message sent — check Telegram!')
+  } catch {
+    fail('Could not send test message')
+  }
+}
+
 export async function setup() {
   const line = '═'.repeat(45)
   console.log(`\n${line}`)
-  console.log(`${COLORS.bold}        REX SETUP — LLM Configuration${COLORS.reset}`)
+  console.log(`${COLORS.bold}        REX SETUP — Full Configuration${COLORS.reset}`)
   console.log(`${line}\n`)
 
   // Hardware info
@@ -154,11 +257,14 @@ export async function setup() {
   if (genOk) ok('Generation test passed')
   else fail('Generation test failed')
 
+  // 6. Telegram Gateway
+  await setupTelegram()
+
   console.log(`\n${COLORS.dim}─────────────────────────────────────────────${COLORS.reset}`)
   if (embedOk && genOk) {
-    console.log(`\n  ${COLORS.green}${COLORS.bold}Setup complete!${COLORS.reset} REX is ready for local AI.`)
+    console.log(`\n  ${COLORS.green}${COLORS.bold}Setup complete!${COLORS.reset} REX is fully configured.`)
   } else {
-    console.log(`\n  ${COLORS.yellow}Setup incomplete.${COLORS.reset} Some tests failed — check Ollama logs.`)
+    console.log(`\n  ${COLORS.yellow}Setup partial.${COLORS.reset} Some tests failed — check Ollama logs.`)
   }
   console.log()
 }
