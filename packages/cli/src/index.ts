@@ -281,6 +281,21 @@ async function main() {
       break
     }
 
+    case 'self-review': {
+      const { selfReview } = await import('./self-improve.js')
+      await selfReview()
+      break
+    }
+
+    case 'promote-rule': {
+      const { promoteRule } = await import('./self-improve.js')
+      const idx = parseInt(process.argv[3])
+      if (!idx) { console.log('Usage: rex promote-rule <index>'); process.exit(1) }
+      const ok = await promoteRule(idx)
+      console.log(ok ? `${COLORS.green}Rule promoted to ~/.claude/rules/${COLORS.reset}` : `${COLORS.red}Failed — invalid index or no suggested rule${COLORS.reset}`)
+      break
+    }
+
     case '--version':
     case '-v':
       console.log('rex-claude v4.0.1')
@@ -309,6 +324,8 @@ ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex optimize --apply Apply optimizations (with backup)
   rex prune            Cleanup old/duplicate memories
   rex prune --stats    Show memory database stats
+  rex self-review      Extract lessons, detect error patterns
+  rex promote-rule N   Promote rule candidate to ~/.claude/rules/
 
 ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex setup            Install Ollama + models + Telegram gateway
