@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, chmodSync, unlinkSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, chmodSync, unlinkSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { execSync } from 'node:child_process'
@@ -383,6 +383,12 @@ fi
       desc: 'Scope creep detector',
       matcher: 'Edit|Write',
     },
+    {
+      file: 'error-pattern-guard.sh',
+      event: 'PostToolUse',
+      desc: 'Recurring error pattern detector',
+      matcher: 'Bash',
+    },
   ]
 
   let guardsInstalled = 0
@@ -456,7 +462,52 @@ fi
     info('Ollama not running — needed for memory/RAG. Install: https://ollama.ai')
   }
 
-  // 7. Save settings
+  // 7. Sync bundled skills to ~/.claude/skills/
+  const bundledSkillsDir = join(thisDir, '..', 'skills')
+  if (existsSync(bundledSkillsDir)) {
+    const skillsTargetDir = join(claudeDir, 'skills')
+    ensureDir(skillsTargetDir)
+    let skillsSynced = 0
+    try {
+      const skillDirs = readdirSync(bundledSkillsDir).filter(d => {
+        try { return statSync(join(bundledSkillsDir, d)).isDirectory() } catch { return false }
+      })
+      for (const skill of skillDirs) {
+        const srcSkill = join(bundledSkillsDir, skill, 'SKILL.md')
+        const destSkillDir = join(skillsTargetDir, skill)
+        const destSkill = join(destSkillDir, 'SKILL.md')
+        if (existsSync(srcSkill)) {
+          const srcContent = readFileSync(srcSkill, 'utf-8')
+          const destContent = existsSync(destSkill) ? readFileSync(destSkill, 'utf-8') : ''
+          if (srcContent !== destContent) {
+            ensureDir(destSkillDir)
+            writeFileSync(destSkill, srcContent)
+            skillsSynced++
+          }
+        }
+      }
+    } catch {}
+    if (skillsSynced > 0) {
+      ok(`${skillsSynced} skills synced from rex-claude`)
+    } else {
+      skip('All skills up to date')
+    }
+  }
+
+  // 8. Sync @rex/memory to ~/.rex-memory/ if not present
+  const memoryMonorepoDir = join(thisDir, '..', '..', 'memory')
+  const memoryTargetDir = join(homedir(), '.rex-memory')
+  if (existsSync(join(memoryMonorepoDir, 'package.json')) && !existsSync(join(memoryTargetDir, 'package.json'))) {
+    try {
+      execSync(`cp -R "${memoryMonorepoDir}" "${memoryTargetDir}"`, { stdio: 'ignore' })
+      execSync('npm install --production 2>/dev/null', { cwd: memoryTargetDir, stdio: 'ignore' })
+      ok('@rex/memory synced to ~/.rex-memory/')
+    } catch {
+      info('Could not sync @rex/memory — install manually')
+    }
+  }
+
+  // 9. Save settings
   writeJson(settingsPath, settings)
 
   console.log(`\n${COLORS.dim}─────────────────────────────────────────────${COLORS.reset}`)

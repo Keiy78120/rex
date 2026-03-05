@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-tauri:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install
+      - run: pnpm --filter @rex/core build
+      - run: pnpm --filter rex-claude build
+      - run: pnpm --filter tauri-app build
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: packages/app
+          tagName: ${{ github.ref_name }}
+          releaseName: 'REX ${{ github.ref_name }}'
+          releaseBody: 'See the assets for download links.'
+          releaseDraft: false
+          prerelease: false

@@ -114,6 +114,148 @@ fn audio_logger_status(state: tauri::State<'_, AppState>) -> Result<serde_json::
     }))
 }
 
+/// Helper to call the @rex/memory bridge script via tsx.
+/// Bridge path is relative to the monorepo root (2 levels up from src-tauri).
+async fn call_memory_bridge(app: &tauri::AppHandle, args: &[&str]) -> Result<String, String> {
+    use tauri_plugin_shell::ShellExt;
+
+    // Resolve monorepo root: src-tauri/../.. = packages/app/../.. = repo root
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Cannot resolve resource dir: {e}"))?;
+    // In dev mode, resource_dir points to src-tauri, go up 2 levels
+    let repo_root = resource_dir.join("../..").canonicalize().unwrap_or_else(|_| {
+        // Fallback: use home dir approach
+        std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default())
+            .join("Documents/Developer/keiy/rex")
+    });
+
+    let tsx = repo_root.join("packages/memory/node_modules/.bin/tsx");
+    let bridge = repo_root.join("packages/memory/src/bridge.ts");
+
+    let output = app
+        .shell()
+        .command(tsx.to_string_lossy().as_ref())
+        .args([bridge.to_string_lossy().as_ref()])
+        .args(args)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run memory bridge: {e}"))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if stdout.is_empty() {
+            Ok("{}".to_string())
+        } else {
+            Ok(stdout)
+        }
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        Err(format!("Memory bridge error: {stderr}"))
+    }
+}
+
+#[tauri::command]
+async fn memory_search(app: tauri::AppHandle, query: String, limit: Option<u32>) -> Result<String, String> {
+    let limit_str = limit.unwrap_or(10).to_string();
+    call_memory_bridge(&app, &["search", &query, &limit_str]).await
+}
+
+#[tauri::command]
+async fn memory_learn(app: tauri::AppHandle, fact: String, category: Option<String>) -> Result<String, String> {
+    let cat = category.unwrap_or_else(|| "general".to_string());
+    call_memory_bridge(&app, &["learn", &fact, &cat]).await
+}
+
+#[tauri::command]
+async fn memory_status(app: tauri::AppHandle) -> Result<String, String> {
+    call_memory_bridge(&app, &["status"]).await
+}
+
+#[tauri::command]
+async fn ollama_status(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_shell::ShellExt;
+    let output = app
+        .shell()
+        .command("curl")
+        .args(["-s", "http://localhost:11434/api/tags"])
+        .output()
+        .await;
+
+    match output {
+        Ok(o) if o.status.success() => {
+            let body = String::from_utf8_lossy(&o.stdout);
+            let json: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+            let models: Vec<String> = json["models"]
+                .as_array()
+                .map(|arr| arr.iter().filter_map(|m| m["name"].as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            Ok(serde_json::json!({ "running": true, "models": models }).to_string())
+        }
+        _ => Ok(serde_json::json!({ "running": false, "models": [] }).to_string()),
+    }
+}
+
+/// Calls `rex optimize` CLI and returns analysis text
+#[tauri::command]
+async fn optimize_analyze(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_shell::ShellExt;
+    let output = app
+        .shell()
+        .command("rex")
+        .args(["optimize"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run rex optimize: {e}"))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+/// Calls `rex optimize --apply` and returns JSON with before/after/saved token counts
+#[tauri::command]
+async fn optimize_apply(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_shell::ShellExt;
+    let output = app
+        .shell()
+        .command("rex")
+        .args(["optimize", "--apply"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run rex optimize --apply: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    // Parse token counts from stdout
+    let mut before = 0u64;
+    let mut after = 0u64;
+    for line in stdout.lines() {
+        if line.contains("Before:") {
+            before = line.split('~').nth(1).and_then(|s| s.trim().split_whitespace().next()).and_then(|s| s.parse().ok()).unwrap_or(0);
+        }
+        if line.contains("After:") {
+            after = line.split('~').nth(1).and_then(|s| s.trim().split_whitespace().next()).and_then(|s| s.parse().ok()).unwrap_or(0);
+        }
+    }
+    let saved = if before > after { before - after } else { 0 };
+    Ok(serde_json::json!({ "before": before, "after": after, "saved": saved }).to_string())
+}
+
+/// Calls `rex setup` to install Ollama + models
+#[tauri::command]
+async fn run_setup(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_shell::ShellExt;
+    let output = app
+        .shell()
+        .command("rex")
+        .args(["setup"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run rex setup: {e}"))?;
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut engine = WhisperEngine::new();
@@ -255,6 +397,18 @@ pub fn run() {
                             draft
                         };
 
+                        // Save transcription to memory (async, fire-and-forget)
+                        {
+                            let handle = app_handle.clone();
+                            let text_clone = text.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let fact = format!("[voice transcription] {}", text_clone);
+                                if let Err(e) = call_memory_bridge(&handle, &["learn", &fact, "voice"]).await {
+                                    eprintln!("[Voice] Failed to save to memory: {e}");
+                                }
+                            });
+                        }
+
                         // Copy to clipboard + auto-paste
                         #[cfg(target_os = "macos")]
                         {
@@ -319,7 +473,14 @@ pub fn run() {
             voice_status,
             audio_logger_start,
             audio_logger_stop,
-            audio_logger_status
+            audio_logger_status,
+            memory_search,
+            memory_learn,
+            memory_status,
+            ollama_status,
+            optimize_analyze,
+            optimize_apply,
+            run_setup
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

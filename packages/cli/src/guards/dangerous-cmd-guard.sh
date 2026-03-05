@@ -3,8 +3,8 @@
 # Hook: PreToolUse (matcher: Bash)
 # Prevents destructive commands from running without confirmation
 
-# $TOOL_INPUT contains the command about to be executed
-CMD="$TOOL_INPUT"
+# $CLAUDE_TOOL_INPUT contains the command about to be executed
+CMD="${CLAUDE_TOOL_INPUT:-$TOOL_INPUT}"
 
 # Patterns that should ALWAYS be blocked or warned
 BLOCKED_PATTERNS=(

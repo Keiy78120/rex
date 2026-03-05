@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
-import { readFileSync, readdirSync, existsSync, statSync, mkdirSync } from "fs";
+import { readFileSync, readdirSync, existsSync, statSync, mkdirSync, unlinkSync, writeFileSync as writeFS } from "fs";
 import { join, basename } from "path";
 import { embed, embeddingToBuffer, EMBEDDING_DIM } from "./embed.js";
 
@@ -161,11 +161,42 @@ async function checkOllama(): Promise<boolean> {
   }
 }
 
+const PENDING_DIR = join(process.env.HOME || "~", ".rex-memory", "pending");
+
+async function savePending(chunks: Array<{ text: string; source: string; project: string }>) {
+  if (!existsSync(PENDING_DIR)) mkdirSync(PENDING_DIR, { recursive: true });
+  const filename = `pending-${Date.now()}.json`;
+  writeFS(join(PENDING_DIR, filename), JSON.stringify(chunks, null, 2));
+  console.log(`  Saved ${chunks.length} chunks to pending/ (Ollama offline)`);
+}
+
+async function processPending() {
+  if (!existsSync(PENDING_DIR)) return;
+  const files = readdirSync(PENDING_DIR).filter((f) => f.endsWith(".json"));
+  if (files.length === 0) return;
+
+  console.log(`  Processing ${files.length} pending file(s)...`);
+  for (const file of files) {
+    const filePath = join(PENDING_DIR, file);
+    try {
+      const chunks: Array<{ text: string; source: string; project: string }> = JSON.parse(readFileSync(filePath, "utf-8"));
+      for (const chunk of chunks) {
+        await learn(chunk.text, "session", chunk.source, chunk.project);
+      }
+      unlinkSync(filePath);
+      console.log(`  ${file}: ${chunks.length} chunks processed`);
+    } catch (err) {
+      console.error(`  Error processing ${file}: ${(err as Error).message}`);
+    }
+  }
+}
+
 async function ingestSessions() {
-  // Pre-flight: check Ollama
-  if (!(await checkOllama())) {
-    console.error("ERROR: Ollama is not running. Start it with: ollama serve");
-    process.exit(1);
+  const ollamaUp = await checkOllama();
+
+  // If Ollama is up, process any pending backlog first
+  if (ollamaUp) {
+    await processPending();
   }
 
   const sessionsDir = join(process.env.HOME || "~", ".claude", "projects");
@@ -225,6 +256,14 @@ async function ingestSessions() {
         if (chunks.length === 0) {
           // Mark as processed even if empty (no need to re-parse)
           db.prepare("INSERT OR IGNORE INTO ingest_log (file_path, chunks_count) VALUES (?, 0)").run(filePath);
+          continue;
+        }
+
+        if (!ollamaUp) {
+          // Save to pending for later processing
+          const pendingChunks = chunks.map(c => ({ text: c, source: filePath, project: projectDir }));
+          await savePending(pendingChunks);
+          totalIngested += chunks.length;
           continue;
         }
 

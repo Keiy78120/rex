@@ -128,7 +128,33 @@ async function main() {
 
     case 'optimize': {
       const { optimize } = await import('./optimize.js')
-      await optimize()
+      const applyFlag = process.argv.includes('--apply')
+      await optimize(applyFlag)
+      break
+    }
+
+    case 'setup': {
+      const { setup } = await import('./setup.js')
+      await setup()
+      break
+    }
+
+    case 'llm': {
+      const prompt = process.argv.slice(3).join(' ')
+      if (!prompt) {
+        console.error('Usage: rex llm <prompt>')
+        process.exit(1)
+      }
+      const { llm } = await import('./llm.js')
+      const result = await llm(prompt)
+      console.log(result)
+      break
+    }
+
+    case 'context': {
+      const targetPath = process.argv[3] || process.cwd()
+      const { context } = await import('./context.js')
+      await context(targetPath)
       break
     }
 
@@ -146,7 +172,7 @@ async function main() {
 
     case '--version':
     case '-v':
-      console.log('rex-claude v2.2.0')
+      console.log('rex-claude v3.0.0')
       break
 
     case 'help':
@@ -162,15 +188,21 @@ ${COLORS.bold}Commands:${COLORS.reset}
   rex startup-remove  Remove LaunchAgent
 
 ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
-  rex ingest      Sync session history to vector DB
-  rex search      Semantic search across past sessions
-  rex optimize    Analyze CLAUDE.md with local LLM
+  rex ingest           Sync session history to vector DB
+  rex search <query>   Semantic search across past sessions
+  rex optimize         Analyze CLAUDE.md with local LLM
+  rex optimize --apply Apply optimizations (with backup)
+
+${COLORS.bold}LLM & Context:${COLORS.reset}
+  rex setup            Install Ollama + models (auto hardware detect)
+  rex llm <prompt>     Query local LLM directly
+  rex context [path]   Analyze project, recommend MCP/skills
 
 ${COLORS.bold}Info:${COLORS.reset}
-  rex help        Show this help
-  rex --version   Show version
+  rex help             Show this help
+  rex --version        Show version
 
-${COLORS.dim}After install: rex init — everything else is automatic.${COLORS.reset}
+${COLORS.dim}After install: rex init && rex setup — everything else is automatic.${COLORS.reset}
 `)
   }
 }

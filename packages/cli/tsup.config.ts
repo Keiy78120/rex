@@ -6,5 +6,5 @@ export default defineConfig({
   noExternal: ['@rex/core'],
   banner: { js: '#!/usr/bin/env node' },
   clean: true,
-  onSuccess: 'mkdir -p dist/guards && cp src/guards/*.sh dist/guards/',
+  onSuccess: 'mkdir -p dist/guards && cp src/guards/*.sh dist/guards/ && cp -R skills dist/skills 2>/dev/null || true',
 })
