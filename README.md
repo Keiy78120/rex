@@ -1,163 +1,111 @@
-# REX — Senior Dev Companion
+<h1 align="center">REX</h1>
 
-Config unifiée Claude Code + MCP memory server + activity logger pour Kevin (D-Studio).
+<p align="center">
+  <strong>Claude Code sous steroides</strong><br>
+  Installe, oublie, Claude Code fait moins de conneries.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/rex-claude"><img src="https://img.shields.io/npm/v/rex-claude?color=blue&label=npm" alt="npm" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="license" /></a>
+  <img src="https://img.shields.io/badge/zero_deps-black" alt="zero deps" />
+</p>
+
+---
+
+## C'est quoi ?
+
+Claude Code est puissant mais fait toujours les memes erreurs. REX ajoute des **gardes automatiques** qui surveillent Claude en arriere-plan et l'empechent de faire n'importe quoi.
+
+**En une phrase :** REX = un filet de securite pour Claude Code.
+
+## Install
+
+```bash
+npm install -g rex-claude
+rex install
+```
+
+C'est tout. Tout est automatique apres ca.
+
+## Ce que REX fait
+
+### Il empeche Claude de faire des betises
+
+| Garde | Ce qu'il fait |
+|-------|--------------|
+| **Completion** | Empeche Claude de dire "done" quand il reste des TODO ou des fonctions vides |
+| **Dangerous Command** | Bloque les commandes dangereuses (`rm -rf`, `git push --force main`) |
+| **Test Protector** | Alerte quand Claude modifie les tests au lieu de fixer le code |
+| **UI Checklist** | Verifie que chaque composant gere le loading, l'erreur et le vide |
+| **Scope Guard** | Alerte quand Claude touche trop de fichiers (> 8) |
+| **Session Summary** | Sauvegarde l'etat du travail a chaque fin de session |
+
+### Il surveille ta config
+
+```bash
+rex doctor    # 55 checks, 9 categories
+rex status    # une ligne rapide
+```
+
+### Il se souvient de tout (optionnel)
+
+Avec [Ollama](https://ollama.ai), REX transforme tes sessions Claude Code en base de connaissances searchable :
+
+```bash
+rex ingest                              # indexe tes sessions
+rex search "comment j'ai fix le bug X"  # recherche semantique
+```
+
+### Il tourne tout seul
+
+- Health check toutes les heures (LaunchAgent macOS)
+- Auto-ingest des sessions toutes les heures
+- Gateway Telegram + call watcher au demarrage du Mac
+
+## Commandes
+
+| Commande | Description |
+|----------|-------------|
+| `rex install` | One-command install (init + setup + audit) |
+| `rex init` | Setup complet (gardes, hooks, LaunchAgents) |
+| `rex setup --yes` | Setup non-interactif (deps + Ollama + models) |
+| `rex audit` | Audit d'integration des fonctionnalites |
+| `rex doctor` | Health check detaille |
+| `rex status` | Status en une ligne |
+| `rex startup` | Installer le demarrage auto |
+| `rex startup-remove` | Retirer le demarrage auto |
+| `rex ingest` | Indexer les sessions (Ollama) |
+| `rex search <query>` | Recherche semantique (Ollama) |
+| `rex optimize` | Analyser CLAUDE.md (Ollama) |
+| `rex call status` | Etat detection d'appel (Hammerspoon) |
+| `rex call watch` | Auto start/stop audio logger sur event d'appel |
+| `rex voice transcribe` | Transcrire le dernier WAV (whisper-cli) |
+| `rex voice set-optimize on/off` | Activer l'optimisation prompt post-transcription |
+| `rex audio start/stop` | Controle enregistrement audio (ffmpeg) |
 
 ## Architecture
 
 ```
-rex/
-├── dotfiles/                  # Claude Code config (symlinked → ~/.claude/)
-│   ├── CLAUDE.md              # Instructions globales REX
-│   ├── settings.json          # MCP servers, hooks, plugins
-│   ├── commands/              # Slash commands custom
-│   ├── rules/                 # Règles auto-chargées au boot (7 fichiers)
-│   ├── skills/                # Skills on-demand (8 skills)
-│   ├── agents/                # Vide — migré vers skills
-│   ├── docs/                  # Cache docs frameworks (chargé on-demand)
-│   └── templates/             # Templates de projets
-├── memory/                    # MCP Server REX-Memory
-│   ├── src/
-│   │   ├── server.ts          # 3 tools MCP : rex_search, rex_learn, rex_context
-│   │   ├── ingest.ts          # Parse sessions JSONL → SQLite + embeddings
-│   │   ├── embed.ts           # Embeddings via Ollama (qwen3-embedding:4b)
-│   │   └── search.ts          # Recherche sémantique sqlite-vec
-│   ├── db/                    # SQLite DB (gitignored)
-│   ├── package.json
-│   └── tsconfig.json
-├── activity/                  # Hammerspoon activity logger
-│   ├── init.lua               # Log app switches → JSONL
-│   └── config.lua             # Config (chemin de log, intervalle)
-├── install.sh                 # Setup complet en 1 commande
-├── package.json
-└── .gitignore
+rex-claude (npm, 12KB, zero deps)
+├── 6 gardes bash          ~/.claude/rex-guards/
+├── 9 categories de checks  rex doctor
+├── 4 LaunchAgents          health + ingest + gateway + call-watch
+└── hooks Claude Code       SessionStart/End, Stop, PreToolUse, PostToolUse
+
+rex-app (Flutter, macOS)
+├── UI desktop              health + memory + gateway + optimize
+└── voice/audio             call detection + audio logger (Hammerspoon + ffmpeg)
 ```
 
-## Installation
+## Prerequis
 
-```bash
-cd ~/Documents/Developer/_config/rex
-./install.sh
-```
+- Node.js 20+
+- Claude Code
+- macOS ou Linux
 
-Le script :
-1. Crée les symlinks `dotfiles/*` → `~/.claude/`
-2. `npm install` dans memory/
-3. Build le MCP server (`npm run build`)
-4. Copie la config Hammerspoon
-5. Enregistre le MCP server dans `~/.claude/settings.json`
+**Optionnel :** Ollama + `nomic-embed-text` pour la memoire
 
-## MCP Server — REX Memory
+## License
 
-### Tools disponibles
-
-| Tool | Usage |
-|------|-------|
-| `rex_search(query)` | Recherche sémantique dans les sessions passées et faits mémorisés |
-| `rex_learn(fact, category)` | Mémorise un pattern, debug insight, ou préférence |
-| `rex_context(project_path)` | Retourne le contexte pertinent pour le projet courant |
-
-### Stack technique
-
-- **DB** : SQLite + [sqlite-vec](https://github.com/asg017/sqlite-vec) pour la recherche vectorielle
-- **Embeddings** : Ollama local avec `qwen3-embedding:4b` (2560 dimensions)
-- **Ingestion** : parse les JSONL de `~/.claude/projects/`, extrait messages + tool_use + metadata
-- **Fix notable** : `CAST(? AS INTEGER)` pour contourner un bug sqlite-vec avec les BigInt rowid
-
-### Ingestion manuelle
-
-```bash
-cd memory && npm run ingest
-```
-
-### Ingestion automatique
-
-Un LaunchAgent macOS tourne toutes les heures :
-- Fichier : `~/Library/LaunchAgents/com.dstudio.rex-ingest.plist`
-- Logs : `/tmp/rex-ingest.log`
-- RunAtLoad : oui (se lance au démarrage du Mac)
-
-```bash
-# Vérifier le status
-launchctl list | grep rex
-
-# Forcer une exécution
-launchctl kickstart gui/$(id -u)/com.dstudio.rex-ingest
-
-# Voir les logs
-tail -f /tmp/rex-ingest.log
-```
-
-## Activity Logger (Hammerspoon)
-
-Log les changements d'app active en JSONL :
-- **Quoi** : app name, durée, timestamps
-- **Pas de keylogger** (privacy)
-- **Fichier** : `rex/activity/activity.jsonl`
-- **Chargé via** : `~/.hammerspoon/init.lua` → `rex/activity/init.lua`
-
-## Skills (chargés on-demand)
-
-| Skill | Description |
-|-------|-------------|
-| `rex-boot` | Briefing de session — auto-détecte projet, git, PRs, demande l'objectif |
-| `context-loader` | Charge docs + CLAUDE.md + mémoire REX avant de bosser |
-| `debug-assist` | Debugging systématique — parse erreur, cherche dans mémoire, root cause |
-| `token-guard` | Audit du contexte — fichiers redondants, sorties trop longues, suggestions /compact |
-| `project-init` | Init un nouveau projet avec CLAUDE.md, git, docs cache |
-| `build-validate` | Vérifie build, lint, tests, dev server — reporte sans modifier |
-| `code-review` | Review de code : logique, sécu, perf, TypeScript strictness |
-| `one-shot` | Génère un projet complet Next.js + Shadcn en une passe |
-
-## Rules (chargées au boot, ~370 lignes total)
-
-| Fichier | Contenu |
-|---------|---------|
-| `defensive-engineering.md` | Scale, pagination, rate limits, error handling |
-| `api-design.md` | REST conventions, response envelopes, status codes |
-| `frontend.md` | Loading/empty/error states, SSR, hydration, forms, a11y |
-| `security.md` | OWASP, secrets, SQL injection, XSS, CORS, auth |
-| `testing.md` | Test discipline, build verification, mocking |
-| `git-workflow.md` | Commit conventions, branching, PR process |
-| `never-assume.md` | Règles anti-erreurs, alternatives obligatoires |
-| `docs-first.md` | Documentation-first, cache local, Context7 |
-
-## Docs Cache (~/.claude/docs/)
-
-Fichiers de patterns/gotchas pré-chargés (lus on-demand uniquement) :
-
-- `nextjs.md` — App Router, SSR, caching, middleware
-- `react.md` — Hooks, patterns, performance
-- `cloudflare.md` — Workers, D1, KV, limites
-- `telegram-bot.md` — Bot API, rate limits, webhooks
-- `tailwind.md` — Classes utilitaires, responsive, dark mode
-
-## Plugins Claude Code
-
-| Plugin | Status | Notes |
-|--------|--------|-------|
-| Playwright | Actif | Browser automation, tests E2E |
-| Frontend Design | Actif | UI/design quality |
-| Figma | **Désactivé** | Réactiver manuellement quand besoin (auth pénible) |
-| Superpowers | Actif | Capacités étendues |
-| Trail of Bits (x4) | Actif | Sécurité : static analysis, semgrep, audit, insecure defaults |
-| Vercel | Désactivé | Pas utilisé |
-| Ralph Loop | Désactivé | Pas utilisé |
-
-Pour activer/désactiver : éditer `~/.claude/settings.json` > `enabledPlugins`.
-
-## Services auto-start au boot Mac
-
-| Service | Méthode | Vérification |
-|---------|---------|-------------|
-| Ollama | Login Items macOS | `pgrep ollama` |
-| Hammerspoon | Login Items macOS | Icône menubar |
-| REX Ingest | LaunchAgent (hourly) | `launchctl list \| grep rex` |
-| MCP Server | Claude Code (auto) | Démarre avec Claude |
-
-## Historique des décisions
-
-1. **agents → skills** : les agents se chargent entièrement au boot (~500 tokens chacun), les skills ne chargent que les métadonnées (~700 tokens pour les 8). Économie significative.
-2. **docs on-demand** : les fichiers `~/.claude/docs/` ne sont jamais lus au boot, seulement quand le framework est pertinent pour la tâche en cours.
-3. **sqlite-vec CAST workaround** : le rowid en BigInt de `better-sqlite3` est rejeté par sqlite-vec. Fix : `CAST(? AS INTEGER)` dans le SQL.
-4. **Figma désactivé par défaut** : re-auth fréquente, activé manuellement quand besoin.
-5. **qwen3-embedding:4b** : modèle d'embedding local via Ollama, 2560 dimensions, déjà installé.
+[MIT](LICENSE) — D-Studio

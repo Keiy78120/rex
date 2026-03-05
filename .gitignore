@@ -1,6 +1,9 @@
 node_modules/
-memory/db/*.sqlite
-memory/db/*.sqlite-*
-memory/dist/
+dist/
+target/
 .DS_Store
-*.log
+*.tsbuildinfo
+.env
+.env.*
+*.dmg
+packages/memory/package-lock.json

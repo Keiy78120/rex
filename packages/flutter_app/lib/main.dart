@@ -1,0 +1,238 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show ThemeMode;
+import 'package:macos_ui/macos_ui.dart';
+import 'package:provider/provider.dart';
+import 'services/rex_service.dart';
+import 'pages/health_page.dart';
+import 'pages/voice_page.dart';
+import 'pages/audio_page.dart';
+import 'pages/memory_page.dart';
+import 'pages/gateway_page.dart';
+import 'pages/agents_page.dart';
+import 'pages/mcp_page.dart';
+import 'pages/optimize_page.dart';
+import 'pages/settings_page.dart';
+
+final themeModeNotifier = ValueNotifier<ThemeMode>(ThemeMode.dark);
+
+void main() {
+  runApp(
+    ChangeNotifierProvider(create: (_) => RexService(), child: const RexApp()),
+  );
+}
+
+class RexApp extends StatelessWidget {
+  const RexApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeModeNotifier,
+      builder: (context, mode, _) => MacosApp(
+        title: 'REX',
+        theme: MacosThemeData.light(
+          accentColor: AccentColor.red,
+        ).copyWith(canvasColor: const Color(0xFFF5F5F7)),
+        darkTheme: MacosThemeData.dark(
+          accentColor: AccentColor.red,
+        ).copyWith(canvasColor: const Color(0xFF1C1C24)),
+        themeMode: mode,
+        home: const RexMainWindow(),
+        debugShowCheckedModeBanner: false,
+      ),
+    );
+  }
+}
+
+class RexMainWindow extends StatefulWidget {
+  const RexMainWindow({super.key});
+
+  @override
+  State<RexMainWindow> createState() => _RexMainWindowState();
+}
+
+class _RexMainWindowState extends State<RexMainWindow> {
+  int _pageIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<RexService>().refreshAll();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MacosWindow(
+      sidebar: Sidebar(
+        minWidth: 200,
+        builder: (context, scrollController) {
+          return SidebarItems(
+            currentIndex: _pageIndex,
+            onChanged: (index) => setState(() => _pageIndex = index),
+            scrollController: scrollController,
+            itemSize: SidebarItemSize.large,
+            items: const [
+              SidebarItem(
+                leading: MacosIcon(CupertinoIcons.heart_fill),
+                label: Text('Health'),
+              ),
+              SidebarItem(
+                leading: MacosIcon(CupertinoIcons.mic_fill),
+                label: Text('Voice'),
+              ),
+              SidebarItem(
+                leading: MacosIcon(CupertinoIcons.waveform),
+                label: Text('Audio'),
+              ),
+              SidebarItem(
+                leading: MacosIcon(CupertinoIcons.search),
+                label: Text('Memory'),
+              ),
+              SidebarItem(
+                leading: MacosIcon(CupertinoIcons.paperplane_fill),
+                label: Text('Gateway'),
+              ),
+              SidebarItem(
+                leading: MacosIcon(CupertinoIcons.sparkles),
+                label: Text('Agents'),
+              ),
+              SidebarItem(
+                leading: MacosIcon(CupertinoIcons.link),
+                label: Text('MCP'),
+              ),
+              SidebarItem(
+                leading: MacosIcon(CupertinoIcons.bolt_fill),
+                label: Text('Optimize'),
+              ),
+              SidebarItem(
+                leading: MacosIcon(CupertinoIcons.gear),
+                label: Text('Settings'),
+              ),
+            ],
+          );
+        },
+        top: _SidebarHeader(),
+        bottom: _SidebarFooter(),
+      ),
+      child: IndexedStack(
+        index: _pageIndex,
+        children: const [
+          HealthPage(),
+          VoicePage(),
+          AudioPage(),
+          MemoryPage(),
+          GatewayPage(),
+          AgentsPage(),
+          McpPage(),
+          OptimizePage(),
+          SettingsPage(),
+        ],
+      ),
+    );
+  }
+}
+
+class _SidebarHeader extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<RexService>(
+      builder: (context, rex, _) {
+        final statusColor = rex.healthStatus == 'healthy'
+            ? CupertinoColors.systemGreen
+            : rex.healthStatus == 'degraded'
+            ? CupertinoColors.systemYellow
+            : CupertinoColors.systemRed;
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFE5484D), Color(0xFFC53030)],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Center(
+                  child: Text(
+                    'R',
+                    style: TextStyle(
+                      color: CupertinoColors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'REX',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        rex.healthStatus.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: MacosTheme.of(
+                            context,
+                          ).typography.subheadline.color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SidebarFooter extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final isDark = themeModeNotifier.value == ThemeMode.dark;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          const Text(
+            'v5.0.0',
+            style: TextStyle(fontSize: 11, color: CupertinoColors.systemGrey),
+          ),
+          const Spacer(),
+          PushButton(
+            controlSize: ControlSize.small,
+            secondary: true,
+            onPressed: () {
+              themeModeNotifier.value = isDark
+                  ? ThemeMode.light
+                  : ThemeMode.dark;
+            },
+            child: Text(isDark ? 'Dark' : 'Light'),
+          ),
+        ],
+      ),
+    );
+  }
+}

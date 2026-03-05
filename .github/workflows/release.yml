@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install JS deps
+        run: pnpm install
+
+      - name: Build core packages
+        run: |
+          pnpm --filter @rex/core build
+          pnpm --filter @rex/memory build
+          pnpm --filter rex-claude build
+          node packages/cli/dist/index.js audit
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Build Flutter app
+        run: |
+          cd packages/flutter_app
+          flutter pub get
+          flutter test
+          flutter build macos --release
+
+      - name: Archive app bundle
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            packages/flutter_app/build/macos/Build/Products/Release/rex_app.app \
+            rex_app-macos.zip
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: rex_app-macos.zip
+          generate_release_notes: true

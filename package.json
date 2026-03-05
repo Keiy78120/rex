@@ -1,7 +1,13 @@
 {
-  "name": "rex",
-  "version": "1.0.0",
+  "name": "rex-monorepo",
   "private": true,
-  "description": "REX — Config unifiée + MCP memory server + activity logger",
-  "workspaces": ["memory"]
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "dev": "pnpm -r --parallel dev"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  }
 }
