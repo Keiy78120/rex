@@ -133,6 +133,13 @@ async function main() {
       break
     }
 
+    case 'prune': {
+      const { prune } = await import('./prune.js')
+      const statsFlag = process.argv.includes('--stats')
+      await prune(statsFlag)
+      break
+    }
+
     case 'setup': {
       const { setup } = await import('./setup.js')
       await setup()
@@ -179,7 +186,7 @@ async function main() {
 
     case '--version':
     case '-v':
-      console.log('rex-claude v3.0.1')
+      console.log('rex-claude v4.0.0')
       break
 
     case 'help':
@@ -199,6 +206,8 @@ ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex search <query>   Semantic search across past sessions
   rex optimize         Analyze CLAUDE.md with local LLM
   rex optimize --apply Apply optimizations (with backup)
+  rex prune            Cleanup old/duplicate memories
+  rex prune --stats    Show memory database stats
 
 ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex setup            Install Ollama + models + Telegram gateway

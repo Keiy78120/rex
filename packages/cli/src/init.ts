@@ -228,7 +228,7 @@ export function installApp() {
 
   // Find REX.app — check build output or /Applications
   const thisDir = new URL('.', import.meta.url).pathname
-  const buildApp = join(thisDir, '..', '..', 'app', 'src-tauri', 'target', 'release', 'bundle', 'macos', 'REX.app')
+  const buildApp = join(thisDir, '..', '..', 'flutter_app', 'build', 'macos', 'Build', 'Products', 'Release', 'rex_app.app')
   const installedApp = '/Applications/REX.app'
 
   if (existsSync(installedApp)) {
