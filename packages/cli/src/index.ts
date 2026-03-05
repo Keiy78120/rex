@@ -264,6 +264,15 @@ async function main() {
       break
     }
 
+    case 'recategorize': {
+      const { recategorize } = await import('./recategorize.js')
+      const batchArg = process.argv.find(a => a.startsWith('--batch='))
+      const batch = batchArg ? parseInt(batchArg.split('=')[1]) : 50
+      const dryRun = process.argv.includes('--dry-run')
+      await recategorize({ batch, dryRun })
+      break
+    }
+
     case '--version':
     case '-v':
       console.log('rex-claude v4.0.1')
@@ -287,6 +296,7 @@ ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex search <query>   Semantic search across past sessions
   rex categorize       Classify uncategorized memories
   rex consolidate      Merge similar memories (cosine clustering)
+  rex recategorize     Re-classify session memories with AI
   rex optimize         Analyze CLAUDE.md with local LLM
   rex optimize --apply Apply optimizations (with backup)
   rex prune            Cleanup old/duplicate memories
