@@ -1,0 +1,32 @@
+import { join } from 'node:path'
+import { existsSync, mkdirSync } from 'node:fs'
+
+const HOME = process.env.HOME || '~'
+
+export const REX_DIR = join(HOME, '.claude', 'rex')
+export const MEMORY_DIR = join(REX_DIR, 'memory')
+export const MEMORY_DB_PATH = join(MEMORY_DIR, 'rex.sqlite')
+export const PENDING_DIR = join(MEMORY_DIR, 'pending')
+export const BACKUPS_DIR = join(MEMORY_DIR, 'backups')
+export const PROJECTS_DIR = join(REX_DIR, 'projects')
+export const SUMMARIES_DIR = join(PROJECTS_DIR, 'summaries')
+export const SELF_IMPROVEMENT_DIR = join(REX_DIR, 'self-improvement')
+export const CONFIG_PATH = join(REX_DIR, 'config.json')
+export const VAULT_PATH = join(REX_DIR, 'vault.md')
+export const DAEMON_LOG_PATH = join(REX_DIR, 'daemon.log')
+export const REFERENCES_DIR = join(REX_DIR, 'references')
+export const INSPIRATIONS_DIR = join(REX_DIR, 'inspirations')
+
+export const LEGACY_MEMORY_DIR = join(HOME, '.rex-memory')
+export const LEGACY_DB_PATH = join(LEGACY_MEMORY_DIR, 'db', 'rex.sqlite')
+
+export function ensureRexDirs(): void {
+  const dirs = [
+    REX_DIR, MEMORY_DIR, PENDING_DIR, BACKUPS_DIR,
+    PROJECTS_DIR, SUMMARIES_DIR, SELF_IMPROVEMENT_DIR,
+    REFERENCES_DIR, INSPIRATIONS_DIR,
+  ]
+  for (const dir of dirs) {
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  }
+}

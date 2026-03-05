@@ -4,7 +4,8 @@ import { readFileSync, readdirSync, existsSync, statSync, mkdirSync, unlinkSync,
 import { join, basename } from "path";
 import { embed, embeddingToBuffer, EMBEDDING_DIM } from "./embed.js";
 
-const DB_PATH = join(import.meta.dirname, "..", "db", "rex.sqlite");
+const REX_DB = join(process.env.HOME || '~', '.claude', 'rex', 'memory', 'rex.sqlite')
+const DB_PATH = existsSync(REX_DB) ? REX_DB : join(import.meta.dirname, '..', 'db', 'rex.sqlite')
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 const MAX_CHUNKS_PER_FILE = 50;
 const CHUNK_SIZE = 1000;
@@ -59,11 +60,18 @@ async function classifyAndSummarize(chunk: string): Promise<{ category: Category
     if (!res.ok) return fallback;
 
     const data = (await res.json()) as { response: string };
-    // Extract JSON from response (handle markdown code blocks)
-    const jsonMatch = data.response.match(/\{[\s\S]*?\}/);
-    if (!jsonMatch) return fallback;
-
-    const parsed = JSON.parse(jsonMatch[0]);
+    const rawResponse = data.response;
+    let parsed: any = null;
+    try { parsed = JSON.parse(rawResponse); } catch {}
+    if (!parsed) {
+      const fence = rawResponse.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fence) { try { parsed = JSON.parse(fence[1].trim()); } catch {} }
+    }
+    if (!parsed) {
+      const brace = rawResponse.match(/\{[\s\S]*\}/);  // greedy — handles nested objects
+      if (brace) { try { parsed = JSON.parse(brace[0]); } catch {} }
+    }
+    if (!parsed) return fallback;
     const category = VALID_CATEGORIES.includes(parsed.category) ? parsed.category : "session";
     const summary = typeof parsed.summary === "string" && parsed.summary.length > 10 ? parsed.summary : chunk;
 
@@ -221,7 +229,7 @@ async function checkOllama(): Promise<boolean> {
   }
 }
 
-const PENDING_DIR = join(process.env.HOME || "~", ".rex-memory", "pending");
+const PENDING_DIR = join(process.env.HOME || '~', '.claude', 'rex', 'memory', 'pending')
 
 async function savePending(chunks: Array<{ text: string; source: string; project: string }>) {
   if (!existsSync(PENDING_DIR)) mkdirSync(PENDING_DIR, { recursive: true });

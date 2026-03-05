@@ -9,6 +9,13 @@ importers:
   .: {}
 
   packages/cli:
+    dependencies:
+      better-sqlite3:
+        specifier: ^11.8.1
+        version: 11.10.0
+      sqlite-vec:
+        specifier: ^0.1.6
+        version: 0.1.6
     devDependencies:
       '@rex/core':
         specifier: workspace:*

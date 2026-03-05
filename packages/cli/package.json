@@ -1,6 +1,6 @@
 {
   "name": "rex-claude",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "description": "Claude Code sous steroides — guards, health checks, memory RAG",
   "type": "module",
   "bin": {
@@ -33,6 +33,10 @@
   "homepage": "https://github.com/Keiy78120/rex#readme",
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "sqlite-vec": "^0.1.6"
   },
   "devDependencies": {
     "@rex/core": "workspace:*",

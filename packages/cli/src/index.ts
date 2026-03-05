@@ -1,7 +1,9 @@
 import { runAllChecks } from '@rex/core'
 import type { HealthReport, CheckGroup } from '@rex/core'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { createLogger, configureLogger } from './logger.js'
+import { DAEMON_LOG_PATH } from './paths.js'
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -66,9 +68,34 @@ function formatReport(report: HealthReport): string {
 
 async function main() {
   const command = process.argv[2] ?? 'help'
+  const verbose = process.argv.includes('--verbose')
+  if (verbose) configureLogger({ level: 'debug' })
+  const log = createLogger('cli')
 
   switch (command) {
     case 'doctor': {
+      const fixMode = process.argv.includes('--fix')
+      if (fixMode) {
+        log.info('Doctor --fix started')
+        console.log(`\n${COLORS.bold}REX Doctor — Auto-fix mode${COLORS.reset}\n`)
+        const { ensureRexDirs } = await import('./paths.js')
+        ensureRexDirs()
+        log.info('Directory structure ensured')
+        console.log(`  ${COLORS.green}✓${COLORS.reset} Directory structure ensured`)
+        // Run migrate if needed
+        try {
+          const { migrate } = await import('./migrate.js')
+          await migrate()
+        } catch (e: any) {
+          console.log(`  ${COLORS.yellow}!${COLORS.reset} Migration: ${e.message?.slice(0, 100)}`)
+        }
+        // Process pending
+        const { execSync } = await import('node:child_process')
+        try { execSync('rex ingest', { stdio: 'inherit', timeout: 120_000 }) } catch {}
+        try { execSync('rex recategorize --batch=50', { stdio: 'inherit', timeout: 180_000 }) } catch {}
+        log.info('Auto-fix complete, running doctor')
+        console.log(`\n${COLORS.green}Auto-fix complete.${COLORS.reset} Running doctor...\n`)
+      }
       const report = await runAllChecks()
       console.log(formatReport(report))
       process.exit(report.status === 'broken' ? 1 : 0)
@@ -135,7 +162,9 @@ async function main() {
     case 'optimize': {
       const { optimize } = await import('./optimize.js')
       const applyFlag = process.argv.includes('--apply')
-      await optimize(applyFlag)
+      const modelIdx = process.argv.indexOf('--model')
+      const modelFlag = modelIdx !== -1 ? process.argv[modelIdx + 1] : undefined
+      await optimize(applyFlag, modelFlag)
       break
     }
 
@@ -159,6 +188,12 @@ async function main() {
       const json = process.argv.includes('--json')
       const strict = process.argv.includes('--strict')
       await audit({ json, strict })
+      break
+    }
+
+    case 'migrate': {
+      const { migrate } = await import('./migrate.js')
+      await migrate()
       break
     }
 
@@ -198,7 +233,6 @@ async function main() {
       await app(['update', ...process.argv.slice(3)])
       break
     }
-
     case 'agents': {
       const { agents } = await import('./agents.js')
       await agents(process.argv.slice(3))
@@ -241,10 +275,129 @@ async function main() {
       break
     }
 
+    case 'categorize': {
+      try {
+        const memDir = findMemoryPackage()
+        if (!memDir) {
+          console.log(`Memory package not found. Run from the REX monorepo.`)
+          process.exit(1)
+        }
+        const { execSync } = await import('node:child_process')
+        const modelArg = process.argv.find(a => a.startsWith('--model='))
+          ?? (process.argv.includes('--model') ? `--model=${process.argv[process.argv.indexOf('--model') + 1]}` : '')
+        const batchArg = process.argv.find(a => a.startsWith('--batch='))
+          ?? (process.argv.includes('--batch') ? `--batch=${process.argv[process.argv.indexOf('--batch') + 1]}` : '')
+        execSync(`npx tsx src/categorize.ts ${modelArg} ${batchArg}`.trim(), { cwd: memDir, stdio: 'inherit' })
+      } catch { process.exit(1) }
+      break
+    }
+
+    case 'list-memories': {
+      try {
+        const memDir = findMemoryPackage()
+        if (!memDir) { console.log(`Memory package not found.`); process.exit(1) }
+        const { execSync } = await import('node:child_process')
+        const extraArgs = process.argv.slice(3).join(' ')
+        execSync(`npx tsx src/categorize.ts list ${extraArgs}`.trim(), { cwd: memDir, stdio: 'inherit' })
+      } catch { process.exit(1) }
+      break
+    }
+
+    case 'consolidate': {
+      try {
+        const memDir = findMemoryPackage()
+        if (!memDir) { console.log(`Memory package not found. Run from the REX monorepo.`); process.exit(1) }
+        const { execSync } = await import('node:child_process')
+        const thresholdArg = process.argv.find(a => a.startsWith('--threshold=')) ?? ''
+        const limitArg = process.argv.find(a => a.startsWith('--limit=')) ?? ''
+        const modelArg = process.argv.find(a => a.startsWith('--model=')) ?? ''
+        const dryRunArg = process.argv.includes('--dry-run') ? '--dry-run' : ''
+        execSync(`npx tsx src/categorize.ts consolidate ${thresholdArg} ${limitArg} ${modelArg} ${dryRunArg}`.trim(), { cwd: memDir, stdio: 'inherit' })
+      } catch { process.exit(1) }
+      break
+    }
+
+    case 'models': {
+      const { showModelRouter } = await import('./router.js')
+      await showModelRouter()
+      break
+    }
+
+    case 'projects': {
+      const { scanProjects, saveProjectIndex } = await import('./projects.js')
+      console.log(`${COLORS.cyan}Scanning projects...${COLORS.reset}`)
+      const projects = scanProjects()
+      saveProjectIndex(projects)
+      console.log(`\n${COLORS.bold}${projects.length} projects found${COLORS.reset}\n`)
+      for (const p of projects) {
+        const dot = p.status === 'active' ? `${COLORS.green}●${COLORS.reset}` : `${COLORS.dim}○${COLORS.reset}`
+        console.log(`  ${dot} ${COLORS.bold}${p.name.padEnd(20)}${COLORS.reset} ${p.stack.join(', ').padEnd(30)} ${COLORS.dim}${p.lastActive}${COLORS.reset}`)
+      }
+      break
+    }
+
+    case 'recategorize': {
+      const { recategorize } = await import('./recategorize.js')
+      const batchArg = process.argv.find(a => a.startsWith('--batch='))
+      const batch = batchArg ? parseInt(batchArg.split('=')[1]) : 50
+      const dryRun = process.argv.includes('--dry-run')
+      await recategorize({ batch, dryRun })
+      break
+    }
+
+    case 'preload': {
+      const { preload } = await import('./preload.js')
+      const cwd = process.argv[3] || process.cwd()
+      const context = await preload(cwd)
+      if (context) console.log(context)
+      break
+    }
+
+    case 'self-review': {
+      const { selfReview } = await import('./self-improve.js')
+      await selfReview()
+      break
+    }
+
+    case 'promote-rule': {
+      const { promoteRule } = await import('./self-improve.js')
+      const idx = parseInt(process.argv[3])
+      if (!idx) { console.log('Usage: rex promote-rule <index>'); process.exit(1) }
+      const ok = await promoteRule(idx)
+      console.log(ok ? `${COLORS.green}Rule promoted to ~/.claude/rules/${COLORS.reset}` : `${COLORS.red}Failed — invalid index or no suggested rule${COLORS.reset}`)
+      break
+    }
+
+    case 'daemon': {
+      const { daemon } = await import('./daemon.js')
+      await daemon()
+      break
+    }
+
+    case 'logs': {
+      const lines = process.argv.find(a => a.startsWith('--lines='))
+      const n = lines ? parseInt(lines.split('=')[1]) : 50
+      const follow = process.argv.includes('--follow') || process.argv.includes('-f')
+      if (!existsSync(DAEMON_LOG_PATH)) {
+        console.log(`${COLORS.dim}No log file found at ${DAEMON_LOG_PATH}${COLORS.reset}`)
+        break
+      }
+      if (follow) {
+        const { execSync: execSyncLocal } = await import('node:child_process')
+        try { execSyncLocal(`tail -f "${DAEMON_LOG_PATH}"`, { stdio: 'inherit' }) } catch {}
+      } else {
+        const content = readFileSync(DAEMON_LOG_PATH, 'utf-8')
+        const logLines = content.split('\n').filter(Boolean)
+        const tail = logLines.slice(-n)
+        for (const line of tail) console.log(line)
+        console.log(`\n${COLORS.dim}Showing last ${tail.length} of ${logLines.length} lines. Use --follow/-f for live tail.${COLORS.reset}`)
+      }
+      break
+    }
 
     case '--version':
     case '-v':
-      console.log('rex-claude v4.0.0')
+      console.log('rex-claude v5.0.0')
       break
 
     case 'help':
@@ -257,23 +410,37 @@ ${COLORS.bold}Commands:${COLORS.reset}
   rex init            Setup REX (guards, hooks, MCP, startup)
   rex audit           Run integration audit checks
   rex doctor          Full health check (9 categories)
+  rex doctor --fix    Auto-fix common issues then check
   rex status          Quick one-line status
   rex startup         Install LaunchAgent (auto-start on login)
   rex startup-remove  Remove LaunchAgent
 
 ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
+  rex migrate          Migrate ~/.rex-memory/ to ~/.claude/rex/ hub
   rex ingest           Sync session history to vector DB
   rex search <query>   Semantic search across past sessions
+  rex categorize       Classify uncategorized memories
+  rex consolidate      Merge similar memories (cosine clustering)
+  rex recategorize     Re-classify session memories with AI
   rex optimize         Analyze CLAUDE.md with local LLM
   rex optimize --apply Apply optimizations (with backup)
   rex prune            Cleanup old/duplicate memories
   rex prune --stats    Show memory database stats
+  rex self-review      Extract lessons, detect error patterns
+  rex promote-rule N   Promote rule candidate to ~/.claude/rules/
 
 ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex setup            Install Ollama + models + Telegram gateway (interactive)
   rex setup --yes      Non-interactive setup (auto-install deps, env-based Telegram)
   rex llm <prompt>     Query local LLM directly
+  rex models           Show task-aware model routing table
+  rex preload [path]   Show pre-loaded context for a path
   rex context [path]   Analyze project, recommend MCP/skills
+  rex projects         Scan and index all dev projects
+
+${COLORS.bold}Background:${COLORS.reset}
+  rex daemon           Start persistent background daemon
+  rex logs             Show recent daemon/CLI logs (--lines=N, --follow/-f)
 
 ${COLORS.bold}Telegram Gateway:${COLORS.reset}
   rex gateway          Start Telegram bot (long-polling, interactive)

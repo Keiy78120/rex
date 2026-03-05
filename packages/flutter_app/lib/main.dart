@@ -13,6 +13,8 @@ import 'pages/mcp_page.dart';
 import 'pages/optimize_page.dart';
 import 'pages/settings_page.dart';
 
+final themeModeNotifier = ValueNotifier<ThemeMode>(ThemeMode.dark);
+
 void main() {
   runApp(
     ChangeNotifierProvider(create: (_) => RexService(), child: const RexApp()),
@@ -24,17 +26,20 @@ class RexApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MacosApp(
-      title: 'REX',
-      theme: MacosThemeData.light().copyWith(
-        primaryColor: const Color(0xFF6366F1),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeModeNotifier,
+      builder: (context, mode, _) => MacosApp(
+        title: 'REX',
+        theme: MacosThemeData.light(
+          accentColor: AccentColor.red,
+        ).copyWith(canvasColor: const Color(0xFFF5F5F7)),
+        darkTheme: MacosThemeData.dark(
+          accentColor: AccentColor.red,
+        ).copyWith(canvasColor: const Color(0xFF1C1C24)),
+        themeMode: mode,
+        home: const RexMainWindow(),
+        debugShowCheckedModeBanner: false,
       ),
-      darkTheme: MacosThemeData.dark().copyWith(
-        primaryColor: const Color(0xFF818CF8),
-      ),
-      themeMode: ThemeMode.system,
-      home: const RexMainWindow(),
-      debugShowCheckedModeBanner: false,
     );
   }
 }
@@ -148,7 +153,7 @@ class _SidebarHeader extends StatelessWidget {
                 height: 36,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                    colors: [Color(0xFFE5484D), Color(0xFFC53030)],
                   ),
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -206,11 +211,27 @@ class _SidebarHeader extends StatelessWidget {
 class _SidebarFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.all(16),
-      child: Text(
-        'v4.0.0',
-        style: TextStyle(fontSize: 11, color: CupertinoColors.systemGrey),
+    final isDark = themeModeNotifier.value == ThemeMode.dark;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          const Text(
+            'v5.0.0',
+            style: TextStyle(fontSize: 11, color: CupertinoColors.systemGrey),
+          ),
+          const Spacer(),
+          PushButton(
+            controlSize: ControlSize.small,
+            secondary: true,
+            onPressed: () {
+              themeModeNotifier.value = isDark
+                  ? ThemeMode.light
+                  : ThemeMode.dark;
+            },
+            child: Text(isDark ? 'Dark' : 'Light'),
+          ),
+        ],
       ),
     );
   }

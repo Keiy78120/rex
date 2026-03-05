@@ -42,6 +42,7 @@ const PLIST_LABEL = 'com.dstudio.rex'
 const INGEST_PLIST_LABEL = 'com.dstudio.rex-ingest'
 const GATEWAY_PLIST_LABEL = 'com.dstudio.rex-gateway'
 const CALL_WATCH_PLIST_LABEL = 'com.dstudio.rex-call-watch'
+const DAEMON_PLIST_LABEL = 'com.dstudio.rex-daemon'
 
 export function installIngestAgent() {
   if (process.platform !== 'darwin') {
@@ -205,6 +206,81 @@ export function installGatewayAgent() {
   } catch {}
 
   ok('Gateway LaunchAgent installed — Telegram bot always-on (auto-restart)')
+}
+
+export function installDaemonAgent() {
+  if (process.platform !== 'darwin') {
+    info('Daemon LaunchAgent only supported on macOS')
+    return
+  }
+
+  const launchAgentsDir = join(homedir(), 'Library', 'LaunchAgents')
+  ensureDir(launchAgentsDir)
+  const plistPath = join(launchAgentsDir, `${DAEMON_PLIST_LABEL}.plist`)
+
+  let rexBin = ''
+  try {
+    rexBin = execSync('which rex', { encoding: 'utf-8' }).trim()
+  } catch {}
+
+  if (!rexBin) {
+    info('rex binary not in PATH — skipping daemon LaunchAgent')
+    return
+  }
+
+  if (existsSync(plistPath)) {
+    skip('Daemon LaunchAgent already installed (unified background daemon)')
+    return
+  }
+
+  // Read Telegram credentials from settings
+  const settingsPath = join(homedir(), '.claude', 'settings.json')
+  let botToken = ''
+  let chatIdVal = ''
+  try {
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+    botToken = settings.env?.REX_TELEGRAM_BOT_TOKEN || ''
+    chatIdVal = settings.env?.REX_TELEGRAM_CHAT_ID || ''
+  } catch {}
+
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${DAEMON_PLIST_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${rexBin}</string>
+    <string>daemon</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>${join(homedir(), '.claude', 'rex', 'daemon.log')}</string>
+  <key>StandardErrorPath</key>
+  <string>${join(homedir(), '.claude', 'rex', 'daemon.log')}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:${dirname(rexBin)}</string>
+    <key>REX_TELEGRAM_BOT_TOKEN</key>
+    <string>${botToken}</string>
+    <key>REX_TELEGRAM_CHAT_ID</key>
+    <string>${chatIdVal}</string>
+  </dict>
+</dict>
+</plist>
+`
+  writeFileSync(plistPath, plist)
+
+  try {
+    execSync(`launchctl load ${plistPath}`, { stdio: 'ignore' })
+  } catch {}
+
+  ok('Daemon LaunchAgent installed — unified background daemon (KeepAlive)')
 }
 
 export function uninstallGatewayAgent() {
@@ -543,6 +619,32 @@ export async function init() {
     info('Memory package not found — install @rex/memory or run from monorepo')
   }
 
+  // 2b. Sync optional MCP registry into settings (auto-bootstrap)
+  const registryPath = join(homedir(), '.rex-memory', 'mcp-registry.json')
+  if (existsSync(registryPath)) {
+    try {
+      const registry = readJson(registryPath)
+      const registryServers = registry?.servers as Record<string, any> | undefined
+      if (registryServers && typeof registryServers === 'object') {
+        let added = 0
+        for (const [name, cfg] of Object.entries(registryServers)) {
+          if (!settings.mcpServers[name]) {
+            settings.mcpServers[name] = cfg
+            added++
+          }
+        }
+        if (added > 0) {
+          writeJson(settingsPath, settings)
+          ok(`MCP registry synced (${added} server${added > 1 ? 's' : ''} added)`)
+        } else {
+          skip('MCP registry already synced')
+        }
+      }
+    } catch {
+      info('MCP registry exists but could not be parsed')
+    }
+  }
+
   // 3. Setup hooks
   if (!settings.hooks) settings.hooks = {}
 
@@ -570,13 +672,9 @@ export async function init() {
     h.hooks?.some?.((hh: any) => hh.command?.includes('rex-context'))
   )
 
-  if (hasContextHook) {
-    skip('Context injection hook (SessionStart) already configured')
-  } else {
-    // Create the context script
-    const contextScript = join(claudeDir, 'rex-context.sh')
-    if (!existsSync(contextScript)) {
-      writeFileSync(contextScript, `#!/bin/bash
+  // Always refresh context script so new automation logic is applied.
+  const contextScript = join(claudeDir, 'rex-context.sh')
+  writeFileSync(contextScript, `#!/bin/bash
 # REX Context Injection — runs at session start
 # Outputs relevant memory context to CLAUDE_ENV_FILE
 
@@ -584,21 +682,32 @@ if [ -z "$CLAUDE_ENV_FILE" ]; then
   exit 0
 fi
 
+PROJECT_PATH="\${CLAUDE_PROJECT_DIR:-$PWD}"
+
 # Quick check if rex-memory MCP is available
 if command -v npx &>/dev/null; then
   # Context will be loaded via MCP rex_context tool
   # This hook just ensures the env is ready
   echo "REX_MEMORY_AVAILABLE=true" >> "$CLAUDE_ENV_FILE"
 fi
-`, { mode: 0o755 })
-    }
 
+# Auto tool/skill recommendations (LLM-assisted)
+if command -v rex &>/dev/null; then
+  rex agents recommend "$PROJECT_PATH" --quiet --env-file "$CLAUDE_ENV_FILE" >/dev/null 2>&1 || true
+elif command -v npx &>/dev/null; then
+  npx rex-cli agents recommend "$PROJECT_PATH" --quiet --env-file "$CLAUDE_ENV_FILE" >/dev/null 2>&1 || true
+fi
+`, { mode: 0o755 })
+
+  if (hasContextHook) {
+    skip('Context injection hook (SessionStart) already configured')
+  } else {
     if (!settings.hooks.SessionStart) settings.hooks.SessionStart = []
     settings.hooks.SessionStart.push({
       hooks: [{
         type: 'command',
         command: `bash ${contextScript}`,
-        timeout: 5,
+        timeout: 20,
       }],
     })
     ok('Context injection hook configured (SessionStart)')
@@ -706,6 +815,7 @@ fi
   installStartup()
   installIngestAgent()
   installGatewayAgent()
+  installDaemonAgent()
   installHammerspoonCallWatcher()
   installCallWatchAgent()
 
