@@ -20,11 +20,14 @@ class _MemoryPageState extends State<MemoryPage> {
   @override
   void initState() {
     super.initState();
-    _loadStats();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadStats();
+    });
   }
 
   Future<void> _loadStats() async {
     final output = await context.read<RexService>().runPrune(statsOnly: true);
+    if (!mounted) return;
     setState(() => _statsOutput = output);
   }
 
@@ -33,6 +36,7 @@ class _MemoryPageState extends State<MemoryPage> {
     if (query.isEmpty) return;
     setState(() => _searching = true);
     final result = await context.read<RexService>().runSearch(query);
+    if (!mounted) return;
     setState(() {
       _searchResults = result;
       _searching = false;
@@ -51,6 +55,7 @@ class _MemoryPageState extends State<MemoryPage> {
             icon: const MacosIcon(CupertinoIcons.tray_arrow_down),
             onPressed: () async {
               final output = await context.read<RexService>().runIngest();
+              if (!context.mounted) return;
               setState(() => _statsOutput = output);
               _loadStats();
             },
@@ -61,6 +66,7 @@ class _MemoryPageState extends State<MemoryPage> {
             icon: const MacosIcon(CupertinoIcons.trash),
             onPressed: () async {
               final output = await context.read<RexService>().runPrune();
+              if (!context.mounted) return;
               setState(() => _statsOutput = output);
             },
             showLabel: true,
@@ -124,19 +130,25 @@ class _MemoryPageState extends State<MemoryPage> {
                 // Info cards
                 Row(
                   children: [
-                    Expanded(child: _InfoCard(
-                      icon: CupertinoIcons.doc_text,
-                      title: 'Auto-Ingest',
-                      subtitle: 'Sessions are ingested automatically via LaunchAgent every hour and at session end.',
-                      color: CupertinoColors.systemBlue,
-                    )),
+                    Expanded(
+                      child: _InfoCard(
+                        icon: CupertinoIcons.doc_text,
+                        title: 'Auto-Ingest',
+                        subtitle:
+                            'Sessions are ingested automatically via LaunchAgent every hour and at session end.',
+                        color: CupertinoColors.systemBlue,
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(child: _InfoCard(
-                      icon: CupertinoIcons.sparkles,
-                      title: 'Smart Categories',
-                      subtitle: 'Qwen classifies chunks: debug, fix, idea, architecture, pattern, lesson, config.',
-                      color: CupertinoColors.systemPurple,
-                    )),
+                    Expanded(
+                      child: _InfoCard(
+                        icon: CupertinoIcons.sparkles,
+                        title: 'Smart Categories',
+                        subtitle:
+                            'Qwen classifies chunks: debug, fix, idea, architecture, pattern, lesson, config.',
+                        color: CupertinoColors.systemPurple,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -189,11 +201,7 @@ class _OutputCard extends StatelessWidget {
       ),
       child: SelectableText(
         text,
-        style: const TextStyle(
-          fontFamily: 'Menlo',
-          fontSize: 12,
-          height: 1.5,
-        ),
+        style: const TextStyle(fontFamily: 'Menlo', fontSize: 12, height: 1.5),
       ),
     );
   }
@@ -228,7 +236,14 @@ class _InfoCard extends StatelessWidget {
             children: [
               Icon(icon, size: 18, color: color),
               const SizedBox(width: 8),
-              Text(title, style: TextStyle(fontWeight: FontWeight.w600, color: color, fontSize: 13)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                  fontSize: 13,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),

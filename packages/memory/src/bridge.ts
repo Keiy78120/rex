@@ -1,5 +1,5 @@
 /**
- * CLI bridge for Tauri → @rex/memory communication.
+ * CLI bridge for desktop app / CLI -> @rex/memory communication.
  * Called via: node --import tsx/esm packages/memory/src/bridge.ts <command> [args...]
  *
  * Commands:

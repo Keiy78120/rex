@@ -1,13 +1,24 @@
 import { homedir } from 'node:os'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
-import { execSync } from 'node:child_process'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+import { join, basename, extname } from 'node:path'
+import { execSync, execFileSync } from 'node:child_process'
 
 // --- Config (loaded from settings.json) ---
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 const STATE_FILE = join(homedir(), '.rex-memory', 'gateway-state.json')
 const LOG_FILE = join(homedir(), '.claude', 'rex-gateway-commands.log')
+const UPLOADS_ROOT = join(homedir(), '.rex-memory', 'gateway-uploads')
+const MAX_UPLOADS = 200
+const UPLOAD_RETENTION_DAYS = Math.max(1, parseInt(process.env.REX_UPLOAD_RETENTION_DAYS || '10', 10) || 10)
+const MAX_MEDIA_MB = Math.max(1, parseInt(process.env.REX_GATEWAY_MAX_MEDIA_MB || '20', 10) || 20)
+const MAX_MEDIA_BYTES = MAX_MEDIA_MB * 1024 * 1024
+const AUTO_UPLOAD_ANALYZE = process.env.REX_GATEWAY_AUTO_ANALYZE_UPLOADS !== '0'
+const AUTO_UPLOAD_MODE: 'qwen' | 'claude' = (process.env.REX_GATEWAY_AUTO_ANALYZE_MODE || 'claude').toLowerCase() === 'qwen'
+  ? 'qwen'
+  : 'claude'
+const AUTO_UPLOAD_TASK = process.env.REX_GATEWAY_AUTO_ANALYZE_TASK
+  || 'Parse this uploaded file and produce a concise coding-oriented brief with next actions.'
 
 interface GatewayConfig {
   macTailscaleIp: string
@@ -47,15 +58,35 @@ interface GatewayState {
   mode: 'qwen' | 'claude'
   lastActivity: string
   sessionsCount: number
+  uploads: UploadEntry[]
+}
+
+interface UploadEntry {
+  id: string
+  chatId: string
+  from: string
+  kind: 'document' | 'photo' | 'audio' | 'voice' | 'video'
+  filePath: string
+  fileName: string
+  mimeType: string
+  size: number
+  caption?: string
+  uploadedAt: string
 }
 
 function loadState(): GatewayState {
   try {
     if (existsSync(STATE_FILE)) {
-      return JSON.parse(readFileSync(STATE_FILE, 'utf-8'))
+      const parsed = JSON.parse(readFileSync(STATE_FILE, 'utf-8')) as Partial<GatewayState>
+      return {
+        mode: parsed.mode === 'claude' ? 'claude' : 'qwen',
+        lastActivity: parsed.lastActivity || new Date().toISOString(),
+        sessionsCount: typeof parsed.sessionsCount === 'number' ? parsed.sessionsCount : 0,
+        uploads: Array.isArray(parsed.uploads) ? parsed.uploads as UploadEntry[] : [],
+      }
     }
   } catch {}
-  return { mode: 'qwen', lastActivity: new Date().toISOString(), sessionsCount: 0 }
+  return { mode: 'qwen', lastActivity: new Date().toISOString(), sessionsCount: 0, uploads: [] }
 }
 
 function saveState(state: GatewayState) {
@@ -68,6 +99,68 @@ function saveState(state: GatewayState) {
 
 let state = loadState()
 let config = loadConfig()
+
+function ensureUploadsDir() {
+  if (!existsSync(UPLOADS_ROOT)) mkdirSync(UPLOADS_ROOT, { recursive: true })
+}
+
+function slugFileName(name: string) {
+  return name
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'upload'
+}
+
+function rememberUpload(entry: UploadEntry) {
+  state.uploads.push(entry)
+  if (state.uploads.length > MAX_UPLOADS) {
+    state.uploads = state.uploads.slice(-MAX_UPLOADS)
+  }
+  saveState(state)
+}
+
+function recentUploads(chatId: string, limit = 10): UploadEntry[] {
+  return state.uploads
+    .filter((u) => u.chatId === chatId)
+    .slice(-limit)
+    .reverse()
+}
+
+function latestUpload(chatId: string): UploadEntry | null {
+  const list = recentUploads(chatId, 1)
+  return list.length ? list[0] : null
+}
+
+function cleanupOldUploads() {
+  ensureUploadsDir()
+  const now = Date.now()
+  const maxAgeMs = UPLOAD_RETENTION_DAYS * 24 * 60 * 60 * 1000
+  try {
+    const files = readdirSync(UPLOADS_ROOT)
+    for (const file of files) {
+      const full = join(UPLOADS_ROOT, file)
+      let st: ReturnType<typeof statSync>
+      try {
+        st = statSync(full)
+      } catch {
+        continue
+      }
+      if (!st.isFile()) continue
+      if ((now - st.mtimeMs) > maxAgeMs) {
+        try { unlinkSync(full) } catch {}
+      }
+    }
+  } catch {}
+
+  const existing = new Set<string>()
+  try {
+    for (const file of readdirSync(UPLOADS_ROOT)) {
+      existing.add(join(UPLOADS_ROOT, file))
+    }
+  } catch {}
+  state.uploads = state.uploads.filter((u) => existing.has(u.filePath))
+  saveState(state)
+}
 
 // --- Logging ---
 
@@ -164,7 +257,9 @@ function mainMenu() {
     [
       { text: '📋 Sessions', callback_data: 'sessions' },
       { text: '📝 Logs', callback_data: 'logs' },
+      { text: '📎 Files', callback_data: 'files_menu' },
     ],
+    [{ text: '🧭 Advanced', callback_data: 'advanced_menu' }],
   ]
 }
 
@@ -186,6 +281,66 @@ function claudeMenu() {
   ]
 }
 
+function advancedMenu() {
+  return [
+    [
+      { text: '🧠 Agents', callback_data: 'agents_menu' },
+      { text: '🔌 MCP', callback_data: 'mcp_menu' },
+    ],
+    [
+      { text: '🧪 Audit', callback_data: 'audit' },
+      { text: '📝 Logs', callback_data: 'logs' },
+    ],
+    [{ text: '◀️ Menu', callback_data: 'menu' }],
+  ]
+}
+
+function agentsMenu() {
+  return [
+    [
+      { text: '🔄 Refresh', callback_data: 'agents_menu' },
+      { text: '📦 Profiles', callback_data: 'agents_profiles' },
+    ],
+    [
+      { text: '➕ Read', callback_data: 'agents_create_read' },
+      { text: '➕ Review', callback_data: 'agents_create_review' },
+    ],
+    [
+      { text: '▶️ Start all', callback_data: 'agents_start_all' },
+      { text: '⏹ Stop all', callback_data: 'agents_stop_all' },
+    ],
+    [{ text: '◀️ Advanced', callback_data: 'advanced_menu' }],
+  ]
+}
+
+function mcpMenu() {
+  return [
+    [
+      { text: '🔄 Refresh', callback_data: 'mcp_menu' },
+      { text: '🔁 Sync Claude', callback_data: 'mcp_sync' },
+    ],
+    [
+      { text: '✅ Check enabled', callback_data: 'mcp_check_enabled' },
+      { text: '📤 Export', callback_data: 'mcp_export' },
+    ],
+    [{ text: '◀️ Advanced', callback_data: 'advanced_menu' }],
+  ]
+}
+
+function filesMenu() {
+  return [
+    [
+      { text: '🆕 Last file', callback_data: 'file_last' },
+      { text: '📚 List', callback_data: 'files_list' },
+    ],
+    [
+      { text: '🤖 Analyze Claude', callback_data: 'file_analyze_claude' },
+      { text: '🧠 Analyze Qwen', callback_data: 'file_analyze_qwen' },
+    ],
+    [{ text: '◀️ Menu', callback_data: 'menu' }],
+  ]
+}
+
 // --- Shell helpers ---
 
 function run(cmd: string, timeout = 30000): string {
@@ -193,6 +348,26 @@ function run(cmd: string, timeout = 30000): string {
     return execSync(cmd, { timeout, encoding: 'utf-8' }).trim()
   } catch (e: any) {
     return e.stderr?.trim() || e.message || 'Command failed'
+  }
+}
+
+function runRex(args: string[], timeout = 30000): string {
+  try {
+    return execFileSync('rex', args, { timeout, encoding: 'utf-8' }).trim()
+  } catch (e: any) {
+    const stderr = e?.stderr?.toString?.().trim?.() || ''
+    const stdout = e?.stdout?.toString?.().trim?.() || ''
+    return stderr || stdout || e.message || 'Command failed'
+  }
+}
+
+function runRexJson(args: string[], timeout = 30000): any | null {
+  const raw = strip(runRex(args, timeout)).trim()
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
   }
 }
 
@@ -204,6 +379,358 @@ function truncate(text: string, max?: number): string {
   const limit = max || config.maxOutputLength
   if (text.length <= limit) return text
   return text.slice(0, limit) + '\n\n... (truncated)'
+}
+
+function sanitizeToken(input: string): string | null {
+  const value = input.trim()
+  if (!value) return null
+  if (!/^[a-zA-Z0-9._:-]+$/.test(value)) return null
+  return value
+}
+
+interface AgentListEntry {
+  id: string
+  name: string
+  profile: string
+  model: string
+  intervalSec: number
+  enabled: boolean
+  running: boolean
+  lastRunAt?: string | null
+}
+
+interface McpListEntry {
+  id: string
+  name: string
+  type: 'stdio' | 'sse' | 'http'
+  enabled: boolean
+  command?: string
+  args?: string[]
+  url?: string
+}
+
+function loadAgents(): AgentListEntry[] {
+  const parsed = runRexJson(['agents', 'list', '--json'], 15000)
+  const agents = parsed?.agents
+  if (!Array.isArray(agents)) return []
+  return agents as AgentListEntry[]
+}
+
+function loadMcpServers(): McpListEntry[] {
+  const parsed = runRexJson(['mcp', 'list', '--json'], 15000)
+  const servers = parsed?.servers
+  if (!Array.isArray(servers)) return []
+  return servers as McpListEntry[]
+}
+
+function renderAgentsSummary(max = 8): string {
+  const agents = loadAgents()
+  if (agents.length === 0) {
+    return [
+      '🧠 *Agents*',
+      'No agents configured.',
+      '',
+      'Create quickly:',
+      '`/agent_create read`',
+      '`/agent_create code-review`',
+    ].join('\n')
+  }
+
+  const lines = agents.slice(0, max).map((a) => {
+    const icon = a.running ? '🟢' : a.enabled ? '🟡' : '⚫️'
+    return `${icon} \`${a.id}\` • ${a.profile} • ${a.running ? 'running' : 'stopped'}`
+  })
+  const more = agents.length > max ? `\n... +${agents.length - max} more` : ''
+  return [
+    `🧠 *Agents* (${agents.length})`,
+    '',
+    ...lines,
+    more,
+    '',
+    'Commands:',
+    '`/agent_start <id>` `/agent_stop <id>` `/agent_run <id>`',
+  ].filter(Boolean).join('\n')
+}
+
+function renderMcpSummary(max = 8): string {
+  const servers = loadMcpServers()
+  if (servers.length === 0) {
+    return [
+      '🔌 *MCP Registry*',
+      'No servers configured.',
+      '',
+      'Add one:',
+      '`rex mcp add <name> --command <cmd>`',
+    ].join('\n')
+  }
+
+  const lines = servers.slice(0, max).map((s) => {
+    const icon = s.enabled ? '🟢' : '⚫️'
+    const target = s.type === 'stdio'
+      ? `${s.command || 'n/a'} ${(s.args || []).join(' ')}`.trim()
+      : (s.url || 'n/a')
+    return `${icon} \`${s.id}\` • ${s.type} • ${target}`
+  })
+  const more = servers.length > max ? `\n... +${servers.length - max} more` : ''
+  return [
+    `🔌 *MCP Registry* (${servers.length})`,
+    '',
+    ...lines,
+    more,
+    '',
+    'Commands:',
+    '`/mcp_check <id>` `/mcp_sync`',
+  ].filter(Boolean).join('\n')
+}
+
+interface AttachmentCandidate {
+  fileId: string
+  kind: UploadEntry['kind']
+  fileName: string
+  mimeType: string
+  size: number
+  caption: string
+}
+
+function pickAttachment(msg: any): AttachmentCandidate | null {
+  const caption = String(msg?.caption || '').trim()
+  if (msg?.document?.file_id) {
+    return {
+      fileId: String(msg.document.file_id),
+      kind: 'document',
+      fileName: String(msg.document.file_name || `document-${Date.now()}`),
+      mimeType: String(msg.document.mime_type || 'application/octet-stream'),
+      size: Number(msg.document.file_size || 0),
+      caption,
+    }
+  }
+  if (Array.isArray(msg?.photo) && msg.photo.length > 0) {
+    const sorted = [...msg.photo].sort((a, b) => Number(a?.file_size || 0) - Number(b?.file_size || 0))
+    const best = sorted[sorted.length - 1] || {}
+    return {
+      fileId: String(best.file_id),
+      kind: 'photo',
+      fileName: `photo-${Date.now()}.jpg`,
+      mimeType: 'image/jpeg',
+      size: Number(best.file_size || 0),
+      caption,
+    }
+  }
+  if (msg?.audio?.file_id) {
+    const ext = extname(String(msg.audio.file_name || '')).replace('.', '') || 'mp3'
+    return {
+      fileId: String(msg.audio.file_id),
+      kind: 'audio',
+      fileName: String(msg.audio.file_name || `audio-${Date.now()}.${ext}`),
+      mimeType: String(msg.audio.mime_type || 'audio/mpeg'),
+      size: Number(msg.audio.file_size || 0),
+      caption,
+    }
+  }
+  if (msg?.voice?.file_id) {
+    return {
+      fileId: String(msg.voice.file_id),
+      kind: 'voice',
+      fileName: `voice-${Date.now()}.ogg`,
+      mimeType: String(msg.voice.mime_type || 'audio/ogg'),
+      size: Number(msg.voice.file_size || 0),
+      caption,
+    }
+  }
+  if (msg?.video?.file_id) {
+    const ext = extname(String(msg.video.file_name || '')).replace('.', '') || 'mp4'
+    return {
+      fileId: String(msg.video.file_id),
+      kind: 'video',
+      fileName: String(msg.video.file_name || `video-${Date.now()}.${ext}`),
+      mimeType: String(msg.video.mime_type || 'video/mp4'),
+      size: Number(msg.video.file_size || 0),
+      caption,
+    }
+  }
+  return null
+}
+
+async function downloadTelegramFile(token: string, fileId: string, fileName: string): Promise<{ path: string; size: number }> {
+  const info = await tg(token, 'getFile', { file_id: fileId })
+  const tgPath = info?.result?.file_path as string | undefined
+  if (!tgPath) throw new Error('Telegram getFile failed')
+
+  const res = await fetch(`https://api.telegram.org/file/bot${token}/${tgPath}`)
+  if (!res.ok) throw new Error(`Download failed (${res.status})`)
+  const ab = await res.arrayBuffer()
+  const buffer = Buffer.from(ab)
+  if (buffer.byteLength > MAX_MEDIA_BYTES) {
+    throw new Error(`File too large (${Math.round(buffer.byteLength / 1024 / 1024)}MB > ${MAX_MEDIA_MB}MB)`)
+  }
+
+  ensureUploadsDir()
+  const base = slugFileName(fileName || basename(tgPath))
+  const ext = extname(base) || extname(tgPath) || ''
+  const stem = ext ? base.replace(new RegExp(`${ext.replace('.', '\\.')}$`), '') : base
+  const finalName = `${stem}-${Date.now()}${ext}`
+  const full = join(UPLOADS_ROOT, finalName)
+  writeFileSync(full, buffer)
+  return { path: full, size: buffer.byteLength }
+}
+
+function commandExists(cmd: string): boolean {
+  return run(`command -v ${cmd} >/dev/null 2>&1 && echo ok`).includes('ok')
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`
+}
+
+function extractFilePreview(upload: UploadEntry, maxChars = 9000): string {
+  const path = upload.filePath
+  const qPath = shellQuote(path)
+  const name = upload.fileName.toLowerCase()
+  const mime = upload.mimeType.toLowerCase()
+
+  if (mime.includes('pdf') || name.endsWith('.pdf')) {
+    if (commandExists('pdftotext')) {
+      const out = run(`pdftotext -layout ${qPath} - 2>/dev/null | head -c ${maxChars}`, 30000)
+      if (out.trim()) return out.trim()
+    }
+    if (commandExists('python3')) {
+      const py = run(
+        `python3 -c "import sys
+p=sys.argv[1]
+t=''
+try:
+ import pypdf
+ r=pypdf.PdfReader(p)
+ t='\\n'.join([(pg.extract_text() or '') for pg in r.pages])
+except Exception:
+ try:
+  import PyPDF2
+  r=PyPDF2.PdfReader(p)
+  t='\\n'.join([(pg.extract_text() or '') for pg in r.pages])
+ except Exception:
+  pass
+print(t[:${maxChars}])" ${qPath}`,
+        45000,
+      )
+      if (py.trim()) return py.trim()
+    }
+    const raw = run(`strings ${qPath} 2>/dev/null | head -c ${maxChars}`, 10000)
+    return raw.trim()
+  }
+
+  const textLike = (
+    mime.startsWith('text/') ||
+    name.endsWith('.md') || name.endsWith('.txt') || name.endsWith('.json') ||
+    name.endsWith('.ts') || name.endsWith('.tsx') || name.endsWith('.js') ||
+    name.endsWith('.yml') || name.endsWith('.yaml') || name.endsWith('.toml') ||
+    name.endsWith('.csv')
+  )
+  if (textLike) {
+    const out = run(`head -c ${maxChars} ${qPath}`, 10000)
+    return out.trim()
+  }
+
+  if (upload.kind === 'photo' && commandExists('tesseract')) {
+    const out = run(`tesseract ${qPath} stdout 2>/dev/null | head -c ${maxChars}`, 30000)
+    return out.trim()
+  }
+
+  return ''
+}
+
+async function analyzeUpload(upload: UploadEntry, task: string, mode?: 'qwen' | 'claude'): Promise<string> {
+  const preview = extractFilePreview(upload)
+  const activeMode = mode || state.mode
+  const prompt = [
+    'You are processing a file uploaded from Telegram to REX.',
+    `File path: ${upload.filePath}`,
+    `File name: ${upload.fileName}`,
+    `Kind: ${upload.kind}`,
+    `Mime type: ${upload.mimeType}`,
+    `Size: ${upload.size} bytes`,
+    `User task: ${task}`,
+    '',
+    preview
+      ? `Extracted preview:\\n${preview}`
+      : 'No text preview available from this file type. Explain what can be done next.',
+    '',
+    'Return:',
+    '1) concise summary',
+    '2) useful action plan for coding/ops',
+  ].join('\n')
+
+  if (activeMode === 'claude') {
+    return claudeSession(prompt)
+  }
+  return askLLM(prompt)
+}
+
+function renderUpload(u: UploadEntry): string {
+  const mb = (u.size / 1024 / 1024).toFixed(2)
+  return [
+    `id: ${u.id}`,
+    `type: ${u.kind}`,
+    `name: ${u.fileName}`,
+    `mime: ${u.mimeType}`,
+    `size: ${mb} MB`,
+    `path: ${u.filePath}`,
+    `time: ${u.uploadedAt}`,
+  ].join('\n')
+}
+
+function renderUploadsList(chatId: string): string {
+  const uploads = recentUploads(chatId, 10)
+  if (uploads.length === 0) {
+    return '📎 *Files*\nNo uploads yet.\n\nSend an image, PDF, audio, or document to this bot.'
+  }
+  const lines = uploads.map((u) => {
+    const mb = (u.size / 1024 / 1024).toFixed(2)
+    return `• \`${u.id}\` ${u.kind} ${u.fileName} (${mb}MB)`
+  })
+  return ['📎 *Recent uploads*', '', ...lines, '', 'Auto-analysis is ON. Optional override: `/file_analyze <prompt>`'].join('\n')
+}
+
+async function handleAttachment(token: string, chatId: string, msg: any, from: string): Promise<string> {
+  const attachment = pickAttachment(msg)
+  if (!attachment) return ''
+
+  if (attachment.size > MAX_MEDIA_BYTES) {
+    return `⚠️ File too large (${Math.round(attachment.size / 1024 / 1024)}MB). Limit is ${MAX_MEDIA_MB}MB.`
+  }
+
+  const dl = await downloadTelegramFile(token, attachment.fileId, attachment.fileName)
+  const entry: UploadEntry = {
+    id: `up-${Date.now().toString(36)}`,
+    chatId,
+    from,
+    kind: attachment.kind,
+    filePath: dl.path,
+    fileName: attachment.fileName,
+    mimeType: attachment.mimeType,
+    size: dl.size,
+    caption: attachment.caption || undefined,
+    uploadedAt: new Date().toISOString(),
+  }
+  rememberUpload(entry)
+
+  let text = `📎 *File received*\n\`\`\`\n${renderUpload(entry)}\n\`\`\``
+  if (AUTO_UPLOAD_ANALYZE) {
+    const mode = AUTO_UPLOAD_MODE
+    const task = attachment.caption && attachment.caption.length > 2
+      ? attachment.caption
+      : AUTO_UPLOAD_TASK
+    try {
+      const out = await analyzeUpload(entry, task, mode)
+      text += `\n\n${mode === 'claude' ? '🤖' : '🧠'} *Auto analysis* (${mode})\n${truncate(out, 2800)}`
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e)
+      text += `\n\n⚠️ Auto analysis failed: ${err}`
+    }
+  } else {
+    text += '\n\nAuto analysis disabled. Use `/file_analyze <prompt>`.'
+  }
+  logCommand(from, `[upload] ${attachment.kind}:${attachment.fileName}`, 'saved')
+  return text
 }
 
 // --- Wake-on-LAN ---
@@ -497,6 +1024,187 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
       break
     }
 
+    case 'advanced_menu':
+      await editMessage(token, chatId, messageId,
+        '🧭 *Advanced*\nAgents autonomes, registry MCP et audit.',
+        advancedMenu()
+      )
+      break
+
+    case 'audit': {
+      await editMessage(token, chatId, messageId, '🧪 _Running strict audit..._')
+      const out = truncate(strip(run('rex audit --strict', 120000)), 3500)
+      await editMessage(token, chatId, messageId,
+        `🧪 *Audit*\n\`\`\`\n${out}\n\`\`\``,
+        advancedMenu()
+      )
+      break
+    }
+
+    case 'agents_menu':
+      await editMessage(token, chatId, messageId, renderAgentsSummary(), agentsMenu())
+      break
+
+    case 'agents_profiles': {
+      const parsed = runRexJson(['agents', 'profiles', '--json'], 15000)
+      const rows = Array.isArray(parsed?.profiles) ? parsed.profiles : []
+      const body = rows.length
+        ? rows.slice(0, 8).map((p: any) => `• ${p.name} • model=${p.model} • every=${p.intervalSec}s`).join('\n')
+        : 'No profile data.'
+      await editMessage(token, chatId, messageId,
+        `📦 *Agent Profiles*\n${body}`,
+        agentsMenu()
+      )
+      break
+    }
+
+    case 'agents_create_read': {
+      const out = truncate(strip(runRex(['agents', 'create', 'read'], 20000)), 3000)
+      await editMessage(token, chatId, messageId,
+        `➕ *Agent Created (read)*\n\`\`\`\n${out}\n\`\`\``,
+        agentsMenu()
+      )
+      break
+    }
+
+    case 'agents_create_review': {
+      const out = truncate(strip(runRex(['agents', 'create', 'code-review'], 20000)), 3000)
+      await editMessage(token, chatId, messageId,
+        `➕ *Agent Created (code-review)*\n\`\`\`\n${out}\n\`\`\``,
+        agentsMenu()
+      )
+      break
+    }
+
+    case 'agents_start_all': {
+      const targets = loadAgents().filter((a) => a.enabled)
+      if (targets.length === 0) {
+        await editMessage(token, chatId, messageId, '🧠 *Agents*\nNo enabled agents to start.', agentsMenu())
+        break
+      }
+      const lines = targets.slice(0, 10).map((a) => {
+        const out = runRex(['agents', 'run', a.id], 20000)
+        const ok = out.includes('"ok"') || out.includes('alreadyRunning')
+        return `${ok ? '✅' : '⚠️'} ${a.id}`
+      })
+      const more = targets.length > 10 ? `\n... +${targets.length - 10} more` : ''
+      await editMessage(token, chatId, messageId,
+        `▶️ *Start enabled agents*\n${lines.join('\n')}${more}`,
+        agentsMenu()
+      )
+      break
+    }
+
+    case 'agents_stop_all': {
+      const targets = loadAgents().filter((a) => a.running)
+      if (targets.length === 0) {
+        await editMessage(token, chatId, messageId, '🧠 *Agents*\nNo running agents to stop.', agentsMenu())
+        break
+      }
+      const lines = targets.slice(0, 10).map((a) => {
+        const out = runRex(['agents', 'stop', a.id], 20000)
+        const ok = out.includes('"ok"') || out.includes('"stopped"')
+        return `${ok ? '✅' : '⚠️'} ${a.id}`
+      })
+      const more = targets.length > 10 ? `\n... +${targets.length - 10} more` : ''
+      await editMessage(token, chatId, messageId,
+        `⏹ *Stop running agents*\n${lines.join('\n')}${more}`,
+        agentsMenu()
+      )
+      break
+    }
+
+    case 'mcp_menu':
+      await editMessage(token, chatId, messageId, renderMcpSummary(), mcpMenu())
+      break
+
+    case 'mcp_sync': {
+      const out = truncate(strip(runRex(['mcp', 'sync-claude'], 20000)), 3000)
+      await editMessage(token, chatId, messageId,
+        `🔁 *MCP Sync Claude*\n\`\`\`\n${out}\n\`\`\``,
+        mcpMenu()
+      )
+      break
+    }
+
+    case 'mcp_check_enabled': {
+      const servers = loadMcpServers().filter((s) => s.enabled)
+      if (servers.length === 0) {
+        await editMessage(token, chatId, messageId, '🔌 *MCP*\nNo enabled servers to check.', mcpMenu())
+        break
+      }
+      const lines = servers.slice(0, 8).map((s) => {
+        const checked = runRexJson(['mcp', 'check', s.id], 15000)
+        return `${checked?.ok ? '✅' : '❌'} ${s.id} (${s.type})`
+      })
+      const more = servers.length > 8 ? `\n... +${servers.length - 8} more` : ''
+      await editMessage(token, chatId, messageId,
+        `✅ *MCP check (enabled)*\n${lines.join('\n')}${more}`,
+        mcpMenu()
+      )
+      break
+    }
+
+    case 'mcp_export': {
+      const out = truncate(strip(runRex(['mcp', 'export'], 15000)), 3000)
+      await editMessage(token, chatId, messageId,
+        `📤 *MCP Export*\n\`\`\`\n${out}\n\`\`\``,
+        mcpMenu()
+      )
+      break
+    }
+
+    case 'files_menu':
+      await editMessage(token, chatId, messageId, renderUploadsList(chatId), filesMenu())
+      break
+
+    case 'files_list':
+      await editMessage(token, chatId, messageId, renderUploadsList(chatId), filesMenu())
+      break
+
+    case 'file_last': {
+      const upload = latestUpload(chatId)
+      if (!upload) {
+        await editMessage(token, chatId, messageId, '📎 *Files*\nNo uploaded file found yet.', filesMenu())
+        break
+      }
+      await editMessage(token, chatId, messageId,
+        `📎 *Last File*\n\`\`\`\n${renderUpload(upload)}\n\`\`\``,
+        filesMenu()
+      )
+      break
+    }
+
+    case 'file_analyze_claude': {
+      const upload = latestUpload(chatId)
+      if (!upload) {
+        await editMessage(token, chatId, messageId, '📎 *Files*\nNo uploaded file found yet.', filesMenu())
+        break
+      }
+      await editMessage(token, chatId, messageId, '🤖 _Analyzing latest file with Claude..._')
+      const out = await analyzeUpload(upload, 'Summarize the file and propose engineering actions.', 'claude')
+      await editMessage(token, chatId, messageId,
+        `🤖 *Claude file analysis*\n${truncate(out, 3200)}`,
+        filesMenu()
+      )
+      break
+    }
+
+    case 'file_analyze_qwen': {
+      const upload = latestUpload(chatId)
+      if (!upload) {
+        await editMessage(token, chatId, messageId, '📎 *Files*\nNo uploaded file found yet.', filesMenu())
+        break
+      }
+      await editMessage(token, chatId, messageId, '🧠 _Analyzing latest file with Qwen..._')
+      const out = await analyzeUpload(upload, 'Summarize the file and propose engineering actions.', 'qwen')
+      await editMessage(token, chatId, messageId,
+        `🧠 *Qwen file analysis*\n${truncate(out, 3200)}`,
+        filesMenu()
+      )
+      break
+    }
+
     case 'logs': {
       let logs = 'No logs yet'
       try {
@@ -627,6 +1335,203 @@ async function handleText(token: string, chatId: string, text: string, from: str
     return
   }
 
+  if (cmd === '/advanced' || cmd === '/adv') {
+    await send(token, chatId, '🧭 *Advanced*\nAgents autonomes, MCP et audit.', advancedMenu())
+    logCommand(from, '/advanced', 'menu')
+    return
+  }
+
+  if (cmd === '/audit') {
+    await send(token, chatId, '🧪 _Running strict audit..._')
+    const out = truncate(strip(run('rex audit --strict', 120000)), 3500)
+    await send(token, chatId, `🧪\n\`\`\`\n${out}\n\`\`\``, advancedMenu())
+    logCommand(from, '/audit', 'done')
+    return
+  }
+
+  if (cmd === '/agents') {
+    await send(token, chatId, renderAgentsSummary(), agentsMenu())
+    logCommand(from, '/agents', 'listed')
+    return
+  }
+
+  if (cmd.startsWith('/agent_create ')) {
+    const parts = text.trim().split(/\s+/)
+    const profile = sanitizeToken(parts[1] || '')
+    const name = sanitizeToken(parts[2] || '')
+    if (!profile) {
+      await send(token, chatId, 'Usage: `/agent_create <read|analysis|code-review|advanced|ultimate> [name]`')
+      return
+    }
+    const args = ['agents', 'create', profile]
+    if (name) args.push(name)
+    const out = truncate(strip(runRex(args, 20000)), 3200)
+    await send(token, chatId, `➕ Agent created\n\`\`\`\n${out}\n\`\`\``, agentsMenu())
+    logCommand(from, `/agent_create ${profile}`, 'done')
+    return
+  }
+
+  if (cmd.startsWith('/agent_start ')) {
+    const id = sanitizeToken(text.replace(/^\/agent_start\s+/i, ''))
+    if (!id) { await send(token, chatId, 'Usage: `/agent_start <id>`'); return }
+    const out = truncate(strip(runRex(['agents', 'run', id], 20000)), 3200)
+    await send(token, chatId, `▶️\n\`\`\`\n${out}\n\`\`\``, agentsMenu())
+    logCommand(from, `/agent_start ${id}`, out.slice(0, 80))
+    return
+  }
+
+  if (cmd.startsWith('/agent_run ')) {
+    const id = sanitizeToken(text.replace(/^\/agent_run\s+/i, ''))
+    if (!id) { await send(token, chatId, 'Usage: `/agent_run <id>`'); return }
+    await send(token, chatId, '▶️ _Running one cycle..._')
+    const out = truncate(strip(runRex(['agents', 'run', id, '--once'], 90000)), 3200)
+    await send(token, chatId, `▶️ One cycle done\n\`\`\`\n${out}\n\`\`\``, agentsMenu())
+    logCommand(from, `/agent_run ${id}`, 'once')
+    return
+  }
+
+  if (cmd.startsWith('/agent_stop ')) {
+    const id = sanitizeToken(text.replace(/^\/agent_stop\s+/i, ''))
+    if (!id) { await send(token, chatId, 'Usage: `/agent_stop <id>`'); return }
+    const out = truncate(strip(runRex(['agents', 'stop', id], 20000)), 3200)
+    await send(token, chatId, `⏹\n\`\`\`\n${out}\n\`\`\``, agentsMenu())
+    logCommand(from, `/agent_stop ${id}`, out.slice(0, 80))
+    return
+  }
+
+  if (cmd.startsWith('/agent_enable ')) {
+    const id = sanitizeToken(text.replace(/^\/agent_enable\s+/i, ''))
+    if (!id) { await send(token, chatId, 'Usage: `/agent_enable <id>`'); return }
+    const out = truncate(strip(runRex(['agents', 'enable', id], 20000)), 3200)
+    await send(token, chatId, `✅\n\`\`\`\n${out}\n\`\`\``, agentsMenu())
+    logCommand(from, `/agent_enable ${id}`, out.slice(0, 80))
+    return
+  }
+
+  if (cmd.startsWith('/agent_disable ')) {
+    const id = sanitizeToken(text.replace(/^\/agent_disable\s+/i, ''))
+    if (!id) { await send(token, chatId, 'Usage: `/agent_disable <id>`'); return }
+    const out = truncate(strip(runRex(['agents', 'disable', id], 20000)), 3200)
+    await send(token, chatId, `⚫️\n\`\`\`\n${out}\n\`\`\``, agentsMenu())
+    logCommand(from, `/agent_disable ${id}`, out.slice(0, 80))
+    return
+  }
+
+  if (cmd.startsWith('/agent_delete ')) {
+    const id = sanitizeToken(text.replace(/^\/agent_delete\s+/i, ''))
+    if (!id) { await send(token, chatId, 'Usage: `/agent_delete <id>`'); return }
+    const out = truncate(strip(runRex(['agents', 'delete', id], 20000)), 3200)
+    await send(token, chatId, `🗑\n\`\`\`\n${out}\n\`\`\``, agentsMenu())
+    logCommand(from, `/agent_delete ${id}`, out.slice(0, 80))
+    return
+  }
+
+  if (cmd.startsWith('/agent_logs ')) {
+    const id = sanitizeToken(text.replace(/^\/agent_logs\s+/i, ''))
+    if (!id) { await send(token, chatId, 'Usage: `/agent_logs <id>`'); return }
+    const out = truncate(strip(runRex(['agents', 'logs', id, '--tail', '25'], 20000)), 3200)
+    await send(token, chatId, `📝 Agent logs\n\`\`\`\n${out}\n\`\`\``, agentsMenu())
+    logCommand(from, `/agent_logs ${id}`, 'done')
+    return
+  }
+
+  if (cmd.startsWith('/mcp_check ')) {
+    const id = sanitizeToken(text.replace(/^\/mcp_check\s+/i, ''))
+    if (!id) { await send(token, chatId, 'Usage: `/mcp_check <id>`'); return }
+    const out = truncate(strip(runRex(['mcp', 'check', id], 20000)), 3200)
+    await send(token, chatId, `✅ MCP check\n\`\`\`\n${out}\n\`\`\``, mcpMenu())
+    logCommand(from, `/mcp_check ${id}`, out.slice(0, 80))
+    return
+  }
+
+  if (cmd.startsWith('/mcp_enable ')) {
+    const id = sanitizeToken(text.replace(/^\/mcp_enable\s+/i, ''))
+    if (!id) { await send(token, chatId, 'Usage: `/mcp_enable <id>`'); return }
+    const out = truncate(strip(runRex(['mcp', 'enable', id], 20000)), 3200)
+    await send(token, chatId, `🟢 MCP enabled\n\`\`\`\n${out}\n\`\`\``, mcpMenu())
+    logCommand(from, `/mcp_enable ${id}`, out.slice(0, 80))
+    return
+  }
+
+  if (cmd.startsWith('/mcp_disable ')) {
+    const id = sanitizeToken(text.replace(/^\/mcp_disable\s+/i, ''))
+    if (!id) { await send(token, chatId, 'Usage: `/mcp_disable <id>`'); return }
+    const out = truncate(strip(runRex(['mcp', 'disable', id], 20000)), 3200)
+    await send(token, chatId, `⚫️ MCP disabled\n\`\`\`\n${out}\n\`\`\``, mcpMenu())
+    logCommand(from, `/mcp_disable ${id}`, out.slice(0, 80))
+    return
+  }
+
+  if (cmd.startsWith('/mcp_remove ')) {
+    const id = sanitizeToken(text.replace(/^\/mcp_remove\s+/i, ''))
+    if (!id) { await send(token, chatId, 'Usage: `/mcp_remove <id>`'); return }
+    const out = truncate(strip(runRex(['mcp', 'remove', id], 20000)), 3200)
+    await send(token, chatId, `🗑 MCP removed\n\`\`\`\n${out}\n\`\`\``, mcpMenu())
+    logCommand(from, `/mcp_remove ${id}`, out.slice(0, 80))
+    return
+  }
+
+  if (cmd === '/mcp_sync') {
+    const out = truncate(strip(runRex(['mcp', 'sync-claude'], 20000)), 3200)
+    await send(token, chatId, `🔁 MCP synced\n\`\`\`\n${out}\n\`\`\``, mcpMenu())
+    logCommand(from, '/mcp_sync', 'done')
+    return
+  }
+
+  if (cmd === '/mcp_export') {
+    const out = truncate(strip(runRex(['mcp', 'export'], 20000)), 3200)
+    await send(token, chatId, `📤 MCP export\n\`\`\`\n${out}\n\`\`\``, mcpMenu())
+    logCommand(from, '/mcp_export', 'done')
+    return
+  }
+
+  if (cmd === '/mcp') {
+    await send(token, chatId, renderMcpSummary(), mcpMenu())
+    logCommand(from, '/mcp', 'listed')
+    return
+  }
+
+  if (cmd === '/files' || cmd === '/file_list') {
+    await send(token, chatId, renderUploadsList(chatId), filesMenu())
+    logCommand(from, '/files', 'listed')
+    return
+  }
+
+  if (cmd === '/file_last') {
+    const upload = latestUpload(chatId)
+    if (!upload) {
+      await send(token, chatId, '📎 No uploaded file found yet.', filesMenu())
+      return
+    }
+    await send(token, chatId, `📎 *Last File*\n\`\`\`\n${renderUpload(upload)}\n\`\`\``, filesMenu())
+    return
+  }
+
+  if (cmd.startsWith('/file_analyze')) {
+    const upload = latestUpload(chatId)
+    if (!upload) {
+      await send(token, chatId, '📎 No uploaded file found yet.', filesMenu())
+      return
+    }
+    const raw = text.replace(/^\/file_analyze\s*/i, '').trim()
+    let mode: 'qwen' | 'claude' | undefined
+    let task = raw
+    if (raw.toLowerCase().startsWith('qwen ')) {
+      mode = 'qwen'
+      task = raw.slice(5).trim()
+    } else if (raw.toLowerCase().startsWith('claude ')) {
+      mode = 'claude'
+      task = raw.slice(7).trim()
+    }
+    if (!task) task = 'Summarize this file and propose concrete next engineering actions.'
+    const runMode = mode || state.mode
+    await send(token, chatId, `${runMode === 'claude' ? '🤖' : '🧠'} _Analyzing latest file..._`)
+    const out = await analyzeUpload(upload, task, runMode)
+    await send(token, chatId, truncate(out, 3200), filesMenu())
+    logCommand(from, `/file_analyze ${runMode}`, out.slice(0, 120))
+    return
+  }
+
   // Free text -> send to current LLM
   if (text.length > 2) {
     const modeLabel = state.mode === 'qwen' ? '🧠 Qwen' : '🤖 Claude'
@@ -667,6 +1572,7 @@ export async function gateway() {
   const { token, chatId } = creds
   config = loadConfig()
   state = loadState()
+  cleanupOldUploads()
 
   console.log(`${COLORS.bold}REX Gateway v3${COLORS.reset} — Interactive Telegram bot`)
   console.log(`${COLORS.dim}Chat: ${chatId} | Mode: ${state.mode} | Sessions: ${state.sessionsCount}${COLORS.reset}`)
@@ -710,7 +1616,17 @@ export async function gateway() {
         ok: boolean
         result: Array<{
           update_id: number
-          message?: { chat: { id: number }; text?: string; from?: { username?: string } }
+          message?: {
+            chat: { id: number }
+            text?: string
+            caption?: string
+            from?: { username?: string }
+            document?: { file_id: string; file_name?: string; file_size?: number; mime_type?: string }
+            photo?: Array<{ file_id: string; file_size?: number }>
+            audio?: { file_id: string; file_name?: string; file_size?: number; mime_type?: string }
+            voice?: { file_id: string; file_size?: number; mime_type?: string }
+            video?: { file_id: string; file_name?: string; file_size?: number; mime_type?: string }
+          }
           callback_query?: {
             id: string
             message?: { chat: { id: number }; message_id: number }
@@ -743,9 +1659,9 @@ export async function gateway() {
           continue
         }
 
-        // Handle text message
+        // Handle message (text + attachments)
         const msg = update.message
-        if (!msg?.text) continue
+        if (!msg) continue
 
         // AUTH CHECK
         if (!isAuthorized(msg.chat.id, chatId)) {
@@ -754,9 +1670,25 @@ export async function gateway() {
         }
 
         const from = msg.from?.username ?? '?'
-        console.log(`${COLORS.cyan}@${from}${COLORS.reset}: ${msg.text}`)
+        const attachment = pickAttachment(msg)
+        if (attachment) {
+          console.log(`${COLORS.cyan}@${from}${COLORS.reset}: [upload] ${attachment.kind} ${attachment.fileName}`)
+          await send(token, chatId, '📥 _Downloading attachment..._')
+          try {
+            const response = await handleAttachment(token, chatId, msg, from)
+            await send(token, chatId, response, filesMenu())
+          } catch (e) {
+            const err = e instanceof Error ? e.message : String(e)
+            await send(token, chatId, `⚠️ Upload processing failed: ${err}`, filesMenu())
+            logCommand(from, '[upload]', `error: ${err}`)
+          }
+          if (!msg.text) continue
+        }
 
-        await handleText(token, chatId, msg.text, from)
+        if (msg.text) {
+          console.log(`${COLORS.cyan}@${from}${COLORS.reset}: ${msg.text}`)
+          await handleText(token, chatId, msg.text, from)
+        }
       }
     } catch (err) {
       console.error(`${COLORS.red}Poll error:${COLORS.reset} ${(err as Error).message}`)

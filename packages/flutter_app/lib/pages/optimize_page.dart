@@ -37,10 +37,7 @@ class _OptimizePageState extends State<OptimizePage> {
   @override
   Widget build(BuildContext context) {
     return MacosScaffold(
-      toolBar: ToolBar(
-        title: const Text('Optimize'),
-        titleWidth: 150,
-      ),
+      toolBar: ToolBar(title: const Text('Optimize'), titleWidth: 150),
       children: [
         ContentArea(
           builder: (context, scrollController) {
@@ -59,11 +56,17 @@ class _OptimizePageState extends State<OptimizePage> {
                       ],
                     ),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF6366F1).withAlpha(40)),
+                    border: Border.all(
+                      color: const Color(0xFF6366F1).withAlpha(40),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(CupertinoIcons.bolt_fill, size: 32, color: Color(0xFF6366F1)),
+                      const Icon(
+                        CupertinoIcons.bolt_fill,
+                        size: 32,
+                        color: Color(0xFF6366F1),
+                      ),
                       const SizedBox(width: 16),
                       const Expanded(
                         child: Column(
@@ -71,7 +74,10 @@ class _OptimizePageState extends State<OptimizePage> {
                           children: [
                             Text(
                               'Token Optimizer',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
                             ),
                             SizedBox(height: 4),
                             Text(
@@ -93,24 +99,40 @@ class _OptimizePageState extends State<OptimizePage> {
                       controlSize: ControlSize.large,
                       onPressed: _analyzing ? null : _analyze,
                       child: _analyzing
-                          ? const Row(children: [
-                              SizedBox(width: 14, height: 14, child: ProgressCircle(radius: 7)),
-                              SizedBox(width: 8),
-                              Text('Analyzing...'),
-                            ])
+                          ? const Row(
+                              children: [
+                                SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: ProgressCircle(radius: 7),
+                                ),
+                                SizedBox(width: 8),
+                                Text('Analyzing...'),
+                              ],
+                            )
                           : const Text('Analyze'),
                     ),
                     const SizedBox(width: 12),
                     PushButton(
                       controlSize: ControlSize.large,
-                      color: _analysisOutput.isNotEmpty ? CupertinoColors.systemGreen : null,
-                      onPressed: _applying || _analysisOutput.isEmpty ? null : _apply,
+                      color: _analysisOutput.isNotEmpty
+                          ? CupertinoColors.systemGreen
+                          : null,
+                      onPressed: _applying || _analysisOutput.isEmpty
+                          ? null
+                          : _apply,
                       child: _applying
-                          ? const Row(children: [
-                              SizedBox(width: 14, height: 14, child: ProgressCircle(radius: 7)),
-                              SizedBox(width: 8),
-                              Text('Applying...'),
-                            ])
+                          ? const Row(
+                              children: [
+                                SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: ProgressCircle(radius: 7),
+                                ),
+                                SizedBox(width: 8),
+                                Text('Applying...'),
+                              ],
+                            )
                           : const Text('Apply Optimizations'),
                     ),
                   ],
@@ -133,7 +155,8 @@ class _OptimizePageState extends State<OptimizePage> {
                           : const Color(0xFFF5F5F5),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: MacosTheme.brightnessOf(context) == Brightness.dark
+                        color:
+                            MacosTheme.brightnessOf(context) == Brightness.dark
                             ? const Color(0xFF333333)
                             : const Color(0xFFE5E5E5),
                       ),
@@ -163,7 +186,9 @@ class _OptimizePageState extends State<OptimizePage> {
                           Text(
                             'Click Analyze to scan your CLAUDE.md',
                             style: TextStyle(
-                              color: MacosTheme.of(context).typography.subheadline.color,
+                              color: MacosTheme.of(
+                                context,
+                              ).typography.subheadline.color,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -171,7 +196,9 @@ class _OptimizePageState extends State<OptimizePage> {
                             'Requires Ollama running with Qwen model',
                             style: TextStyle(
                               fontSize: 12,
-                              color: MacosTheme.of(context).typography.subheadline.color,
+                              color: MacosTheme.of(
+                                context,
+                              ).typography.subheadline.color,
                             ),
                           ),
                         ],
@@ -190,8 +217,12 @@ class _OptimizePageState extends State<OptimizePage> {
                 const SizedBox(height: 8),
                 _BulletPoint('Reads CLAUDE.md + all @import rules (~9 files)'),
                 _BulletPoint('Estimates total token cost'),
-                _BulletPoint('Identifies redundancy, verbosity, contradictions'),
-                _BulletPoint('Apply: rewrites with backup (.bak), shows diff & savings'),
+                _BulletPoint(
+                  'Identifies redundancy, verbosity, contradictions',
+                ),
+                _BulletPoint(
+                  'Apply: rewrites with backup (.bak), shows diff & savings',
+                ),
               ],
             );
           },

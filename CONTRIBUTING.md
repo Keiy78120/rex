@@ -4,12 +4,12 @@ Thanks for your interest in REX! Here's how to get started.
 
 ## Development Setup
 
-1. **Prerequisites**: Node.js 20+, pnpm 10+, Rust 1.75+
+1. **Prerequisites**: Node.js 20+, pnpm 10+, Flutter 3.x (macOS toolchain)
 2. **Clone**: `git clone https://github.com/Keiy78120/rex.git && cd rex`
 3. **Install**: `pnpm install`
 4. **Build**: `pnpm build`
 5. **Test**: `pnpm test`
-6. **App dev**: `cd packages/app && cargo tauri dev`
+6. **App dev**: `cd packages/flutter_app && flutter run -d macos`
 
 ## Project Structure
 
@@ -18,7 +18,8 @@ rex/
 ├── packages/
 │   ├── core/    # Shared checks engine (TypeScript)
 │   ├── cli/     # CLI tool (TypeScript)
-│   └── app/     # Tauri v2 menubar app (Rust + React)
+│   ├── memory/  # Local memory MCP + ingestion (TypeScript)
+│   └── flutter_app/ # Desktop app (Flutter macOS)
 ```
 
 ## Pull Request Process
@@ -48,5 +49,5 @@ We use conventional commits:
 
 Use GitHub Issues with the provided templates. Include:
 - OS version and architecture
-- Node.js and Rust versions
+- Node.js and Flutter versions
 - Steps to reproduce

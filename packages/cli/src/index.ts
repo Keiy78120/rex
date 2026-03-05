@@ -91,6 +91,12 @@ async function main() {
       break
     }
 
+    case 'install': {
+      const { install } = await import('./install.js')
+      await install()
+      break
+    }
+
     case 'ingest': {
       try {
         const { execSync } = await import('node:child_process')
@@ -142,7 +148,17 @@ async function main() {
 
     case 'setup': {
       const { setup } = await import('./setup.js')
-      await setup()
+      const nonInteractive = process.argv.includes('--yes') || process.argv.includes('--non-interactive')
+      const skipTelegram = process.argv.includes('--skip-telegram')
+      await setup({ nonInteractive, skipTelegram, autoInstallDeps: nonInteractive })
+      break
+    }
+
+    case 'audit': {
+      const { audit } = await import('./audit.js')
+      const json = process.argv.includes('--json')
+      const strict = process.argv.includes('--strict')
+      await audit({ json, strict })
       break
     }
 
@@ -171,6 +187,48 @@ async function main() {
       break
     }
 
+    case 'app': {
+      const { app } = await import('./app.js')
+      await app(process.argv.slice(3))
+      break
+    }
+
+    case 'update': {
+      const { app } = await import('./app.js')
+      await app(['update', ...process.argv.slice(3)])
+      break
+    }
+
+    case 'agents': {
+      const { agents } = await import('./agents.js')
+      await agents(process.argv.slice(3))
+      break
+    }
+
+    case 'mcp': {
+      const { mcpRegistry } = await import('./mcp_registry.js')
+      await mcpRegistry(process.argv.slice(3))
+      break
+    }
+
+    case 'audio': {
+      const { audio } = await import('./audio.js')
+      await audio(process.argv.slice(3))
+      break
+    }
+
+    case 'call': {
+      const { call } = await import('./call.js')
+      await call(process.argv.slice(3))
+      break
+    }
+
+    case 'voice': {
+      const { voice } = await import('./voice.js')
+      await voice(process.argv.slice(3))
+      break
+    }
+
     case 'startup': {
       const { installStartup } = await import('./init.js')
       installStartup()
@@ -195,7 +253,9 @@ async function main() {
 ${COLORS.bold}REX${COLORS.reset} — Claude Code sous steroides
 
 ${COLORS.bold}Commands:${COLORS.reset}
+  rex install         One-command setup (init + setup + audit)
   rex init            Setup REX (guards, hooks, MCP, startup)
+  rex audit           Run integration audit checks
   rex doctor          Full health check (9 categories)
   rex status          Quick one-line status
   rex startup         Install LaunchAgent (auto-start on login)
@@ -210,18 +270,54 @@ ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex prune --stats    Show memory database stats
 
 ${COLORS.bold}LLM & Context:${COLORS.reset}
-  rex setup            Install Ollama + models + Telegram gateway
+  rex setup            Install Ollama + models + Telegram gateway (interactive)
+  rex setup --yes      Non-interactive setup (auto-install deps, env-based Telegram)
   rex llm <prompt>     Query local LLM directly
   rex context [path]   Analyze project, recommend MCP/skills
 
 ${COLORS.bold}Telegram Gateway:${COLORS.reset}
   rex gateway          Start Telegram bot (long-polling, interactive)
 
+${COLORS.bold}App:${COLORS.reset}
+  rex app update [--debug|--release] [--no-launch]
+                     Build + install + relaunch app from current repo
+  rex app info        Show installed app path + source repo/commit
+  rex app open        Open installed app
+  rex update          Alias for: rex app update
+
+${COLORS.bold}Autonomous Agents:${COLORS.reset}
+  rex agents profiles          List built-in agent profiles
+  rex agents create <profile>  Create agent (read/analysis/code-review/advanced/ultimate)
+  rex agents run <id>          Start autonomous loop (daemon)
+  rex agents run <id> --once   Run one cycle only
+  rex agents stop <id>         Stop running agent
+  rex agents status [id]       Show status
+  rex agents logs <id>         Tail logs
+
+${COLORS.bold}MCP Registry:${COLORS.reset}
+  rex mcp list                 List MCP servers
+  rex mcp add <name> ...       Add stdio MCP server
+  rex mcp add-url <name> <url> Add remote MCP server (sse/http)
+  rex mcp check <id>           Check MCP connectivity
+  rex mcp sync-claude          Sync enabled stdio servers to ~/.claude/settings.json
+
+${COLORS.bold}Voice & Calls:${COLORS.reset}
+  rex call status             Current call detection status (Hammerspoon)
+  rex call events --tail 20   Recent call start/end events
+  rex call watch              Auto start/stop audio logger from call events
+  rex voice status            Voice pipeline status (whisper + optimize)
+  rex voice set-optimize on   Enable post-transcript optimize
+  rex voice transcribe        Transcribe latest WAV recording
+  rex audio status            Audio logger status
+  rex audio start             Start audio capture (ffmpeg avfoundation)
+  rex audio stop              Stop audio capture
+  rex audio list              List saved recordings
+
 ${COLORS.bold}Info:${COLORS.reset}
   rex help             Show this help
   rex --version        Show version
 
-${COLORS.dim}After install: rex init && rex setup — everything else is automatic.${COLORS.reset}
+${COLORS.dim}After install: rex install — everything else is automatic.${COLORS.reset}
 `)
   }
 }

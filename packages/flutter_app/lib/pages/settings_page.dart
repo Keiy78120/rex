@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show SelectableText, Divider, FlutterLogo;
+import 'package:flutter/material.dart'
+    show SelectableText, Divider, FlutterLogo;
 import 'package:macos_ui/macos_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -29,14 +30,17 @@ class _SettingsPageState extends State<SettingsPage> {
 
     // System info
     final ram = (Platform.numberOfProcessors).toString();
-    _systemInfo = 'Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}\n'
+    _systemInfo =
+        'Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}\n'
         'Processors: $ram\n'
         'Dart: ${Platform.version.split(' ').first}';
 
     // Ollama models
     try {
       final result = await Process.run('ollama', ['list']);
-      _ollamaModels = result.exitCode == 0 ? result.stdout as String : 'Ollama not running';
+      _ollamaModels = result.exitCode == 0
+          ? result.stdout as String
+          : 'Ollama not running';
     } catch (_) {
       _ollamaModels = 'Ollama not installed';
     }
@@ -47,10 +51,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return MacosScaffold(
-      toolBar: ToolBar(
-        title: const Text('Settings'),
-        titleWidth: 150,
-      ),
+      toolBar: ToolBar(title: const Text('Settings'), titleWidth: 150),
       children: [
         ContentArea(
           builder: (context, scrollController) {
@@ -63,17 +64,21 @@ class _SettingsPageState extends State<SettingsPage> {
                     // Status row
                     Row(
                       children: [
-                        Expanded(child: _StatusCard(
-                          title: 'Ollama',
-                          running: rex.ollamaRunning,
-                          icon: CupertinoIcons.cube_box,
-                        )),
+                        Expanded(
+                          child: _StatusCard(
+                            title: 'Ollama',
+                            running: rex.ollamaRunning,
+                            icon: CupertinoIcons.cube_box,
+                          ),
+                        ),
                         const SizedBox(width: 12),
-                        Expanded(child: _StatusCard(
-                          title: 'Gateway',
-                          running: rex.gatewayRunning,
-                          icon: CupertinoIcons.paperplane,
-                        )),
+                        Expanded(
+                          child: _StatusCard(
+                            title: 'Gateway',
+                            running: rex.gatewayRunning,
+                            icon: CupertinoIcons.paperplane,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -85,13 +90,15 @@ class _SettingsPageState extends State<SettingsPage> {
                         _SettingsRow(
                           icon: CupertinoIcons.hammer,
                           title: 'Run rex init',
-                          subtitle: 'Install guards, hooks, MCP, skills, LaunchAgents',
+                          subtitle:
+                              'Install guards, hooks, MCP, skills, LaunchAgents',
                           trailing: PushButton(
                             controlSize: ControlSize.regular,
                             onPressed: rex.isLoading
                                 ? null
                                 : () async {
                                     final output = await rex.runInit();
+                                    if (!context.mounted) return;
                                     _showOutput(context, 'Init', output);
                                   },
                             child: const Text('Init'),
@@ -107,9 +114,27 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ? null
                                 : () async {
                                     final output = await rex.runSetup();
+                                    if (!context.mounted) return;
                                     _showOutput(context, 'Setup', output);
                                   },
                             child: const Text('Setup'),
+                          ),
+                        ),
+                        _SettingsRow(
+                          icon: CupertinoIcons.arrow_clockwise_circle,
+                          title: 'Update app',
+                          subtitle:
+                              'Build + install latest Flutter app from this repo',
+                          trailing: PushButton(
+                            controlSize: ControlSize.regular,
+                            onPressed: rex.isLoading
+                                ? null
+                                : () async {
+                                    final output = await rex.runAppUpdate();
+                                    if (!context.mounted) return;
+                                    _showOutput(context, 'App Update', output);
+                                  },
+                            child: const Text('Update'),
                           ),
                         ),
                       ],
@@ -121,23 +146,32 @@ class _SettingsPageState extends State<SettingsPage> {
                       title: 'Ollama Models',
                       children: [
                         if (_loading)
-                          const Center(child: Padding(
-                            padding: EdgeInsets.all(20),
-                            child: ProgressCircle(),
-                          ))
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(20),
+                              child: ProgressCircle(),
+                            ),
+                          )
                         else
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: MacosTheme.brightnessOf(context) == Brightness.dark
+                              color:
+                                  MacosTheme.brightnessOf(context) ==
+                                      Brightness.dark
                                   ? const Color(0xFF1A1A1A)
                                   : const Color(0xFFF8F8F8),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: SelectableText(
-                              _ollamaModels.isEmpty ? 'No models found' : _ollamaModels,
-                              style: const TextStyle(fontFamily: 'Menlo', fontSize: 11),
+                              _ollamaModels.isEmpty
+                                  ? 'No models found'
+                                  : _ollamaModels,
+                              style: const TextStyle(
+                                fontFamily: 'Menlo',
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                       ],
@@ -152,14 +186,19 @@ class _SettingsPageState extends State<SettingsPage> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: MacosTheme.brightnessOf(context) == Brightness.dark
+                            color:
+                                MacosTheme.brightnessOf(context) ==
+                                    Brightness.dark
                                 ? const Color(0xFF1A1A1A)
                                 : const Color(0xFFF8F8F8),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             _systemInfo,
-                            style: const TextStyle(fontFamily: 'Menlo', fontSize: 11),
+                            style: const TextStyle(
+                              fontFamily: 'Menlo',
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                       ],
@@ -177,7 +216,9 @@ class _SettingsPageState extends State<SettingsPage> {
                           trailing: PushButton(
                             controlSize: ControlSize.regular,
                             secondary: true,
-                            onPressed: () => launchUrl(Uri.parse('https://github.com/Keiy78120/rex')),
+                            onPressed: () => launchUrl(
+                              Uri.parse('https://github.com/Keiy78120/rex'),
+                            ),
                             child: const Text('Open'),
                           ),
                         ),
@@ -188,7 +229,8 @@ class _SettingsPageState extends State<SettingsPage> {
                           trailing: PushButton(
                             controlSize: ControlSize.regular,
                             secondary: true,
-                            onPressed: () => launchUrl(Uri.parse('https://ollama.com')),
+                            onPressed: () =>
+                                launchUrl(Uri.parse('https://ollama.com')),
                             child: const Text('Open'),
                           ),
                         ),
@@ -235,7 +277,11 @@ class _StatusCard extends StatelessWidget {
   final bool running;
   final IconData icon;
 
-  const _StatusCard({required this.title, required this.running, required this.icon});
+  const _StatusCard({
+    required this.title,
+    required this.running,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -265,7 +311,9 @@ class _StatusCard extends StatelessWidget {
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: running ? CupertinoColors.systemGreen : CupertinoColors.systemRed,
+                      color: running
+                          ? CupertinoColors.systemGreen
+                          : CupertinoColors.systemRed,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -274,7 +322,9 @@ class _StatusCard extends StatelessWidget {
                     running ? 'Running' : 'Stopped',
                     style: TextStyle(
                       fontSize: 12,
-                      color: running ? CupertinoColors.systemGreen : CupertinoColors.systemRed,
+                      color: running
+                          ? CupertinoColors.systemGreen
+                          : CupertinoColors.systemRed,
                     ),
                   ),
                 ],
@@ -298,7 +348,10 @@ class _SettingsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
@@ -349,7 +402,13 @@ class _SettingsRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                  ),
+                ),
                 Text(
                   subtitle,
                   style: TextStyle(

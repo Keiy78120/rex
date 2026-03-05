@@ -4,17 +4,18 @@ import 'package:macos_ui/macos_ui.dart';
 import 'package:provider/provider.dart';
 import 'services/rex_service.dart';
 import 'pages/health_page.dart';
+import 'pages/voice_page.dart';
+import 'pages/audio_page.dart';
 import 'pages/memory_page.dart';
 import 'pages/gateway_page.dart';
+import 'pages/agents_page.dart';
+import 'pages/mcp_page.dart';
 import 'pages/optimize_page.dart';
 import 'pages/settings_page.dart';
 
 void main() {
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => RexService(),
-      child: const RexApp(),
-    ),
+    ChangeNotifierProvider(create: (_) => RexService(), child: const RexApp()),
   );
 }
 
@@ -73,12 +74,28 @@ class _RexMainWindowState extends State<RexMainWindow> {
                 label: Text('Health'),
               ),
               SidebarItem(
+                leading: MacosIcon(CupertinoIcons.mic_fill),
+                label: Text('Voice'),
+              ),
+              SidebarItem(
+                leading: MacosIcon(CupertinoIcons.waveform),
+                label: Text('Audio'),
+              ),
+              SidebarItem(
                 leading: MacosIcon(CupertinoIcons.search),
                 label: Text('Memory'),
               ),
               SidebarItem(
                 leading: MacosIcon(CupertinoIcons.paperplane_fill),
                 label: Text('Gateway'),
+              ),
+              SidebarItem(
+                leading: MacosIcon(CupertinoIcons.sparkles),
+                label: Text('Agents'),
+              ),
+              SidebarItem(
+                leading: MacosIcon(CupertinoIcons.link),
+                label: Text('MCP'),
               ),
               SidebarItem(
                 leading: MacosIcon(CupertinoIcons.bolt_fill),
@@ -98,8 +115,12 @@ class _RexMainWindowState extends State<RexMainWindow> {
         index: _pageIndex,
         children: const [
           HealthPage(),
+          VoicePage(),
+          AudioPage(),
           MemoryPage(),
           GatewayPage(),
+          AgentsPage(),
+          McpPage(),
           OptimizePage(),
           SettingsPage(),
         ],
@@ -116,8 +137,8 @@ class _SidebarHeader extends StatelessWidget {
         final statusColor = rex.healthStatus == 'healthy'
             ? CupertinoColors.systemGreen
             : rex.healthStatus == 'degraded'
-                ? CupertinoColors.systemYellow
-                : CupertinoColors.systemRed;
+            ? CupertinoColors.systemYellow
+            : CupertinoColors.systemRed;
         return Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -148,10 +169,7 @@ class _SidebarHeader extends StatelessWidget {
                 children: [
                   const Text(
                     'REX',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   Row(
                     children: [
@@ -168,10 +186,9 @@ class _SidebarHeader extends StatelessWidget {
                         rex.healthStatus.toUpperCase(),
                         style: TextStyle(
                           fontSize: 11,
-                          color: MacosTheme.of(context)
-                              .typography
-                              .subheadline
-                              .color,
+                          color: MacosTheme.of(
+                            context,
+                          ).typography.subheadline.color,
                         ),
                       ),
                     ],

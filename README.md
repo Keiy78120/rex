@@ -23,7 +23,7 @@ Claude Code est puissant mais fait toujours les memes erreurs. REX ajoute des **
 
 ```bash
 npm install -g rex-claude
-rex init
+rex install
 ```
 
 C'est tout. Tout est automatique apres ca.
@@ -61,13 +61,16 @@ rex search "comment j'ai fix le bug X"  # recherche semantique
 
 - Health check toutes les heures (LaunchAgent macOS)
 - Auto-ingest des sessions toutes les heures
-- App menubar au demarrage du Mac
+- Gateway Telegram + call watcher au demarrage du Mac
 
 ## Commandes
 
 | Commande | Description |
 |----------|-------------|
+| `rex install` | One-command install (init + setup + audit) |
 | `rex init` | Setup complet (gardes, hooks, LaunchAgents) |
+| `rex setup --yes` | Setup non-interactif (deps + Ollama + models) |
+| `rex audit` | Audit d'integration des fonctionnalites |
 | `rex doctor` | Health check detaille |
 | `rex status` | Status en une ligne |
 | `rex startup` | Installer le demarrage auto |
@@ -75,6 +78,11 @@ rex search "comment j'ai fix le bug X"  # recherche semantique
 | `rex ingest` | Indexer les sessions (Ollama) |
 | `rex search <query>` | Recherche semantique (Ollama) |
 | `rex optimize` | Analyser CLAUDE.md (Ollama) |
+| `rex call status` | Etat detection d'appel (Hammerspoon) |
+| `rex call watch` | Auto start/stop audio logger sur event d'appel |
+| `rex voice transcribe` | Transcrire le dernier WAV (whisper-cli) |
+| `rex voice set-optimize on/off` | Activer l'optimisation prompt post-transcription |
+| `rex audio start/stop` | Controle enregistrement audio (ffmpeg) |
 
 ## Architecture
 
@@ -82,12 +90,12 @@ rex search "comment j'ai fix le bug X"  # recherche semantique
 rex-claude (npm, 12KB, zero deps)
 ├── 6 gardes bash          ~/.claude/rex-guards/
 ├── 9 categories de checks  rex doctor
-├── 2 LaunchAgents          health + ingest auto
+├── 4 LaunchAgents          health + ingest + gateway + call-watch
 └── hooks Claude Code       SessionStart/End, Stop, PreToolUse, PostToolUse
 
-rex-app (Tauri, optionnel)
-├── menubar macOS           status en temps reel
-└── voice transcription     whisper.cpp
+rex-app (Flutter, macOS)
+├── UI desktop              health + memory + gateway + optimize
+└── voice/audio             call detection + audio logger (Hammerspoon + ffmpeg)
 ```
 
 ## Prerequis

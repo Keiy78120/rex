@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process'
 import { platform, totalmem, homedir } from 'node:os'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 
@@ -20,13 +20,38 @@ function fail(msg: string) { console.log(`  ${COLORS.red}✗${COLORS.reset} ${ms
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 
-async function isOllamaInstalled(): Promise<boolean> {
+export interface SetupOptions {
+  nonInteractive?: boolean
+  skipTelegram?: boolean
+  autoInstallDeps?: boolean
+}
+
+function commandExists(cmd: string): boolean {
   try {
-    execSync('which ollama', { stdio: 'ignore' })
+    execSync(`which ${cmd}`, { stdio: 'ignore' })
     return true
   } catch {
     return false
   }
+}
+
+function hasBrew(): boolean {
+  return commandExists('brew')
+}
+
+function tryBrewInstall(formula: string, isCask = false): boolean {
+  if (!hasBrew()) return false
+  try {
+    const cmd = isCask ? `brew install --cask ${formula}` : `brew install ${formula}`
+    execSync(cmd, { stdio: 'inherit' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function isOllamaInstalled(): Promise<boolean> {
+  return commandExists('ollama')
 }
 
 async function isOllamaRunning(): Promise<boolean> {
@@ -94,10 +119,51 @@ function prompt(question: string): Promise<string> {
   })
 }
 
-async function setupTelegram() {
-  console.log(`\n  ${COLORS.bold}Telegram Gateway${COLORS.reset}`)
+async function ensurePlatformDeps(os: string, autoInstallDeps: boolean) {
+  console.log(`\n  ${COLORS.bold}System Dependencies${COLORS.reset}`)
 
-  const settingsPath = join(homedir(), '.claude', 'settings.json')
+  const deps: Array<{ cmd: string; formula: string; cask?: boolean; label: string }> = [
+    { cmd: 'ffmpeg', formula: 'ffmpeg', label: 'ffmpeg (audio logger)' },
+    { cmd: 'whisper-cli', formula: 'whisper-cpp', label: 'whisper-cli (transcription)' },
+    { cmd: 'hs', formula: 'hammerspoon', cask: true, label: 'Hammerspoon CLI (call watcher)' },
+  ]
+
+  for (const dep of deps) {
+    if (commandExists(dep.cmd)) {
+      ok(`${dep.label} available`)
+      continue
+    }
+
+    if (!autoInstallDeps) {
+      info(`${dep.label} missing`)
+      continue
+    }
+
+    if (os !== 'darwin') {
+      info(`${dep.label} missing (auto-install currently targets macOS)`)
+      continue
+    }
+
+    if (!hasBrew()) {
+      info(`${dep.label} missing and Homebrew not found`)
+      continue
+    }
+
+    info(`Installing ${dep.label}...`)
+    const installed = tryBrewInstall(dep.formula, dep.cask === true)
+    if (installed && commandExists(dep.cmd)) ok(`${dep.label} installed`)
+    else fail(`Could not install ${dep.label}`)
+  }
+}
+
+async function setupTelegram(options: SetupOptions = {}) {
+  console.log(`\n  ${COLORS.bold}Telegram Gateway${COLORS.reset}`)
+  const nonInteractive = options.nonInteractive === true
+
+  const settingsDir = join(homedir(), '.claude')
+  const settingsPath = join(settingsDir, 'settings.json')
+  if (!existsSync(settingsDir)) mkdirSync(settingsDir, { recursive: true })
+
   let settings: any = {}
   try { settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) } catch {}
   if (!settings.env) settings.env = {}
@@ -106,7 +172,6 @@ async function setupTelegram() {
   const existingChat = settings.env.REX_TELEGRAM_CHAT_ID
 
   if (existingToken && existingChat) {
-    // Test existing config
     try {
       const res = await fetch(`https://api.telegram.org/bot${existingToken}/sendMessage`, {
         method: 'POST',
@@ -121,13 +186,31 @@ async function setupTelegram() {
     info('Existing Telegram config found but not working — reconfiguring')
   }
 
+  if (options.skipTelegram) {
+    info('Skipping Telegram setup (flag enabled)')
+    return
+  }
+
+  if (nonInteractive) {
+    const envToken = process.env.REX_TELEGRAM_BOT_TOKEN
+    const envChat = process.env.REX_TELEGRAM_CHAT_ID
+    if (envToken && envChat) {
+      settings.env.REX_TELEGRAM_BOT_TOKEN = envToken
+      settings.env.REX_TELEGRAM_CHAT_ID = envChat
+      writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n')
+      ok('Telegram credentials loaded from environment')
+      return
+    }
+    info('Telegram not configured (set REX_TELEGRAM_BOT_TOKEN + REX_TELEGRAM_CHAT_ID to enable)')
+    return
+  }
+
   const botToken = await prompt('Telegram Bot Token (from @BotFather):')
   if (!botToken) {
     info('Skipped Telegram setup')
     return
   }
 
-  // Validate token by calling getMe
   try {
     const res = await fetch(`https://api.telegram.org/bot${botToken}/getMe`)
     const data = await res.json() as { ok: boolean; result?: { username: string } }
@@ -144,7 +227,6 @@ async function setupTelegram() {
   console.log(`\n  ${COLORS.dim}Send /start to your bot on Telegram, then press Enter...${COLORS.reset}`)
   await prompt('Press Enter when done')
 
-  // Get chat_id from updates
   let chatId = ''
   try {
     const res = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates`)
@@ -165,13 +247,11 @@ async function setupTelegram() {
     return
   }
 
-  // Save to settings.json
   settings.env.REX_TELEGRAM_BOT_TOKEN = botToken
   settings.env.REX_TELEGRAM_CHAT_ID = chatId
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n')
   ok('Telegram credentials saved to settings.json')
 
-  // Test send
   try {
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
@@ -184,35 +264,42 @@ async function setupTelegram() {
   }
 }
 
-export async function setup() {
+export async function setup(options: SetupOptions = {}) {
+  const nonInteractive = options.nonInteractive === true
+  const autoInstallDeps = options.autoInstallDeps ?? nonInteractive
   const line = '═'.repeat(45)
   console.log(`\n${line}`)
   console.log(`${COLORS.bold}        REX SETUP — Full Configuration${COLORS.reset}`)
   console.log(`${line}\n`)
 
-  // Hardware info
   const ramGB = Math.round(totalmem() / (1024 ** 3))
   const os = platform()
   info(`System: ${os}, ${ramGB}GB RAM`)
 
-  // 1. Check Ollama installed
+  await ensurePlatformDeps(os, autoInstallDeps)
+
   if (!(await isOllamaInstalled())) {
-    fail('Ollama not installed')
-    console.log(`\n  Install: ${COLORS.cyan}https://ollama.com/download${COLORS.reset}`)
-    if (os === 'darwin') {
-      info('Opening download page...')
-      try { execSync('open https://ollama.com/download', { stdio: 'ignore' }) } catch {}
+    if (autoInstallDeps && os === 'darwin' && hasBrew()) {
+      info('Installing Ollama via Homebrew...')
+      tryBrewInstall('ollama')
     }
-    return
+
+    if (!(await isOllamaInstalled())) {
+      fail('Ollama not installed')
+      console.log(`\n  Install: ${COLORS.cyan}https://ollama.com/download${COLORS.reset}`)
+      if (os === 'darwin' && !nonInteractive) {
+        info('Opening download page...')
+        try { execSync('open https://ollama.com/download', { stdio: 'ignore' }) } catch {}
+      }
+      return
+    }
   }
   ok('Ollama installed')
 
-  // 2. Check Ollama running
   if (!(await isOllamaRunning())) {
     info('Starting Ollama...')
     try {
-      execSync('ollama serve &', { stdio: 'ignore' })
-      // Wait a bit for it to start
+      execSync('nohup ollama serve > ~/.claude/rex-ollama.log 2>&1 &', { stdio: 'ignore' })
       await new Promise(r => setTimeout(r, 3000))
       if (await isOllamaRunning()) {
         ok('Ollama started')
@@ -228,7 +315,6 @@ export async function setup() {
     ok('Ollama running')
   }
 
-  // 3. Pull embedding model
   const models = await getInstalledModels()
   if (models.some(m => m.includes('nomic-embed-text'))) {
     ok('nomic-embed-text already installed')
@@ -236,7 +322,6 @@ export async function setup() {
     pullModel('nomic-embed-text')
   }
 
-  // 4. Pull reasoning model based on RAM
   const reasoningModel = ramGB >= 16 ? 'qwen3.5:9b' : 'qwen3.5:4b'
   info(`Selected reasoning model: ${reasoningModel} (${ramGB}GB RAM)`)
 
@@ -246,7 +331,6 @@ export async function setup() {
     pullModel(reasoningModel)
   }
 
-  // 5. Test
   console.log(`\n  ${COLORS.dim}Testing...${COLORS.reset}`)
   const embedOk = await testEmbed()
   const genOk = await testGenerate(reasoningModel)
@@ -257,8 +341,7 @@ export async function setup() {
   if (genOk) ok('Generation test passed')
   else fail('Generation test failed')
 
-  // 6. Telegram Gateway
-  await setupTelegram()
+  await setupTelegram(options)
 
   console.log(`\n${COLORS.dim}─────────────────────────────────────────────${COLORS.reset}`)
   if (embedOk && genOk) {

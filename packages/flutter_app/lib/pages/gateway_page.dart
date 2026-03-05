@@ -26,11 +26,15 @@ class _GatewayPageState extends State<GatewayPage> {
   Future<void> _loadLogs() async {
     setState(() => _refreshingLogs = true);
     try {
-      final logFile = File('${Platform.environment['HOME']}/.claude/rex-gateway.log');
+      final logFile = File(
+        '${Platform.environment['HOME']}/.claude/rex-gateway.log',
+      );
       if (await logFile.exists()) {
         final content = await logFile.readAsString();
         final lines = content.split('\n');
-        final last50 = lines.length > 50 ? lines.sublist(lines.length - 50) : lines;
+        final last50 = lines.length > 50
+            ? lines.sublist(lines.length - 50)
+            : lines;
         setState(() => _logContent = last50.join('\n'));
       } else {
         setState(() => _logContent = 'No gateway log file found.');
@@ -101,55 +105,67 @@ class _GatewayPageState extends State<GatewayPage> {
                     // Features grid
                     Row(
                       children: [
-                        Expanded(child: _FeatureCard(
-                          icon: CupertinoIcons.chat_bubble_2,
-                          title: 'Interactive Menu',
-                          subtitle: 'Inline keyboards, button actions',
-                          enabled: true,
-                        )),
+                        Expanded(
+                          child: _FeatureCard(
+                            icon: CupertinoIcons.chat_bubble_2,
+                            title: 'Interactive Menu',
+                            subtitle: 'Inline keyboards, button actions',
+                            enabled: true,
+                          ),
+                        ),
                         const SizedBox(width: 12),
-                        Expanded(child: _FeatureCard(
-                          icon: CupertinoIcons.bolt,
-                          title: 'Wake-on-LAN',
-                          subtitle: 'Wake Mac remotely via Tailscale',
-                          enabled: true,
-                        )),
+                        Expanded(
+                          child: _FeatureCard(
+                            icon: CupertinoIcons.bolt,
+                            title: 'Wake-on-LAN',
+                            subtitle: 'Wake Mac remotely via Tailscale',
+                            enabled: true,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: _FeatureCard(
-                          icon: CupertinoIcons.desktopcomputer,
-                          title: 'Claude Remote',
-                          subtitle: 'Continue sessions via Telegram',
-                          enabled: true,
-                        )),
+                        Expanded(
+                          child: _FeatureCard(
+                            icon: CupertinoIcons.desktopcomputer,
+                            title: 'Claude Remote',
+                            subtitle: 'Continue sessions via Telegram',
+                            enabled: true,
+                          ),
+                        ),
                         const SizedBox(width: 12),
-                        Expanded(child: _FeatureCard(
-                          icon: CupertinoIcons.lock_shield,
-                          title: 'Auth Protected',
-                          subtitle: 'Restricted to your chat_id',
-                          enabled: true,
-                        )),
+                        Expanded(
+                          child: _FeatureCard(
+                            icon: CupertinoIcons.lock_shield,
+                            title: 'Auth Protected',
+                            subtitle: 'Restricted to your chat_id',
+                            enabled: true,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: _FeatureCard(
-                          icon: CupertinoIcons.text_bubble,
-                          title: 'Dual LLM',
-                          subtitle: 'Toggle Qwen (local) / Claude',
-                          enabled: rex.ollamaRunning,
-                        )),
+                        Expanded(
+                          child: _FeatureCard(
+                            icon: CupertinoIcons.text_bubble,
+                            title: 'Dual LLM',
+                            subtitle: 'Toggle Qwen (local) / Claude',
+                            enabled: rex.ollamaRunning,
+                          ),
+                        ),
                         const SizedBox(width: 12),
-                        Expanded(child: _FeatureCard(
-                          icon: CupertinoIcons.doc_on_clipboard,
-                          title: 'Command Logging',
-                          subtitle: 'All actions logged for traceability',
-                          enabled: true,
-                        )),
+                        Expanded(
+                          child: _FeatureCard(
+                            icon: CupertinoIcons.doc_on_clipboard,
+                            title: 'Command Logging',
+                            subtitle: 'All actions logged for traceability',
+                            enabled: true,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -159,7 +175,10 @@ class _GatewayPageState extends State<GatewayPage> {
                       children: [
                         const Text(
                           'Gateway Logs',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const Spacer(),
                         if (_refreshingLogs) const ProgressCircle(radius: 8),
@@ -171,12 +190,15 @@ class _GatewayPageState extends State<GatewayPage> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: MacosTheme.brightnessOf(context) == Brightness.dark
+                        color:
+                            MacosTheme.brightnessOf(context) == Brightness.dark
                             ? const Color(0xFF1A1A1A)
                             : const Color(0xFFF5F5F5),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: MacosTheme.brightnessOf(context) == Brightness.dark
+                          color:
+                              MacosTheme.brightnessOf(context) ==
+                                  Brightness.dark
                               ? const Color(0xFF333333)
                               : const Color(0xFFE5E5E5),
                         ),
@@ -184,7 +206,9 @@ class _GatewayPageState extends State<GatewayPage> {
                       child: SingleChildScrollView(
                         reverse: true,
                         child: SelectableText(
-                          _logContent.isEmpty ? 'No logs available' : _logContent,
+                          _logContent.isEmpty
+                              ? 'No logs available'
+                              : _logContent,
                           style: const TextStyle(
                             fontFamily: 'Menlo',
                             fontSize: 11,
@@ -222,8 +246,14 @@ class _GatewayStatusCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: running
-              ? [const Color(0xFF10B981).withAlpha(20), const Color(0xFF10B981).withAlpha(8)]
-              : [const Color(0xFFEF4444).withAlpha(20), const Color(0xFFEF4444).withAlpha(8)],
+              ? [
+                  const Color(0xFF10B981).withAlpha(20),
+                  const Color(0xFF10B981).withAlpha(8),
+                ]
+              : [
+                  const Color(0xFFEF4444).withAlpha(20),
+                  const Color(0xFFEF4444).withAlpha(8),
+                ],
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
@@ -238,12 +268,17 @@ class _GatewayStatusCard extends StatelessWidget {
             width: 12,
             height: 12,
             decoration: BoxDecoration(
-              color: running ? CupertinoColors.systemGreen : CupertinoColors.systemRed,
+              color: running
+                  ? CupertinoColors.systemGreen
+                  : CupertinoColors.systemRed,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: (running ? CupertinoColors.systemGreen : CupertinoColors.systemRed)
-                      .withAlpha(100),
+                  color:
+                      (running
+                              ? CupertinoColors.systemGreen
+                              : CupertinoColors.systemRed)
+                          .withAlpha(100),
                   blurRadius: 8,
                 ),
               ],
@@ -255,10 +290,15 @@ class _GatewayStatusCard extends StatelessWidget {
             children: [
               Text(
                 running ? 'Gateway Running' : 'Gateway Stopped',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
               ),
               Text(
-                running ? 'Telegram bot is active and listening' : 'Start the gateway to enable remote control',
+                running
+                    ? 'Telegram bot is active and listening'
+                    : 'Start the gateway to enable remote control',
                 style: TextStyle(
                   fontSize: 12,
                   color: MacosTheme.of(context).typography.subheadline.color,
@@ -269,7 +309,9 @@ class _GatewayStatusCard extends StatelessWidget {
           const Spacer(),
           PushButton(
             controlSize: ControlSize.regular,
-            color: running ? CupertinoColors.systemRed : CupertinoColors.systemGreen,
+            color: running
+                ? CupertinoColors.systemRed
+                : CupertinoColors.systemGreen,
             onPressed: running ? onStop : onStart,
             child: Text(running ? 'Stop' : 'Start'),
           ),
@@ -310,7 +352,9 @@ class _FeatureCard extends StatelessWidget {
           Icon(
             icon,
             size: 20,
-            color: enabled ? const Color(0xFF6366F1) : CupertinoColors.systemGrey,
+            color: enabled
+                ? const Color(0xFF6366F1)
+                : CupertinoColors.systemGrey,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -319,7 +363,10 @@ class _FeatureCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
                 ),
                 Text(
                   subtitle,
@@ -335,7 +382,9 @@ class _FeatureCard extends StatelessWidget {
             width: 8,
             height: 8,
             decoration: BoxDecoration(
-              color: enabled ? CupertinoColors.systemGreen : CupertinoColors.systemGrey,
+              color: enabled
+                  ? CupertinoColors.systemGreen
+                  : CupertinoColors.systemGrey,
               shape: BoxShape.circle,
             ),
           ),

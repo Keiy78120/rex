@@ -50,7 +50,7 @@ export async function prune(statsOnly: boolean = false) {
     }
     try {
       Database = (await import(join(memDir, 'node_modules', 'better-sqlite3', 'lib', 'index.js'))).default
-      sqliteVec = await import(join(memDir, 'node_modules', 'sqlite-vec', 'src', 'index.js'))
+      sqliteVec = await import(join(memDir, 'node_modules', 'sqlite-vec', 'index.mjs'))
     } catch (err) {
       console.log(`  ${COLORS.red}Cannot load database modules:${COLORS.reset} ${(err as Error).message}\n`)
       return

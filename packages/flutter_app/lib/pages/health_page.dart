@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show CircularProgressIndicator, AlwaysStoppedAnimation, Divider;
+import 'package:flutter/material.dart'
+    show CircularProgressIndicator, AlwaysStoppedAnimation, Divider;
 import 'package:macos_ui/macos_ui.dart';
 import 'package:provider/provider.dart';
 import '../services/rex_service.dart';
@@ -28,9 +29,7 @@ class HealthPage extends StatelessWidget {
             return Consumer<RexService>(
               builder: (context, rex, _) {
                 if (rex.isLoading && rex.healthGroups.isEmpty) {
-                  return const Center(
-                    child: ProgressCircle(),
-                  );
+                  return const Center(child: ProgressCircle());
                 }
 
                 return ListView(
@@ -38,10 +37,15 @@ class HealthPage extends StatelessWidget {
                   padding: const EdgeInsets.all(20),
                   children: [
                     // Status banner
-                    _StatusBanner(status: rex.healthStatus, groups: rex.healthGroups),
+                    _StatusBanner(
+                      status: rex.healthStatus,
+                      groups: rex.healthGroups,
+                    ),
                     const SizedBox(height: 20),
                     // Check groups
-                    ...rex.healthGroups.map((group) => _CheckGroupCard(group: group)),
+                    ...rex.healthGroups.map(
+                      (group) => _CheckGroupCard(group: group),
+                    ),
                     const SizedBox(height: 20),
                     // Quick actions
                     _QuickActions(),
@@ -88,10 +92,7 @@ class _StatusBanner extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            statusColor.withAlpha(30),
-            statusColor.withAlpha(10),
-          ],
+          colors: [statusColor.withAlpha(30), statusColor.withAlpha(10)],
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: statusColor.withAlpha(60)),
@@ -133,7 +134,10 @@ class _StatusBanner extends StatelessWidget {
                 ),
                 Text(
                   total > 0 ? '${(passed / total * 100).round()}%' : '-',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
               ],
             ),
@@ -174,7 +178,10 @@ class _CheckGroupCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     group.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
                   ),
                   const Spacer(),
                   Text(
@@ -285,7 +292,11 @@ class _ActionCard extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _ActionCard({required this.icon, required this.label, required this.onTap});
+  const _ActionCard({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -306,7 +317,10 @@ class _ActionCard extends StatelessWidget {
           children: [
             Icon(icon, size: 24, color: const Color(0xFF6366F1)),
             const SizedBox(height: 6),
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            ),
           ],
         ),
       ),
