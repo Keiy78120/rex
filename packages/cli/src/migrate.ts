@@ -1,5 +1,6 @@
 import { existsSync, copyFileSync, mkdirSync, symlinkSync, renameSync, readdirSync, lstatSync } from 'node:fs'
 import { join } from 'node:path'
+import { execSync } from 'node:child_process'
 import { MEMORY_DIR, MEMORY_DB_PATH, PENDING_DIR, BACKUPS_DIR, LEGACY_MEMORY_DIR, LEGACY_DB_PATH, ensureRexDirs } from './paths.js'
 
 const COLORS = { green: '\x1b[32m', yellow: '\x1b[33m', dim: '\x1b[2m', reset: '\x1b[0m' }
@@ -54,24 +55,23 @@ export async function migrate(): Promise<void> {
     }
   }
 
-  // 4. Schema upgrade
+  // 4. Schema upgrade (use sqlite3 CLI to avoid better-sqlite3 dependency issues)
   if (existsSync(MEMORY_DB_PATH)) {
-    const Database = (await import('better-sqlite3')).default
-    const db = new Database(MEMORY_DB_PATH)
-    db.pragma('journal_mode = WAL')
+    try {
+      const colsRaw = execSync(`sqlite3 "${MEMORY_DB_PATH}" "PRAGMA table_info(memories)"`, { encoding: 'utf-8' })
+      const colNames = colsRaw.split('\n').map(line => line.split('|')[1]).filter(Boolean)
 
-    const cols = db.prepare("PRAGMA table_info(memories)").all() as Array<{ name: string }>
-    const colNames = cols.map(c => c.name)
-
-    if (!colNames.includes('summary')) {
-      db.exec("ALTER TABLE memories ADD COLUMN summary TEXT")
-      console.log(`${COLORS.green}Added${COLORS.reset} summary column`)
+      if (!colNames.includes('summary')) {
+        execSync(`sqlite3 "${MEMORY_DB_PATH}" "ALTER TABLE memories ADD COLUMN summary TEXT"`)
+        console.log(`${COLORS.green}Added${COLORS.reset} summary column`)
+      }
+      if (!colNames.includes('needs_reprocess')) {
+        execSync(`sqlite3 "${MEMORY_DB_PATH}" "ALTER TABLE memories ADD COLUMN needs_reprocess INTEGER DEFAULT 0"`)
+        console.log(`${COLORS.green}Added${COLORS.reset} needs_reprocess column`)
+      }
+    } catch (e: any) {
+      console.log(`${COLORS.yellow}Schema upgrade skipped${COLORS.reset} — sqlite3 CLI not available: ${e.message?.slice(0, 80)}`)
     }
-    if (!colNames.includes('needs_reprocess')) {
-      db.exec("ALTER TABLE memories ADD COLUMN needs_reprocess INTEGER DEFAULT 0")
-      console.log(`${COLORS.green}Added${COLORS.reset} needs_reprocess column`)
-    }
-    db.close()
   }
 
   console.log(`\n${COLORS.green}Migration complete.${COLORS.reset} REX hub at ~/.claude/rex/`)
