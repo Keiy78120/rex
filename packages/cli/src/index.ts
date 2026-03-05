@@ -273,6 +273,14 @@ async function main() {
       break
     }
 
+    case 'preload': {
+      const { preload } = await import('./preload.js')
+      const cwd = process.argv[3] || process.cwd()
+      const context = await preload(cwd)
+      if (context) console.log(context)
+      break
+    }
+
     case '--version':
     case '-v':
       console.log('rex-claude v4.0.1')
@@ -306,6 +314,7 @@ ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex setup            Install Ollama + models + Telegram gateway
   rex llm <prompt>     Query local LLM directly
   rex models           Show task-aware model routing table
+  rex preload [path]   Show pre-loaded context for a path
   rex context [path]   Analyze project, recommend MCP/skills
   rex projects         Scan and index all dev projects
 
