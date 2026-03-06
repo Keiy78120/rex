@@ -61,7 +61,7 @@ packages/
 │       ├── pages/context_page.dart
 │       ├── pages/settings_page.dart
 │       └── theme.dart
-└── app/         Ancienne app Tauri (archivee, ignorer)
+└── app/         (supprime, legacy)
 ```
 
 ---
@@ -201,7 +201,7 @@ rex doctor --fix     # Auto-fix then health check
 | `rex models` command: routing table avec dots verts/jaunes | `packages/cli/src/index.ts` |
 | llm.ts: detectModel() delegue a pickModel('gateway') | `packages/cli/src/llm.ts` |
 | CCR config optimise: default=qwen3-coder:30b, background=qwen2.5:1.5b, think=deepseek-r1:8b | `~/.claude-code-router/config.json` |
-| Init.ts: suppression reference Tauri → flutter build macos | `packages/cli/src/init.ts` |
+| Init.ts: flutter build macos (ancienne app supprimee) | `packages/cli/src/init.ts` |
 | Gateway: T-Rex animation 🦖↔🦕 sur tous les états de chargement | `packages/cli/src/gateway.ts` |
 | Gateway: askQwenStream utilise pickModel('gateway') au lieu de hardcodé | `packages/cli/src/gateway.ts` |
 | categorize.ts: detectClassifyModel() auto-detect (qwen3.5:9b first) | `packages/memory/src/categorize.ts` |
