@@ -147,7 +147,9 @@ rex doctor --fix     # Auto-fix then health check
 ### Memoire
 - SQLite dans `~/.rex-memory/rex-memory.db`
 - Embeddings via `nomic-embed-text` Ollama
-- Si Ollama off au moment de l'ingest → les chunks bruts vont dans `~/.rex-memory/pending/`
+- Two-phase ingest : chunks TOUJOURS sauvés dans `~/.claude/rex/memory/pending/` d'abord (instant), puis embeddés lazily par `processPending()` (max 30/run, 500ms throttle)
+- Lockfile `~/.claude/rex/memory/ingest.lock` empêche les process concurrents (stale après 10min)
+- Config env : `REX_EMBED_THROTTLE_MS` (défaut 500), `REX_MAX_EMBED_PER_RUN` (défaut 30)
 
 ---
 
@@ -261,13 +263,17 @@ rex doctor --fix     # Auto-fix then health check
 | Delta ingest (file_size + lines_ingested tracking, re-process growing files) | `packages/memory/src/ingest.ts` |
 | Watchdog agent profile (30min, auto-fix ingest/Ollama/LaunchAgents) | `agents.ts` |
 | Background processes monitoring in Health page (ps aux + restart) | `rex_service.dart`, `health_page.dart` |
+| Two-phase ingest: save to pending/ (instant) + embed lazily (30 chunks/run, 500ms throttle) | `packages/memory/src/ingest.ts` |
+| Lockfile mutex preventing concurrent ingest processes (10min stale detection) | `packages/memory/src/ingest.ts` |
+| Hooks consolidation: 4 Stop hooks → 1 background script (0 impact UX) | `~/.claude/rex-guards/stop-all.sh` |
+| PostToolUse: 4 hooks → 2 combined fast scripts (<2s) | `~/.claude/rex-guards/post-edit-guard.sh`, `post-bash-guard.sh` |
+| LaunchAgent ingest+categorize combo (1h cycle) | `com.dstudio.rex-ingest.plist` |
 
 ### 🔄 En cours / A faire
 
 | Tache | Priorite | Detail |
 |-------|----------|--------|
 | Training pipeline research approfondie | BASSE | Benchmarks reels mlx-lm vs unsloth + eval dataset interne |
-| Rex daemon LaunchAgent (com.dstudio.rex-daemon) | HAUTE | `rex init` installs, KeepAlive, replaces 3 old agents |
 | Flutter Settings: Model Router section | BASSE | Afficher task→model mapping depuis getRouterSnapshot() |
 | MCP compatibility check dans `rex doctor` | MOYENNE | Diagnostic clair si MCP mal configure |
 | Pipeline no memory loss | MOYENNE | Memoire cloud Claude + semantic search locale + resume |
