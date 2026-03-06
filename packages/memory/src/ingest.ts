@@ -248,28 +248,94 @@ async function savePending(chunks: Array<{ text: string; source: string; project
   console.log(`  Saved ${chunks.length} chunks to pending/ (Ollama offline)`);
 }
 
+const EMBED_THROTTLE_MS = parseInt(process.env.REX_EMBED_THROTTLE_MS || '500', 10);
+const MAX_EMBED_PER_RUN = parseInt(process.env.REX_MAX_EMBED_PER_RUN || '30', 10);
+
 async function processPending() {
   if (!existsSync(PENDING_DIR)) return;
   const files = readdirSync(PENDING_DIR).filter((f) => f.endsWith(".json"));
   if (files.length === 0) return;
 
-  console.log(`  Processing ${files.length} pending file(s)...`);
+  console.log(`  Processing ${files.length} pending file(s) (max ${MAX_EMBED_PER_RUN} chunks/run, ${EMBED_THROTTLE_MS}ms throttle)...`);
+  let totalEmbedded = 0;
+
   for (const file of files) {
+    if (totalEmbedded >= MAX_EMBED_PER_RUN) {
+      console.log(`  Reached ${MAX_EMBED_PER_RUN} chunk limit — rest will process next run.`);
+      break;
+    }
+
     const filePath = join(PENDING_DIR, file);
     try {
       const chunks: Array<{ text: string; source: string; project: string }> = JSON.parse(readFileSync(filePath, "utf-8"));
+      let processed = 0;
+
       for (const chunk of chunks) {
-        await learn(chunk.text, "session", chunk.source, chunk.project);
+        if (totalEmbedded >= MAX_EMBED_PER_RUN) break;
+
+        if (SMART_INGEST) {
+          const { category, summary } = await classifyAndSummarize(chunk.text);
+          await learn(summary, category, chunk.source, chunk.project);
+        } else {
+          await learn(chunk.text, "session", chunk.source, chunk.project);
+        }
+        processed++;
+        totalEmbedded++;
+
+        // Throttle to avoid CPU spikes
+        if (EMBED_THROTTLE_MS > 0) {
+          await new Promise((r) => setTimeout(r, EMBED_THROTTLE_MS));
+        }
       }
-      unlinkSync(filePath);
-      console.log(`  ${file}: ${chunks.length} chunks processed`);
+
+      if (processed >= chunks.length) {
+        // Fully processed — remove file
+        unlinkSync(filePath);
+        console.log(`  ${file}: ${processed} chunks embedded`);
+      } else {
+        // Partial — rewrite with remaining chunks
+        const remaining = chunks.slice(processed);
+        writeFS(filePath, JSON.stringify(remaining, null, 2));
+        console.log(`  ${file}: ${processed}/${chunks.length} embedded, ${remaining.length} remaining`);
+      }
     } catch (err) {
       console.error(`  Error processing ${file}: ${(err as Error).message}`);
     }
   }
+
+  if (totalEmbedded > 0) console.log(`  Embedded ${totalEmbedded} chunks total this run.`);
+}
+
+const LOCK_FILE = join(process.env.HOME || '~', '.claude', 'rex', 'memory', 'ingest.lock');
+const LOCK_STALE_MS = 10 * 60 * 1000; // 10 min — consider lock stale after this
+
+function acquireLock(): boolean {
+  try {
+    if (existsSync(LOCK_FILE)) {
+      const lockAge = Date.now() - statSync(LOCK_FILE).mtimeMs;
+      if (lockAge < LOCK_STALE_MS) {
+        console.log('Ingest already running (lock held). Skipping.');
+        return false;
+      }
+      // Stale lock — remove and continue
+      unlinkSync(LOCK_FILE);
+    }
+    const lockDir = join(process.env.HOME || '~', '.claude', 'rex', 'memory');
+    if (!existsSync(lockDir)) mkdirSync(lockDir, { recursive: true });
+    writeFS(LOCK_FILE, String(process.pid));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function releaseLock() {
+  try { if (existsSync(LOCK_FILE)) unlinkSync(LOCK_FILE); } catch {}
 }
 
 async function ingestSessions() {
+  if (!acquireLock()) return;
+
   const ollamaUp = await checkOllama();
 
   // If Ollama is up, process any pending backlog first
@@ -356,24 +422,11 @@ async function ingestSessions() {
           continue;
         }
 
-        if (!ollamaUp) {
-          const pendingChunks = chunks.map(c => ({ text: c, source: filePath, project: projectDir }));
-          await savePending(pendingChunks);
-          totalIngested += chunks.length;
-          continue;
-        }
-
-        let fileIngested = 0;
-        for (const chunk of chunks) {
-          if (SMART_INGEST) {
-            const { category, summary } = await classifyAndSummarize(chunk);
-            await learn(summary, category, filePath, projectDir);
-            console.log(`    [${category}] ${summary.slice(0, 80)}...`);
-          } else {
-            await learn(chunk, "session", filePath, projectDir);
-          }
-          fileIngested++;
-        }
+        // Phase 1: ALWAYS save to pending/ first (instant, no CPU)
+        // Phase 2: processPending() embeds lazily with throttling
+        const pendingChunks = chunks.map(c => ({ text: c, source: filePath, project: projectDir }));
+        await savePending(pendingChunks);
+        const fileIngested = chunks.length;
 
         const totalChunks = (prev?.chunks_count ?? 0) + fileIngested;
         db.prepare("INSERT INTO ingest_log (file_path, chunks_count, file_size, lines_ingested) VALUES (?, ?, ?, ?) ON CONFLICT(file_path) DO UPDATE SET chunks_count=?, file_size=?, lines_ingested=?, ingested_at=datetime('now')")
@@ -393,6 +446,7 @@ async function ingestSessions() {
   }
 
   console.log(`\nDone: ${totalIngested} ingested${totalDelta > 0 ? ` (${totalDelta} delta updates)` : ''}, ${totalSkipped} skipped, ${totalErrors} errors`);
+  releaseLock();
 }
 
 // Run CLI if called directly
