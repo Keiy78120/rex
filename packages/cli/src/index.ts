@@ -239,6 +239,12 @@ async function main() {
       break
     }
 
+    case 'skills': {
+      const { skills } = await import('./skills.js')
+      await skills(process.argv.slice(3))
+      break
+    }
+
     case 'mcp': {
       const { mcpRegistry } = await import('./mcp_registry.js')
       await mcpRegistry(process.argv.slice(3))
@@ -397,7 +403,7 @@ async function main() {
 
     case '--version':
     case '-v':
-      console.log('rex-claude v5.0.0')
+      console.log('rex-claude v6.0.0')
       break
 
     case 'help':
@@ -460,12 +466,23 @@ ${COLORS.bold}Autonomous Agents:${COLORS.reset}
   rex agents stop <id>         Stop running agent
   rex agents status [id]       Show status
   rex agents logs <id>         Tail logs
+  rex agents chat <message>   Chat with orchestrator
+  rex agents team [name]      List teams / team members
+
+${COLORS.bold}Skills:${COLORS.reset}
+  rex skills list              List installed skills
+  rex skills show <name>       Show skill content
+  rex skills add <name>        Create a new skill
+  rex skills delete <name>     Remove a skill
 
 ${COLORS.bold}MCP Registry:${COLORS.reset}
   rex mcp list                 List MCP servers
   rex mcp add <name> ...       Add stdio MCP server
   rex mcp add-url <name> <url> Add remote MCP server (sse/http)
   rex mcp check <id>           Check MCP connectivity
+  rex mcp discover <id|name>   List tools exposed by an MCP server
+  rex mcp search <query>       Search MCP marketplace cache
+  rex mcp install <name>       Install MCP server from marketplace
   rex mcp sync-claude          Sync enabled stdio servers to ~/.claude/settings.json
 
 ${COLORS.bold}Voice & Calls:${COLORS.reset}
@@ -493,6 +510,7 @@ function findMemoryPackage(): string | null {
   const thisDir = new URL('.', import.meta.url).pathname
   const candidates = [
     join(thisDir, '..', '..', 'memory'),
+    join(process.env.HOME || '~', 'Documents', 'Developer', 'keiy', 'rex', 'packages', 'memory'),
     join(process.env.HOME || '~', '.rex-memory'),
   ]
   for (const c of candidates) {

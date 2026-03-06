@@ -114,9 +114,19 @@ export function getDb(): Database.Database {
     CREATE TABLE IF NOT EXISTS ingest_log (
       file_path TEXT PRIMARY KEY,
       chunks_count INTEGER,
+      file_size INTEGER DEFAULT 0,
+      lines_ingested INTEGER DEFAULT 0,
       ingested_at TEXT DEFAULT (datetime('now'))
     );
   `);
+
+  // Migration: add columns if missing (existing DBs)
+  try {
+    _db.exec(`ALTER TABLE ingest_log ADD COLUMN file_size INTEGER DEFAULT 0`);
+  } catch { /* column already exists */ }
+  try {
+    _db.exec(`ALTER TABLE ingest_log ADD COLUMN lines_ingested INTEGER DEFAULT 0`);
+  } catch { /* column already exists */ }
 
   return _db;
 }
@@ -275,14 +285,16 @@ async function ingestSessions() {
 
   const db = getDb();
 
-  // Use ingest_log to track already-processed files (more reliable than source column)
-  const alreadyIngested = new Set(
-    (db.prepare("SELECT file_path FROM ingest_log").all() as Array<{ file_path: string }>).map((r) => r.file_path)
+  // Track already-processed files with size for delta detection
+  const ingestLog = new Map<string, { chunks_count: number; file_size: number; lines_ingested: number }>(
+    (db.prepare("SELECT file_path, chunks_count, COALESCE(file_size, 0) as file_size, COALESCE(lines_ingested, 0) as lines_ingested FROM ingest_log").all() as Array<{ file_path: string; chunks_count: number; file_size: number; lines_ingested: number }>)
+      .map((r) => [r.file_path, { chunks_count: r.chunks_count, file_size: r.file_size, lines_ingested: r.lines_ingested }])
   );
 
   let totalIngested = 0;
   let totalSkipped = 0;
   let totalErrors = 0;
+  let totalDelta = 0;
 
   let projectDirs: string[];
   try {
@@ -311,24 +323,40 @@ async function ingestSessions() {
     for (const file of files) {
       const filePath = join(projectPath, file);
 
-      if (alreadyIngested.has(filePath)) {
-        totalSkipped++;
-        continue;
-      }
-
       try {
+        const currentSize = statSync(filePath).size;
+        const prev = ingestLog.get(filePath);
+
+        // Skip if file hasn't grown since last ingest
+        if (prev && prev.file_size >= currentSize) {
+          totalSkipped++;
+          continue;
+        }
+
         const content = readFileSync(filePath, "utf-8");
-        const lines = content.split("\n").filter(Boolean);
-        const chunks = chunkText(lines);
+        const allLines = content.split("\n").filter(Boolean);
+
+        // Delta: skip lines already ingested
+        const startLine = prev ? prev.lines_ingested : 0;
+        const newLines = allLines.slice(startLine);
+
+        if (newLines.length === 0) {
+          // Update size tracking even if no new meaningful lines
+          db.prepare("INSERT INTO ingest_log (file_path, chunks_count, file_size, lines_ingested) VALUES (?, ?, ?, ?) ON CONFLICT(file_path) DO UPDATE SET file_size=?, lines_ingested=?")
+            .run(filePath, prev?.chunks_count ?? 0, currentSize, allLines.length, currentSize, allLines.length);
+          totalSkipped++;
+          continue;
+        }
+
+        const chunks = chunkText(newLines);
 
         if (chunks.length === 0) {
-          // Mark as processed even if empty (no need to re-parse)
-          db.prepare("INSERT OR IGNORE INTO ingest_log (file_path, chunks_count) VALUES (?, 0)").run(filePath);
+          db.prepare("INSERT INTO ingest_log (file_path, chunks_count, file_size, lines_ingested) VALUES (?, ?, ?, ?) ON CONFLICT(file_path) DO UPDATE SET file_size=?, lines_ingested=?")
+            .run(filePath, prev?.chunks_count ?? 0, currentSize, allLines.length, currentSize, allLines.length);
           continue;
         }
 
         if (!ollamaUp) {
-          // Save to pending for later processing
           const pendingChunks = chunks.map(c => ({ text: c, source: filePath, project: projectDir }));
           await savePending(pendingChunks);
           totalIngested += chunks.length;
@@ -347,11 +375,15 @@ async function ingestSessions() {
           fileIngested++;
         }
 
-        db.prepare("INSERT OR IGNORE INTO ingest_log (file_path, chunks_count) VALUES (?, ?)").run(filePath, fileIngested);
+        const totalChunks = (prev?.chunks_count ?? 0) + fileIngested;
+        db.prepare("INSERT INTO ingest_log (file_path, chunks_count, file_size, lines_ingested) VALUES (?, ?, ?, ?) ON CONFLICT(file_path) DO UPDATE SET chunks_count=?, file_size=?, lines_ingested=?, ingested_at=datetime('now')")
+          .run(filePath, totalChunks, currentSize, allLines.length, totalChunks, currentSize, allLines.length);
         totalIngested += fileIngested;
 
         if (fileIngested > 0) {
-          console.log(`  ${file}: ${fileIngested} chunks`);
+          const label = prev ? '(delta)' : '(new)';
+          console.log(`  ${file} ${label}: ${fileIngested} chunks`);
+          if (prev) totalDelta++;
         }
       } catch (err) {
         totalErrors++;
@@ -360,7 +392,7 @@ async function ingestSessions() {
     }
   }
 
-  console.log(`\nDone: ${totalIngested} ingested, ${totalSkipped} skipped (already done), ${totalErrors} errors`);
+  console.log(`\nDone: ${totalIngested} ingested${totalDelta > 0 ? ` (${totalDelta} delta updates)` : ''}, ${totalSkipped} skipped, ${totalErrors} errors`);
 }
 
 // Run CLI if called directly

@@ -76,7 +76,7 @@ export async function context(targetPath: string) {
   console.log(`${COLORS.bold}        REX CONTEXT${COLORS.reset}`)
   console.log(`${line}\n`)
 
-  const absPath = join(process.cwd(), targetPath === '.' ? '' : targetPath)
+  const absPath = targetPath.startsWith('/') ? targetPath : join(process.cwd(), targetPath === '.' ? '' : targetPath)
   const projectName = basename(absPath)
 
   console.log(`  ${COLORS.cyan}Project:${COLORS.reset} ${projectName}`)

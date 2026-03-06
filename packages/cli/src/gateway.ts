@@ -802,6 +802,105 @@ async function askQwen(prompt: string): Promise<string> {
   return truncate(out)
 }
 
+/** Streaming Qwen via Ollama /api/chat — sends progressive edits to Telegram */
+async function askQwenStream(token: string, chatId: string, prompt: string): Promise<string> {
+  try {
+    const check = await fetch(`${OLLAMA_URL}/api/tags`)
+    if (!check.ok) return '⚠️ Ollama not running.'
+  } catch {
+    return '⚠️ Ollama not running.'
+  }
+
+  // Detect model
+  let model = 'qwen3.5:4b'
+  try {
+    const tags = await fetch(`${OLLAMA_URL}/api/tags`)
+    const data = (await tags.json()) as { models: Array<{ name: string }> }
+    const names = data.models.map(m => m.name)
+    for (const pref of ['qwen3.5:9b', 'qwen3.5:4b', 'qwen2.5:1.5b']) {
+      const base = pref.split(':')[0]
+      const match = names.find(n => n.includes(base))
+      if (match) { model = match; break }
+    }
+  } catch {}
+
+  // Send initial "thinking" message to get message_id for edits
+  const initMsg = await tg(token, 'sendMessage', {
+    chat_id: chatId,
+    text: '🧠 _Qwen thinking..._',
+    parse_mode: 'Markdown',
+  }) as { result?: { message_id: number } }
+  const msgId = initMsg?.result?.message_id
+  if (!msgId) return '⚠️ Failed to send initial message'
+
+  const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      stream: true,
+    }),
+  })
+
+  if (!res.ok || !res.body) {
+    await editMessage(token, chatId, msgId, '⚠️ Ollama stream failed')
+    return '⚠️ Ollama stream failed'
+  }
+
+  let full = ''
+  let lastEdit = 0
+  const EDIT_INTERVAL = 800 // ms between edits (Telegram rate limit)
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          const chunk = JSON.parse(line) as { message?: { content?: string }; done?: boolean }
+          if (chunk.message?.content) {
+            full += chunk.message.content
+          }
+        } catch {}
+      }
+
+      // Progressive edit with rate limiting
+      const now = Date.now()
+      if (full.length > 0 && now - lastEdit > EDIT_INTERVAL) {
+        const display = full.length > 4000 ? full.slice(-4000) : full
+        try {
+          await editMessage(token, chatId, msgId, `🧠 ${display}`)
+        } catch {}
+        lastEdit = now
+      }
+    }
+  } catch {}
+
+  // Final edit with complete text
+  const finalText = truncate(full || '⚠️ Empty response')
+  try {
+    await editMessage(token, chatId, msgId, `🧠 ${finalText}`, [
+      [
+        { text: 'Mode: qwen', callback_data: 'switch_mode' },
+        { text: '◀️ Menu', callback_data: 'menu' },
+      ]
+    ])
+  } catch {}
+
+  return finalText
+}
+
 async function askClaude(prompt: string): Promise<string> {
   try {
     // Use Claude Code CLI in print mode for single-shot queries
@@ -1485,6 +1584,30 @@ async function handleText(token: string, chatId: string, text: string, from: str
     return
   }
 
+  if (cmd.startsWith('/chat ')) {
+    const userMsg = text.replace(/^\/chat\s+/i, '').trim()
+    if (!userMsg) {
+      await send(token, chatId, 'Usage: `/chat <message>` — Talk to the REX Orchestrator')
+      return
+    }
+    await send(token, chatId, '🧠 _Orchestrator thinking..._')
+    // Route to orchestrator agent or fallback to Claude session
+    try {
+      const out = truncate(strip(runRex(['agents', 'run', 'orchestrator', '--task', userMsg, '--once'], 180000)), 3500)
+      await send(token, chatId, `🧠 *Orchestrator*\n${out}`, [
+        [{ text: '💬 Continue', callback_data: 'menu' }],
+      ])
+    } catch {
+      // Fallback: direct Claude session if no orchestrator agent exists
+      const response = await claudeSession(userMsg)
+      await send(token, chatId, `🤖 *Claude*\n${response}`, [
+        [{ text: '💬 Continue', callback_data: 'menu' }],
+      ])
+    }
+    logCommand(from, `/chat ${userMsg.slice(0, 50)}`, 'orchestrator')
+    return
+  }
+
   if (cmd === '/mcp') {
     await send(token, chatId, renderMcpSummary(), mcpMenu())
     logCommand(from, '/mcp', 'listed')
@@ -1534,29 +1657,44 @@ async function handleText(token: string, chatId: string, text: string, from: str
 
   // Free text -> send to current LLM
   if (text.length > 2) {
-    const modeLabel = state.mode === 'qwen' ? '🧠 Qwen' : '🤖 Claude'
-    await send(token, chatId, `${modeLabel} _thinking..._`)
     state.lastActivity = new Date().toISOString()
     saveState(state)
 
     let response: string
-    if (state.mode === 'claude') {
-      response = await claudeSession(text)
+    if (state.mode === 'qwen') {
+      // Streaming mode for Qwen — sends progressive edits
+      response = await askQwenStream(token, chatId, text)
     } else {
-      response = await askLLM(text)
+      await send(token, chatId, '🤖 Claude _thinking..._')
+      response = await claudeSession(text)
+      await send(token, chatId, response, [
+        [
+          { text: 'Mode: claude', callback_data: 'switch_mode' },
+          { text: '💬 Continue', callback_data: 'claude_continue' },
+        ]
+      ])
     }
 
-    await send(token, chatId, response, [
-      [
-        { text: `Mode: ${state.mode}`, callback_data: 'switch_mode' },
-        { text: state.mode === 'claude' ? '💬 Continue' : '◀️ Menu', callback_data: state.mode === 'claude' ? 'claude_continue' : 'menu' },
-      ]
-    ])
     logCommand(from, text.slice(0, 80), response.slice(0, 100))
     return
   }
 
   await send(token, chatId, '🦖 *REX*\nEnvoie un message ou appuie sur Menu :', mainMenu())
+}
+
+// --- Dedup guard (prevents double processing of same update) ---
+const processedUpdateIds = new Set<number>()
+const MAX_PROCESSED_IDS = 500
+
+function markProcessed(updateId: number): boolean {
+  if (processedUpdateIds.has(updateId)) return false // already processed
+  processedUpdateIds.add(updateId)
+  // Keep set bounded
+  if (processedUpdateIds.size > MAX_PROCESSED_IDS) {
+    const oldest = processedUpdateIds.values().next().value
+    if (oldest !== undefined) processedUpdateIds.delete(oldest)
+  }
+  return true
 }
 
 // --- Main loop ---
@@ -1640,6 +1778,9 @@ export async function gateway() {
 
       for (const update of data.result) {
         offset = update.update_id + 1
+
+        // Dedup guard — skip if already processed
+        if (!markProcessed(update.update_id)) continue
 
         // Handle callback (button press)
         if (update.callback_query) {

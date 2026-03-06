@@ -1,6 +1,6 @@
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 
-const PREFERRED_MODELS = ['qwen3.5:9b', 'qwen3.5:4b', 'qwen2.5:1.5b', 'llama3.2', 'mistral']
+const PREFERRED_MODELS = ['qwen2.5:1.5b', 'qwen3.5:4b', 'llama3.2', 'mistral']
 
 export async function detectModel(): Promise<string> {
   if (process.env.REX_LLM_MODEL) return process.env.REX_LLM_MODEL
@@ -29,6 +29,7 @@ export async function llm(prompt: string, system?: string, model?: string): Prom
       prompt,
       system,
       stream: false,
+      keep_alive: '30s',
     }),
   })
 

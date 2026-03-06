@@ -1,61 +1,75 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
-    show CircularProgressIndicator, AlwaysStoppedAnimation, Divider;
-import 'package:macos_ui/macos_ui.dart';
+    show CircularProgressIndicator, AlwaysStoppedAnimation;
 import 'package:provider/provider.dart';
 import '../services/rex_service.dart';
+import '../theme.dart';
+import '../widgets/rex_page_layout.dart';
 
-class HealthPage extends StatelessWidget {
+class HealthPage extends StatefulWidget {
   const HealthPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MacosScaffold(
-      toolBar: ToolBar(
-        title: const Text('Health'),
-        titleWidth: 150,
-        actions: [
-          ToolBarIconButton(
-            label: 'Refresh',
-            icon: const MacosIcon(CupertinoIcons.refresh),
-            onPressed: () => context.read<RexService>().runDoctor(),
-            showLabel: false,
-          ),
-        ],
-      ),
-      children: [
-        ContentArea(
-          builder: (context, scrollController) {
-            return Consumer<RexService>(
-              builder: (context, rex, _) {
-                if (rex.isLoading && rex.healthGroups.isEmpty) {
-                  return const Center(child: ProgressCircle());
-                }
+  State<HealthPage> createState() => _HealthPageState();
+}
 
-                return ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    // Status banner
-                    _StatusBanner(
-                      status: rex.healthStatus,
-                      groups: rex.healthGroups,
-                    ),
-                    const SizedBox(height: 20),
-                    // Check groups
-                    ...rex.healthGroups.map(
-                      (group) => _CheckGroupCard(group: group),
-                    ),
-                    const SizedBox(height: 20),
-                    // Quick actions
-                    _QuickActions(),
-                  ],
-                );
-              },
-            );
+class _HealthPageState extends State<HealthPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<RexService>().loadBackgroundProcesses();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RexPageLayout(
+      title: 'Health',
+      actions: [
+        RexHeaderButton(
+          icon: CupertinoIcons.refresh,
+          label: 'Refresh',
+          onPressed: () {
+            context.read<RexService>().runDoctor();
+            context.read<RexService>().loadBackgroundProcesses();
           },
         ),
       ],
+      builder: (context, scrollController) {
+        return Consumer<RexService>(
+          builder: (context, rex, _) {
+            if (rex.isLoading && rex.healthGroups.isEmpty) {
+              return const Center(child: CupertinoActivityIndicator());
+            }
+
+            return ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.all(20),
+              children: [
+                // Status banner
+                _StatusBanner(
+                  status: rex.healthStatus,
+                  groups: rex.healthGroups,
+                ),
+                const SizedBox(height: 20),
+                // Background processes
+                if (rex.backgroundProcesses.isNotEmpty) ...[
+                  _ProcessesSection(processes: rex.backgroundProcesses),
+                  const SizedBox(height: 20),
+                ],
+                // Check groups
+                ...rex.healthGroups.map(
+                  (group) => _CheckGroupCard(group: group),
+                ),
+                const SizedBox(height: 20),
+                // Quick actions
+                _QuickActions(),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -114,7 +128,10 @@ class _StatusBanner extends StatelessWidget {
               ),
               Text(
                 '$passed/$total checks passed',
-                style: MacosTheme.of(context).typography.subheadline,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.rex.textSecondary,
+                ),
               ),
             ],
           ),
@@ -134,9 +151,10 @@ class _StatusBanner extends StatelessWidget {
                 ),
                 Text(
                   total > 0 ? '${(passed / total * 100).round()}%' : '-',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
+                    color: context.rex.text,
                   ),
                 ),
               ],
@@ -159,13 +177,9 @@ class _CheckGroupCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
         decoration: BoxDecoration(
-          color: MacosTheme.of(context).canvasColor,
+          color: context.rex.surfaceSecondary,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: MacosTheme.brightnessOf(context) == Brightness.dark
-                ? const Color(0xFF333333)
-                : const Color(0xFFE5E5E5),
-          ),
+          border: Border.all(color: context.rex.separator),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,13 +188,14 @@ class _CheckGroupCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Row(
                 children: [
-                  Text(group.icon, style: const TextStyle(fontSize: 16)),
+                  Text(group.icon, style: TextStyle(fontSize: 16, color: context.rex.text)),
                   const SizedBox(width: 8),
                   Text(
                     group.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
+                      color: context.rex.text,
                     ),
                   ),
                   const Spacer(),
@@ -197,7 +212,7 @@ class _CheckGroupCard extends StatelessWidget {
                 ],
               ),
             ),
-            const Divider(height: 1),
+            Container(height: 0.5, color: context.rex.separator),
             ...group.results.map((result) => _CheckResultRow(result: result)),
           ],
         ),
@@ -235,18 +250,148 @@ class _CheckResultRow extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 8),
-          Text(result.name, style: const TextStyle(fontSize: 13)),
+          Text(result.name, style: TextStyle(fontSize: 13, color: context.rex.text)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               result.message,
               style: TextStyle(
                 fontSize: 12,
-                color: MacosTheme.of(context).typography.subheadline.color,
+                color: context.rex.textSecondary,
               ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProcessesSection extends StatelessWidget {
+  final List<BackgroundProcess> processes;
+  const _ProcessesSection({required this.processes});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.rex;
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surfaceSecondary,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: c.separator),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Icon(CupertinoIcons.gear_alt, size: 14, color: c.text),
+                const SizedBox(width: 8),
+                Text(
+                  'Background Processes',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: c.text,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${processes.where((p) => p.running).length}/${processes.length} active',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: processes.every((p) => p.running)
+                        ? CupertinoColors.systemGreen
+                        : CupertinoColors.systemOrange,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(height: 0.5, color: c.separator),
+          ...processes.map((proc) => _ProcessRow(proc: proc)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProcessRow extends StatelessWidget {
+  final BackgroundProcess proc;
+  const _ProcessRow({required this.proc});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.rex;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: proc.running
+                  ? CupertinoColors.systemGreen
+                  : CupertinoColors.systemRed,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: (proc.running
+                          ? CupertinoColors.systemGreen
+                          : CupertinoColors.systemRed)
+                      .withAlpha(60),
+                  blurRadius: 4,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  proc.label,
+                  style: TextStyle(fontSize: 13, color: c.text),
+                ),
+                if (proc.pid != null)
+                  Text(
+                    'PID ${proc.pid}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontFamily: 'Menlo',
+                      color: c.textTertiary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (!proc.running)
+            GestureDetector(
+              onTap: () => context.read<RexService>().restartProcess(proc.name),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: c.accent.withAlpha(15),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: c.accent.withAlpha(40)),
+                ),
+                child: Text(
+                  'Start',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: c.accent,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -305,21 +450,17 @@ class _ActionCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: MacosTheme.of(context).canvasColor,
+          color: context.rex.surfaceSecondary,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: MacosTheme.brightnessOf(context) == Brightness.dark
-                ? const Color(0xFF333333)
-                : const Color(0xFFE5E5E5),
-          ),
+          border: Border.all(color: context.rex.separator),
         ),
         child: Column(
           children: [
-            Icon(icon, size: 24, color: const Color(0xFF6366F1)),
+            Icon(icon, size: 24, color: context.rex.accent),
             const SizedBox(height: 6),
             Text(
               label,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: context.rex.text),
             ),
           ],
         ),

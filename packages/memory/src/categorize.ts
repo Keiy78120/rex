@@ -49,6 +49,7 @@ async function classifyWithQwen(chunk: string): Promise<{ category: Category; su
         model: await detectClassifyModel(),
         prompt: CLASSIFY_PROMPT(chunk),
         stream: false,
+        keep_alive: '30s',
         options: { temperature: 0.3, num_ctx: 4096 },
       }),
       signal: AbortSignal.timeout(15000),
@@ -258,10 +259,9 @@ ${chunks.map((c, i) => `[${i + 1}] ${c.slice(0, 300)}`).join('\n\n')}
 Produis une mémoire consolidée en 2-4 phrases qui capture l'essentiel.
 Sois factuel, concis, technique. Réponds UNIQUEMENT avec la synthèse, sans introduction.`
 
-// For consolidation we prefer fast/small models (not max quality)
-const PREFERRED_MODELS = ['qwen2.5:1.5b', 'qwen3.5:4b', 'qwen3.5:latest', 'qwen3.5:9b', 'llama3.2', 'mistral']
-// For categorization we prefer smarter models (accuracy > speed)
-const CLASSIFY_MODELS = ['qwen3.5:9b', 'qwen3.5:latest', 'qwen3.5:4b', 'qwen2.5:1.5b', 'llama3.2', 'mistral']
+// Background tasks: prefer small/fast models to avoid CPU drain
+const PREFERRED_MODELS = ['qwen2.5:1.5b', 'qwen3.5:4b', 'llama3.2', 'mistral']
+const CLASSIFY_MODELS = ['qwen2.5:1.5b', 'qwen3.5:4b', 'llama3.2', 'mistral']
 
 let _classifyModel: string | null = null
 
@@ -312,6 +312,7 @@ async function summarizeCluster(chunks: string[], _modelHint: string): Promise<s
         model,
         prompt: CONSOLIDATE_PROMPT(chunks),
         stream: false,
+        keep_alive: '30s',
         options: { temperature: 0.3, num_ctx: 4096 },
       }),
       signal: AbortSignal.timeout(60000),
