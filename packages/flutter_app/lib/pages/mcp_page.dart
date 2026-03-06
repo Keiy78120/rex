@@ -109,11 +109,6 @@ class _McpPageState extends State<McpPage> {
     setState(() => _statusMessage = out);
   }
 
-  Future<void> _discover(String id) async {
-    final out = await context.read<RexService>().discoverMcp(id);
-    setState(() => _statusMessage = out);
-  }
-
   @override
   Widget build(BuildContext context) {
     return RexPageLayout(

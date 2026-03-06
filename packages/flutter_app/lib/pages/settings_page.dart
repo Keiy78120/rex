@@ -971,7 +971,6 @@ class _FilesTab extends StatefulWidget {
 class _FilesTabState extends State<_FilesTab> {
   List<Map<String, String>> _files = [];
   int _selectedIndex = 0;
-  String _content = '';
   bool _loading = false;
   bool _saving = false;
   bool _saved = false;
@@ -1001,7 +1000,6 @@ class _FilesTabState extends State<_FilesTab> {
         widget.rex.readFile(path) ??
         '# File not found: $path\n\nCreate it with your desired content.';
     setState(() {
-      _content = content;
       _editorCtrl.text = content;
       _loading = false;
     });

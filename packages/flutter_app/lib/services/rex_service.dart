@@ -643,16 +643,22 @@ $transcript
   Future<String> installWhisper() async {
     isLoading = true;
     notifyListeners();
-    final env = Map<String, String>.from(Platform.environment);
-    env['PATH'] =
-        '/opt/homebrew/bin:/usr/local/bin:${Platform.environment['HOME']}/.pyenv/shims:${env['PATH'] ?? ''}';
-    final result = await Process.run('pip3', [
-      'install',
-      'openai-whisper',
-    ], environment: env).timeout(const Duration(seconds: 120));
-    isLoading = false;
-    await checkWhisper();
-    return _stripAnsi('${result.stdout}\n${result.stderr}');
+    try {
+      final env = Map<String, String>.from(Platform.environment);
+      env['PATH'] =
+          '/opt/homebrew/bin:/usr/local/bin:${Platform.environment['HOME']}/.pyenv/shims:${env['PATH'] ?? ''}';
+      final result = await Process.run('pip3', [
+        'install',
+        'openai-whisper',
+      ], environment: env).timeout(const Duration(seconds: 120));
+      await checkWhisper();
+      return _stripAnsi('${result.stdout}\n${result.stderr}');
+    } catch (e) {
+      return 'Install failed: $e';
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
   }
 
   // --- Refresh ---
@@ -1052,7 +1058,6 @@ $transcript
     String output = '';
 
     try {
-      final home = Platform.environment['HOME'] ?? '';
       switch (processName) {
         case 'rex gateway':
           // Stop then restart via launchctl
@@ -1660,6 +1665,9 @@ $transcript
       _gatewayProcess = await Process.start('rex', [
         'gateway',
       ], environment: _env);
+      // Drain stdout/stderr to prevent buffer deadlock
+      _gatewayProcess!.stdout.drain<void>();
+      _gatewayProcess!.stderr.drain<void>();
       await Future.delayed(const Duration(seconds: 2));
       await checkGateway();
     } catch (_) {}

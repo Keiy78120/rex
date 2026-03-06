@@ -14,7 +14,6 @@ import 'pages/optimize_page.dart';
 import 'pages/logs_page.dart';
 import 'pages/settings_page.dart';
 import 'widgets/rex_sidebar.dart';
-import 'theme.dart';
 
 void main() {
   runApp(
