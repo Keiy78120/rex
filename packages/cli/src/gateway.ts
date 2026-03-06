@@ -795,7 +795,7 @@ async function askQwen(prompt: string): Promise<string> {
     return '⚠️ Ollama not running. Wake Mac first.'
   }
 
-  const out = run(`rex llm "${prompt.replace(/"/g, '\\"').replace(/`/g, '\\`')}"`, 60000)
+  const out = runRex(['llm', prompt], 60000)
   if (!out || out.includes('rex-claude') || out.includes('Commands:')) {
     return '⚠️ LLM returned no useful response'
   }
@@ -804,17 +804,11 @@ async function askQwen(prompt: string): Promise<string> {
 
 /** Streaming Qwen via Ollama /api/chat — sends progressive edits to Telegram */
 async function askQwenStream(token: string, chatId: string, prompt: string): Promise<string> {
-  try {
-    const check = await fetch(`${OLLAMA_URL}/api/tags`)
-    if (!check.ok) return '⚠️ Ollama not running.'
-  } catch {
-    return '⚠️ Ollama not running.'
-  }
-
-  // Detect model
+  // Single fetch for health check + model detection
   let model = 'qwen3.5:4b'
   try {
     const tags = await fetch(`${OLLAMA_URL}/api/tags`)
+    if (!tags.ok) return '⚠️ Ollama not running.'
     const data = (await tags.json()) as { models: Array<{ name: string }> }
     const names = data.models.map(m => m.name)
     for (const pref of ['qwen3.5:9b', 'qwen3.5:4b', 'qwen2.5:1.5b']) {
@@ -822,7 +816,9 @@ async function askQwenStream(token: string, chatId: string, prompt: string): Pro
       const match = names.find(n => n.includes(base))
       if (match) { model = match; break }
     }
-  } catch {}
+  } catch {
+    return '⚠️ Ollama not running.'
+  }
 
   // Send initial "thinking" message to get message_id for edits
   const initMsg = await tg(token, 'sendMessage', {
@@ -833,6 +829,8 @@ async function askQwenStream(token: string, chatId: string, prompt: string): Pro
   const msgId = initMsg?.result?.message_id
   if (!msgId) return '⚠️ Failed to send initial message'
 
+  const controller = new AbortController()
+  const streamTimeout = setTimeout(() => controller.abort(), 120_000) // 2min max
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -841,6 +839,7 @@ async function askQwenStream(token: string, chatId: string, prompt: string): Pro
       messages: [{ role: 'user', content: prompt }],
       stream: true,
     }),
+    signal: controller.signal,
   })
 
   if (!res.ok || !res.body) {
@@ -885,7 +884,9 @@ async function askQwenStream(token: string, chatId: string, prompt: string): Pro
         lastEdit = now
       }
     }
-  } catch {}
+  } catch {} finally {
+    clearTimeout(streamTimeout)
+  }
 
   // Final edit with complete text
   const finalText = truncate(full || '⚠️ Empty response')
@@ -903,9 +904,7 @@ async function askQwenStream(token: string, chatId: string, prompt: string): Pro
 
 async function askClaude(prompt: string): Promise<string> {
   try {
-    // Use Claude Code CLI in print mode for single-shot queries
-    const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/`/g, '\\`')
-    const out = run(`claude -p "${escapedPrompt}" 2>/dev/null`, 120000)
+    const out = execFileSync('claude', ['-p', prompt], { timeout: 120000, encoding: 'utf-8' }).trim()
     if (out) return truncate(out)
     return '⚠️ Claude CLI not available or returned empty'
   } catch {
@@ -915,9 +914,8 @@ async function askClaude(prompt: string): Promise<string> {
 
 async function claudeSession(prompt: string, resume?: boolean): Promise<string> {
   try {
-    const flag = resume ? '--continue' : ''
-    const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/`/g, '\\`')
-    const out = run(`claude ${flag} -p "${escapedPrompt}" 2>/dev/null`, 180000)
+    const args = resume ? ['--continue', '-p', prompt] : ['-p', prompt]
+    const out = execFileSync('claude', args, { timeout: 180000, encoding: 'utf-8' }).trim()
     state.sessionsCount++
     saveState(state)
     if (out) return truncate(out)

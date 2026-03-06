@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import * as sqliteVec from 'sqlite-vec'
 import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import { embed, embeddingToBuffer } from './embed.js'
 
 const REX_DB = join(process.env.HOME || '~', '.claude', 'rex', 'memory', 'rex.sqlite')
@@ -79,8 +79,7 @@ async function classifyWithQwen(chunk: string): Promise<{ category: Category; su
 async function classifyWithClaude(chunk: string): Promise<{ category: Category; summary: string } | null> {
   try {
     const prompt = CLASSIFY_PROMPT(chunk)
-    const escaped = prompt.replace(/"/g, '\\"').replace(/`/g, '\\`').replace(/\$/g, '\\$')
-    const out = execSync(`claude -p "${escaped}" 2>/dev/null`, {
+    const out = execFileSync('claude', ['-p', prompt], {
       timeout: 30000,
       encoding: 'utf-8',
       env: { ...process.env },

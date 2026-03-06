@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { execSync } from 'node:child_process'
+import { execSync, execFileSync } from 'node:child_process'
 
 type McpType = 'stdio' | 'sse' | 'http'
 
@@ -211,7 +211,7 @@ async function checkServer(args: string[]) {
     }
 
     try {
-      execSync(`which ${server.command}`, { stdio: 'ignore' })
+      execFileSync('which', [server.command], { stdio: 'ignore' })
       console.log(JSON.stringify({ ok: true, type: 'stdio', command: server.command }, null, 2))
     } catch {
       console.log(JSON.stringify({ ok: false, type: 'stdio', reason: `command not found: ${server.command}` }, null, 2))
@@ -494,6 +494,13 @@ async function installFromMarketplace(args: string[]) {
 
   console.log(`Installing ${name}...`)
   console.log(`  $ ${entry.installCmd}\n`)
+
+  // Validate install command starts with a safe prefix
+  const safePrefix = ['npx ', 'npm ', 'pip ', 'pip3 ', 'brew ', 'docker ']
+  if (!safePrefix.some(p => entry.installCmd.startsWith(p))) {
+    console.log(`\n⚠️ Install command rejected (unsafe prefix): ${entry.installCmd}`)
+    return
+  }
 
   try {
     execSync(entry.installCmd, { stdio: 'inherit', timeout: 120_000 })
