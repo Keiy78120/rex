@@ -7,7 +7,7 @@
 - **NE JAMAIS cloner ou travailler sur un autre dossier** (ex: `/_config/rex` est un ancien clone, NE PAS L'UTILISER).
 - Si un autre agent travaille sur REX, il DOIT ouvrir ce repo, pas un clone.
 - `CLAUDE.md` du root de ce repo = seule source de verite. Pas de copie ailleurs.
-- `docs/plans/action.md` = document d'execution one-shot. Il porte les regles operatoires pour lead agent et sous-agents.
+- `docs/plans/action.md` = document d'execution one-shot. Il porte les regles operatoires pour l'agent externe qui construit REX, son lead et ses sous-agents de build.
 - Si une doc secondaire contredit ce fichier ou `action.md`, corriger la doc secondaire.
 
 Ce fichier est le point d'entree rapide pour tout agent (Claude, Codex, Garry) qui travaille sur ce repo.

@@ -9,7 +9,7 @@ Instructions repo-specifiques pour Codex et les agents de code travaillant sur R
 - Repo officiel unique : `/Users/keiy/Documents/Developer/keiy/rex`
 - Ne jamais travailler dans un clone miroir comme `/_config/rex`
 - `CLAUDE.md` racine = source de verite projet, produit et architecture
-- `docs/plans/action.md` = document d'execution one-shot pour une team d'agents
+- `docs/plans/action.md` = document d'execution one-shot pour l'agent externe qui construit REX et sa team de build
 
 Ordre de priorite :
 
@@ -38,6 +38,12 @@ Ordre de priorite :
 ---
 
 ## Regles de travail pour Codex et autres agents
+
+Distinction critique :
+
+- ici, l'agent est un agent externe de build/orchestration
+- il ne doit pas se confondre avec les agents internes du produit REX
+- s'il lit `docs/plans/action.md`, il doit l'interpreter comme guide de construction du projet
 
 Avant un travail non trivial :
 

@@ -1,6 +1,6 @@
 # REX — ACTION
 
-Document unique d'execution pour une team d'agents.
+Document unique d'execution pour une team d'agents externe chargee de construire REX.
 
 Si un user dit seulement :
 
@@ -10,6 +10,12 @@ Lis docs/plans/action.md
 
 ... l'agent doit pouvoir travailler correctement avec ce fichier seul.
 Les autres docs ne servent qu'en profondeur optionnelle.
+
+Distinction critique :
+
+- ce document guide l'agent externe qui construit, corrige et fait evoluer REX
+- il ne decrit pas les agents internes du runtime REX comme role d'execution pour cette session
+- le lead et les sous-agents mentionnes ici sont des agents de build, pas des features produit
 
 Regle de priorite documentaire :
 
@@ -62,7 +68,10 @@ Regle :
 
 - ne pas gaspiller Opus pour du scan simple
 - ne pas donner une orchestration complexe a un modele de lecture rapide
-- le lead agent pense en Opus, les executants codent surtout en Sonnet, la collecte rapide peut etre faite en Haiku
+- le lead build agent pense en Opus, les executants codent surtout en Sonnet, la collecte rapide peut etre faite en Haiku
+- Opus = lead seulement par defaut
+- Sonnet = implementation par defaut
+- Haiku = scouting par defaut
 
 Mode degrade si tous les modeles ne sont pas disponibles :
 
@@ -70,6 +79,15 @@ Mode degrade si tous les modeles ne sont pas disponibles :
 - **pas de Sonnet** : Opus peut executer des changements codes scopes et plus petits
 - **pas d'Opus** : le lead passe en Sonnet avec verification finale plus stricte
 - **un seul modele disponible** : garder la meme separation mentale en sous-taches, mais avec un seul executant
+
+Discipline tokens :
+
+- une seule passe de scouting rapide au debut
+- pas de relecture complete du repo par chaque sous-agent
+- un sous-agent ne lit que `docs/plans/action.md` et les fichiers de son scope
+- seul le lead ouvre les docs optionnelles si necessaire
+- pas plus d'un sous-agent de search/scan en parallele sans justification
+- preferer 2 sous-agents bien scopes plutot que 5 agents redondants
 
 ---
 
@@ -86,29 +104,32 @@ Mode degrade si tous les modeles ne sont pas disponibles :
 9. **Une seule API REX** pour app, gateway, CLI et dashboard distant
 10. **Scripts/runbooks avant repetition manuelle**
 11. **Chaque sous-agent commence par un resume interne** : mission, fichiers, contraintes, verification, hypothese retenue
+12. **L'agent externe ne joue jamais le role d'un agent interne de REX** : il construit le produit, il ne simule pas son runtime
 
 ---
 
 ## 5. Ce que l'agent doit faire en premier
 
 1. verifier le repo et le chemin
-2. identifier si la tache est surtout backend, frontend, docs/sources, ou install/deploy
-3. choisir la team minimale utile
-4. decouper en sous-taches simples
-5. attribuer les fichiers par sous-agent
-6. demander a chaque sous-agent un resume interne court avant execution
-7. implementer
-8. verifier
-9. resumer ce qui a ete change
+2. se rappeler qu'il agit comme agent externe de build, pas comme agent runtime de REX
+3. identifier si la tache est surtout backend, frontend, docs/sources, ou install/deploy
+4. choisir la team minimale utile
+5. faire une seule passe courte de scouting si necessaire
+6. decouper en sous-taches simples
+7. attribuer les fichiers par sous-agent
+8. demander a chaque sous-agent un resume interne court avant execution
+9. implementer
+10. verifier
+11. resumer ce qui a ete change
 
 Pas de derapage en exploration infinie.
 Pas de "points a clarifier" si une hypothese raisonnable permet d'avancer.
 
 ---
 
-## 6. Teams et roles
+## 6. Teams et roles de build
 
-### Lead Agent
+### Lead Build Agent
 
 Responsable de :
 
@@ -117,8 +138,9 @@ Responsable de :
 - attribuer les sous-taches
 - faire la coherence finale
 - faire la verification finale
+- rester a l'exterieur du runtime produit
 
-### Agent-Team-Backend
+### Build-Team-Backend
 
 A utiliser pour :
 
@@ -143,7 +165,7 @@ Sous-agents possibles :
 - Agent-Sync
 - Agent-MCP
 
-### Agent-Team-Frontend
+### Build-Team-Frontend
 
 A utiliser pour :
 
@@ -160,7 +182,7 @@ Sous-agents possibles :
 - Agent-UX
 - Agent-Design-System
 
-### Agent-Team-Docs
+### Build-Team-Docs
 
 A utiliser pour :
 
@@ -427,17 +449,18 @@ Ne pas ouvrir ces docs si ce fichier suffit a executer proprement la tache.
 ## 16. Prompt minimal recommande
 
 ```text
-Lis docs/plans/action.md et execute en respectant exactement ses roles, ses invariants, ses fallbacks et ses verifications.
+Tu es l'agent externe charge de construire REX. Tu ne fais pas partie du runtime du produit. Lis docs/plans/action.md et execute en respectant exactement ses roles, ses invariants, ses fallbacks et ses verifications.
 ```
 
 ---
 
-## 17. Prompt Lead Agent
+## 17. Prompt Lead Build Agent
 
 Prompt recommande pour lancer le lead :
 
 ```text
-Tu es le lead agent sur REX.
+Tu es le lead build agent charge de construire et faire evoluer le projet REX.
+Tu ne fais pas partie du runtime de REX.
 Lis docs/plans/action.md et travaille a partir de ce fichier comme document unique d'execution.
 
 Respecte exactement :
@@ -447,6 +470,11 @@ Respecte exactement :
 - la logique de continuity / no-loss
 - l'ordre owned-first, free-first, payant en dernier
 - CLI avant MCP avant API
+- Opus = orchestration et verification, pas scan massif
+- Sonnet = implementation
+- Haiku = scouting rapide
+- team minimale utile seulement
+- pas de relecture complete du repo par chaque sous-agent
 
 Ta mission :
 1. identifier le bon type de team
@@ -462,12 +490,13 @@ Pas de plan abstrait inutile. Pas de points a clarifier si une hypothese raisonn
 
 ---
 
-## 18. Prompt Sub Agent
+## 18. Prompt Sub Build Agent
 
 Prompt recommande pour lancer un sous-agent :
 
 ```text
-Tu es un sous-agent sur REX.
+Tu es un sous-agent externe charge de construire une partie de REX.
+Tu ne fais pas partie du runtime de REX.
 Lis docs/plans/action.md et suis uniquement les instructions et references utiles a ton scope.
 
 Commence par te faire un resume court pour toi-meme :
@@ -486,6 +515,9 @@ Regles :
 - CLI avant MCP avant API
 - ne rien perdre : preserve, spool, replay
 - si un OSS gere deja la couche bas niveau, integre-le au lieu de le reimplementer
+- ne relis pas tout le repo
+- ne lis que `action.md` et les fichiers de ton scope
+- si ton scope est purement code, ne pars pas en audit global
 
 Si tu touches du runtime, produis une verification concrete.
 Si tu touches seulement la doc, dis explicitement que build/tests n'ont pas ete relances.
