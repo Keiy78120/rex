@@ -1,110 +1,210 @@
 <h1 align="center">REX</h1>
 
 <p align="center">
-  <strong>Claude Code sous steroides</strong><br>
-  Installe, oublie, Claude Code fait moins de conneries.
+  <strong>Your always-on dev assistant.</strong><br>
+  Talk to Claude from Telegram · Local memory RAG · Smart guards · macOS app
 </p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/rex-claude"><img src="https://img.shields.io/npm/v/rex-claude?color=blue&label=npm" alt="npm" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="license" /></a>
-  <img src="https://img.shields.io/badge/zero_deps-black" alt="zero deps" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT" /></a>
+  <img src="https://img.shields.io/badge/platform-macOS-black" alt="macOS" />
+  <img src="https://img.shields.io/badge/Claude_Code-compatible-purple" alt="Claude Code" />
 </p>
 
 ---
 
-## C'est quoi ?
+## What is REX?
 
-Claude Code est puissant mais fait toujours les memes erreurs. REX ajoute des **gardes automatiques** qui surveillent Claude en arriere-plan et l'empechent de faire n'importe quoi.
+REX wraps your Claude Code workflow with automation that runs 24/7:
 
-**En une phrase :** REX = un filet de securite pour Claude Code.
+| Layer | What it does |
+|-------|-------------|
+| **Telegram Gateway** | Talk to Claude or Qwen from your phone, switch models on the fly |
+| **Memory RAG** | Every session indexed — search your own work with semantic search |
+| **Smart Guards** | Prevent Claude from committing to `main`, writing insecure code, or declaring "done" too early |
+| **Design Skills** | UX flows, premium visual execution, and accessibility audits built into Claude |
+| **macOS Native App** | Flutter UI for health, memory, gateway, and voice |
+
+---
 
 ## Install
 
 ```bash
 npm install -g rex-claude
-rex install
+rex init
+rex setup
 ```
 
-C'est tout. Tout est automatique apres ca.
+Guards, hooks, skills, and LaunchAgents install automatically.
 
-## Ce que REX fait
+---
 
-### Il empeche Claude de faire des betises
+## Telegram Gateway
 
-| Garde | Ce qu'il fait |
-|-------|--------------|
-| **Completion** | Empeche Claude de dire "done" quand il reste des TODO ou des fonctions vides |
-| **Dangerous Command** | Bloque les commandes dangereuses (`rm -rf`, `git push --force main`) |
-| **Test Protector** | Alerte quand Claude modifie les tests au lieu de fixer le code |
-| **UI Checklist** | Verifie que chaque composant gere le loading, l'erreur et le vide |
-| **Scope Guard** | Alerte quand Claude touche trop de fichiers (> 8) |
-| **Session Summary** | Sauvegarde l'etat du travail a chaque fin de session |
+Control your entire dev environment from your phone.
 
-### Il surveille ta config
+```
+/claude <prompt>  → Ask Claude (streams with animated progress)
+/qwen <prompt>    → Ask local Qwen (streaming, think-blocks filtered)
+/models           → Switch model live (Haiku · Sonnet · Opus / Qwen 1.5b · 4b · 9b)
+/memory <query>   → Semantic search over all your sessions
+/notifs           → Browse task notifications by project
+/status           → Full health check in one tap
+```
+
+Start it:
 
 ```bash
-rex doctor    # 55 checks, 9 categories
-rex status    # une ligne rapide
+rex gateway
+# or let the LaunchAgent keep it alive automatically
 ```
 
-### Il se souvient de tout (optionnel)
+**Model switching** — flip between Claude Haiku / Sonnet / Opus and local Qwen models without leaving Telegram. Preferences persist across restarts.
 
-Avec [Ollama](https://ollama.ai), REX transforme tes sessions Claude Code en base de connaissances searchable :
+**Silent notifications** — task completions are stored, never spam your chat. Browse with `/notifs`, filter by project, mark as read.
+
+---
+
+## Memory
+
+Every Claude Code session becomes searchable knowledge.
 
 ```bash
-rex ingest                              # indexe tes sessions
-rex search "comment j'ai fix le bug X"  # recherche semantique
+rex ingest                              # index latest sessions
+rex categorize                          # auto-tag by topic (Qwen or Claude)
+rex search "how did I fix the auth bug" # semantic vector search
 ```
 
-### Il tourne tout seul
+Powered by **Ollama** + `nomic-embed-text` + SQLite. Runs fully local, no cloud.
 
-- Health check toutes les heures (LaunchAgent macOS)
-- Auto-ingest des sessions toutes les heures
-- Gateway Telegram + call watcher au demarrage du Mac
+Auto-ingest runs every hour via LaunchAgent — zero maintenance.
 
-## Commandes
+---
 
-| Commande | Description |
-|----------|-------------|
-| `rex install` | One-command install (init + setup + audit) |
-| `rex init` | Setup complet (gardes, hooks, LaunchAgents) |
-| `rex setup --yes` | Setup non-interactif (deps + Ollama + models) |
-| `rex audit` | Audit d'integration des fonctionnalites |
-| `rex doctor` | Health check detaille |
-| `rex status` | Status en une ligne |
-| `rex startup` | Installer le demarrage auto |
-| `rex startup-remove` | Retirer le demarrage auto |
-| `rex ingest` | Indexer les sessions (Ollama) |
-| `rex search <query>` | Recherche semantique (Ollama) |
-| `rex optimize` | Analyser CLAUDE.md (Ollama) |
-| `rex call status` | Etat detection d'appel (Hammerspoon) |
-| `rex call watch` | Auto start/stop audio logger sur event d'appel |
-| `rex voice transcribe` | Transcrire le dernier WAV (whisper-cli) |
-| `rex voice set-optimize on/off` | Activer l'optimisation prompt post-transcription |
-| `rex audio start/stop` | Controle enregistrement audio (ffmpeg) |
+## Smart Guards
+
+Hooks that run on every Claude action, silently in the background:
+
+| Guard | What it catches |
+|-------|----------------|
+| **Completion** | Saying "done" with TODO / empty functions left |
+| **Dangerous Command** | `rm -rf`, `git push --force main`, irreversible ops |
+| **Test Protector** | Touching tests instead of fixing code |
+| **Scope Guard** | Too many files modified without context (>8) |
+| **Session Summary** | Saves work state + last commit at end of every session |
+
+---
+
+## Design Skills
+
+Three skills that upgrade Claude's UI/UX quality across all projects:
+
+### `/ux-flow` — Before you build
+Maps the full user experience before writing code. Forces:
+- All states: loading · empty · error · success · partial
+- Progressive disclosure and onboarding flows
+- Edge cases: overflow, offline, permissions, double-submit
+- Feedback timing: <100ms tap response, <300ms loader threshold
+
+### `/ui-craft` — While you build
+Premium visual execution. Enforces:
+- Visual hierarchy — one dominant element per section
+- 4px spatial grid — consistent spacing throughout
+- Typography scale — xs to 4xl, never arbitrary sizes
+- WCAG AA contrast, focus states, accessible colors
+- Motion rules — 200ms max, purposeful only
+
+### `/ui-review` — After you build
+Systematic audit on finished components. Read-only, always reports `file:line`:
+- Visual hierarchy and competing weights
+- Missing states (empty, error, loading, disabled)
+- Accessibility: ARIA, keyboard nav, focus indicators, contrast
+- Responsive: 375px / 768px / 1280px breakpoints
+- Component composition: tokens vs hardcoded, no inline styles
+- Performance signals: unbounded lists, layout shifts
+
+**The loop:** `ux-flow` → build with `ui-craft` → ship → `ui-review`
+
+These install automatically with `rex init` and activate in any Claude Code project.
+
+---
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `rex init` | Install guards, hooks, skills, LaunchAgents |
+| `rex setup` | Install Ollama deps and models |
+| `rex doctor` | Full health check (55+ checks, 9 categories) |
+| `rex status` | One-line status |
+| `rex gateway` | Start Telegram bot |
+| `rex ingest` | Index Claude Code sessions |
+| `rex categorize` | Auto-tag memories by topic |
+| `rex search <query>` | Semantic search over sessions |
+| `rex optimize` | Analyze and improve your CLAUDE.md |
+| `rex context` | Project context snapshot |
+| `rex skills list` | List all installed skills |
+
+---
 
 ## Architecture
 
 ```
-rex-claude (npm, 12KB, zero deps)
-├── 6 gardes bash          ~/.claude/rex-guards/
-├── 9 categories de checks  rex doctor
-├── 4 LaunchAgents          health + ingest + gateway + call-watch
-└── hooks Claude Code       SessionStart/End, Stop, PreToolUse, PostToolUse
+rex-claude (npm, ~90KB)
+├── packages/cli/          TypeScript CLI
+│   ├── src/gateway.ts     Telegram bot (Qwen stream · Claude async · model switching)
+│   ├── src/ingest.ts      Session indexer (pending/ + lockfile + throttling)
+│   ├── src/skills.ts      Skills system
+│   └── src/guards/        6 bash guards hooked into Claude Code
+├── packages/core/         Shared health checks (rex doctor)
+└── packages/flutter_app/  macOS native app
+    └── 9 pages: Health · Memory · Gateway · Voice · Optimize · Settings
 
-rex-app (Flutter, macOS)
-├── UI desktop              health + memory + gateway + optimize
-└── voice/audio             call detection + audio logger (Hammerspoon + ffmpeg)
+~/.claude/
+├── rex-guards/            Bash guards (SessionStart, Stop, PreToolUse)
+├── skills/                Skills auto-installed by rex init
+│   ├── ux-flow/           UX flow mapping skill
+│   ├── ui-craft/          Visual execution skill
+│   └── ui-review/         Accessibility + quality audit skill
+└── rules/                 Custom rules loaded per-project
+
+~/.rex-memory/
+├── rex-memory.db          SQLite + sqlite-vec embeddings
+└── notifications.json     Silent notification queue (max 500)
+
+~/Library/LaunchAgents/
+├── com.dstudio.rex-doctor.plist   Health check every hour
+├── com.dstudio.rex-ingest.plist   Session ingest every hour
+└── com.dstudio.rex-gateway.plist  Telegram bot (KeepAlive)
 ```
 
-## Prerequis
+---
 
-- Node.js 20+
-- Claude Code
-- macOS ou Linux
+## Notifications
 
-**Optionnel :** Ollama + `nomic-embed-text` pour la memoire
+REX never spams your Telegram chat. Task completions store silently:
+
+```bash
+bash ~/notify-telegram.sh -p my-project "Deploy done" "3 files changed"
+```
+
+Browse in Telegram with `/notifs` — filter by project, mark as read.
+
+---
+
+## Prerequisites
+
+- **Node.js 20+**
+- **Claude Code** (`claude` CLI)
+- **macOS** (Linux partial support)
+
+**Optional for memory and local chat:**
+- Ollama
+- `nomic-embed-text` (embeddings)
+- `qwen2.5:1.5b` or `qwen3.5:9b` (local chat)
+
+---
 
 ## License
 

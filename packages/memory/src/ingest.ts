@@ -114,9 +114,19 @@ export function getDb(): Database.Database {
     CREATE TABLE IF NOT EXISTS ingest_log (
       file_path TEXT PRIMARY KEY,
       chunks_count INTEGER,
+      file_size INTEGER DEFAULT 0,
+      lines_ingested INTEGER DEFAULT 0,
       ingested_at TEXT DEFAULT (datetime('now'))
     );
   `);
+
+  // Migration: add columns if missing (existing DBs)
+  try {
+    _db.exec(`ALTER TABLE ingest_log ADD COLUMN file_size INTEGER DEFAULT 0`);
+  } catch { /* column already exists */ }
+  try {
+    _db.exec(`ALTER TABLE ingest_log ADD COLUMN lines_ingested INTEGER DEFAULT 0`);
+  } catch { /* column already exists */ }
 
   return _db;
 }
@@ -238,129 +248,215 @@ async function savePending(chunks: Array<{ text: string; source: string; project
   console.log(`  Saved ${chunks.length} chunks to pending/ (Ollama offline)`);
 }
 
+const EMBED_THROTTLE_MS = parseInt(process.env.REX_EMBED_THROTTLE_MS || '500', 10);
+const MAX_EMBED_PER_RUN = parseInt(process.env.REX_MAX_EMBED_PER_RUN || '30', 10);
+
 async function processPending() {
   if (!existsSync(PENDING_DIR)) return;
   const files = readdirSync(PENDING_DIR).filter((f) => f.endsWith(".json"));
   if (files.length === 0) return;
 
-  console.log(`  Processing ${files.length} pending file(s)...`);
+  console.log(`  Processing ${files.length} pending file(s) (max ${MAX_EMBED_PER_RUN} chunks/run, ${EMBED_THROTTLE_MS}ms throttle)...`);
+  let totalEmbedded = 0;
+
   for (const file of files) {
+    if (totalEmbedded >= MAX_EMBED_PER_RUN) {
+      console.log(`  Reached ${MAX_EMBED_PER_RUN} chunk limit — rest will process next run.`);
+      break;
+    }
+
     const filePath = join(PENDING_DIR, file);
     try {
       const chunks: Array<{ text: string; source: string; project: string }> = JSON.parse(readFileSync(filePath, "utf-8"));
+      let processed = 0;
+
       for (const chunk of chunks) {
-        await learn(chunk.text, "session", chunk.source, chunk.project);
+        if (totalEmbedded >= MAX_EMBED_PER_RUN) break;
+
+        if (SMART_INGEST) {
+          const { category, summary } = await classifyAndSummarize(chunk.text);
+          await learn(summary, category, chunk.source, chunk.project);
+        } else {
+          await learn(chunk.text, "session", chunk.source, chunk.project);
+        }
+        processed++;
+        totalEmbedded++;
+
+        // Throttle to avoid CPU spikes
+        if (EMBED_THROTTLE_MS > 0) {
+          await new Promise((r) => setTimeout(r, EMBED_THROTTLE_MS));
+        }
       }
-      unlinkSync(filePath);
-      console.log(`  ${file}: ${chunks.length} chunks processed`);
+
+      if (processed >= chunks.length) {
+        // Fully processed — remove file
+        unlinkSync(filePath);
+        console.log(`  ${file}: ${processed} chunks embedded`);
+      } else {
+        // Partial — rewrite with remaining chunks
+        const remaining = chunks.slice(processed);
+        writeFS(filePath, JSON.stringify(remaining, null, 2));
+        console.log(`  ${file}: ${processed}/${chunks.length} embedded, ${remaining.length} remaining`);
+      }
     } catch (err) {
       console.error(`  Error processing ${file}: ${(err as Error).message}`);
     }
   }
+
+  if (totalEmbedded > 0) console.log(`  Embedded ${totalEmbedded} chunks total this run.`);
+}
+
+const LOCK_FILE = join(process.env.HOME || '~', '.claude', 'rex', 'memory', 'ingest.lock');
+const LOCK_STALE_MS = 10 * 60 * 1000; // 10 min — consider lock stale after this
+
+function acquireLock(): boolean {
+  try {
+    const lockDir = join(process.env.HOME || '~', '.claude', 'rex', 'memory');
+    if (!existsSync(lockDir)) mkdirSync(lockDir, { recursive: true });
+
+    // Check for stale lock first
+    if (existsSync(LOCK_FILE)) {
+      const lockAge = Date.now() - statSync(LOCK_FILE).mtimeMs;
+      if (lockAge < LOCK_STALE_MS) {
+        console.log('Ingest already running (lock held). Skipping.');
+        return false;
+      }
+      unlinkSync(LOCK_FILE);
+    }
+
+    // Atomic create — fails with EEXIST if another process created it first
+    const { writeFileSync: atomicWrite } = require('fs');
+    atomicWrite(LOCK_FILE, String(process.pid), { flag: 'wx' });
+    return true;
+  } catch (e: any) {
+    if (e?.code === 'EEXIST') {
+      console.log('Ingest already running (lock race). Skipping.');
+    }
+    return false;
+  }
+}
+
+function releaseLock() {
+  try { if (existsSync(LOCK_FILE)) unlinkSync(LOCK_FILE); } catch {}
 }
 
 async function ingestSessions() {
-  const ollamaUp = await checkOllama();
+  if (!acquireLock()) return;
 
-  // If Ollama is up, process any pending backlog first
-  if (ollamaUp) {
-    await processPending();
-  }
-
-  const sessionsDir = join(process.env.HOME || "~", ".claude", "projects");
-  if (!existsSync(sessionsDir)) {
-    console.error("No sessions directory found at", sessionsDir);
-    return;
-  }
-
-  const db = getDb();
-
-  // Use ingest_log to track already-processed files (more reliable than source column)
-  const alreadyIngested = new Set(
-    (db.prepare("SELECT file_path FROM ingest_log").all() as Array<{ file_path: string }>).map((r) => r.file_path)
-  );
-
-  let totalIngested = 0;
-  let totalSkipped = 0;
-  let totalErrors = 0;
-
-  let projectDirs: string[];
   try {
-    projectDirs = readdirSync(sessionsDir).filter((d) => {
-      try {
-        return statSync(join(sessionsDir, d)).isDirectory();
-      } catch {
-        return false;
-      }
-    });
-  } catch (err) {
-    console.error("Cannot read sessions directory:", err);
-    return;
-  }
+    const ollamaUp = await checkOllama();
 
-  for (const projectDir of projectDirs) {
-    const projectPath = join(sessionsDir, projectDir);
-
-    let files: string[];
-    try {
-      files = readdirSync(projectPath).filter((f) => f.endsWith(".jsonl"));
-    } catch {
-      continue;
+    // If Ollama is up, process any pending backlog first
+    if (ollamaUp) {
+      await processPending();
     }
 
-    for (const file of files) {
-      const filePath = join(projectPath, file);
+    const sessionsDir = join(process.env.HOME || "~", ".claude", "projects");
+    if (!existsSync(sessionsDir)) {
+      console.error("No sessions directory found at", sessionsDir);
+      return;
+    }
 
-      if (alreadyIngested.has(filePath)) {
-        totalSkipped++;
+    const db = getDb();
+
+    // Track already-processed files with size for delta detection
+    const ingestLog = new Map<string, { chunks_count: number; file_size: number; lines_ingested: number }>(
+      (db.prepare("SELECT file_path, chunks_count, COALESCE(file_size, 0) as file_size, COALESCE(lines_ingested, 0) as lines_ingested FROM ingest_log").all() as Array<{ file_path: string; chunks_count: number; file_size: number; lines_ingested: number }>)
+        .map((r) => [r.file_path, { chunks_count: r.chunks_count, file_size: r.file_size, lines_ingested: r.lines_ingested }])
+    );
+
+    let totalIngested = 0;
+    let totalSkipped = 0;
+    let totalErrors = 0;
+    let totalDelta = 0;
+
+    let projectDirs: string[];
+    try {
+      projectDirs = readdirSync(sessionsDir).filter((d) => {
+        try {
+          return statSync(join(sessionsDir, d)).isDirectory();
+        } catch {
+          return false;
+        }
+      });
+    } catch (err) {
+      console.error("Cannot read sessions directory:", err);
+      return;
+    }
+
+    for (const projectDir of projectDirs) {
+      const projectPath = join(sessionsDir, projectDir);
+
+      let files: string[];
+      try {
+        files = readdirSync(projectPath).filter((f) => f.endsWith(".jsonl"));
+      } catch {
         continue;
       }
 
-      try {
-        const content = readFileSync(filePath, "utf-8");
-        const lines = content.split("\n").filter(Boolean);
-        const chunks = chunkText(lines);
+      for (const file of files) {
+        const filePath = join(projectPath, file);
 
-        if (chunks.length === 0) {
-          // Mark as processed even if empty (no need to re-parse)
-          db.prepare("INSERT OR IGNORE INTO ingest_log (file_path, chunks_count) VALUES (?, 0)").run(filePath);
-          continue;
-        }
+        try {
+          const currentSize = statSync(filePath).size;
+          const prev = ingestLog.get(filePath);
 
-        if (!ollamaUp) {
-          // Save to pending for later processing
+          // Skip if file hasn't grown since last ingest
+          if (prev && prev.file_size >= currentSize) {
+            totalSkipped++;
+            continue;
+          }
+
+          const content = readFileSync(filePath, "utf-8");
+          const allLines = content.split("\n").filter(Boolean);
+
+          // Delta: skip lines already ingested
+          const startLine = prev ? prev.lines_ingested : 0;
+          const newLines = allLines.slice(startLine);
+
+          if (newLines.length === 0) {
+            // Update size tracking even if no new meaningful lines
+            db.prepare("INSERT INTO ingest_log (file_path, chunks_count, file_size, lines_ingested) VALUES (?, ?, ?, ?) ON CONFLICT(file_path) DO UPDATE SET file_size=?, lines_ingested=?")
+              .run(filePath, prev?.chunks_count ?? 0, currentSize, allLines.length, currentSize, allLines.length);
+            totalSkipped++;
+            continue;
+          }
+
+          const chunks = chunkText(newLines);
+
+          if (chunks.length === 0) {
+            db.prepare("INSERT INTO ingest_log (file_path, chunks_count, file_size, lines_ingested) VALUES (?, ?, ?, ?) ON CONFLICT(file_path) DO UPDATE SET file_size=?, lines_ingested=?")
+              .run(filePath, prev?.chunks_count ?? 0, currentSize, allLines.length, currentSize, allLines.length);
+            continue;
+          }
+
+          // Phase 1: ALWAYS save to pending/ first (instant, no CPU)
+          // Phase 2: processPending() embeds lazily with throttling
           const pendingChunks = chunks.map(c => ({ text: c, source: filePath, project: projectDir }));
           await savePending(pendingChunks);
-          totalIngested += chunks.length;
-          continue;
-        }
+          const fileIngested = chunks.length;
 
-        let fileIngested = 0;
-        for (const chunk of chunks) {
-          if (SMART_INGEST) {
-            const { category, summary } = await classifyAndSummarize(chunk);
-            await learn(summary, category, filePath, projectDir);
-            console.log(`    [${category}] ${summary.slice(0, 80)}...`);
-          } else {
-            await learn(chunk, "session", filePath, projectDir);
+          const totalChunks = (prev?.chunks_count ?? 0) + fileIngested;
+          db.prepare("INSERT INTO ingest_log (file_path, chunks_count, file_size, lines_ingested) VALUES (?, ?, ?, ?) ON CONFLICT(file_path) DO UPDATE SET chunks_count=?, file_size=?, lines_ingested=?, ingested_at=datetime('now')")
+            .run(filePath, totalChunks, currentSize, allLines.length, totalChunks, currentSize, allLines.length);
+          totalIngested += fileIngested;
+
+          if (fileIngested > 0) {
+            const label = prev ? '(delta)' : '(new)';
+            console.log(`  ${file} ${label}: ${fileIngested} chunks`);
+            if (prev) totalDelta++;
           }
-          fileIngested++;
+        } catch (err) {
+          totalErrors++;
+          console.error(`  Error ${file}: ${(err as Error).message}`);
         }
-
-        db.prepare("INSERT OR IGNORE INTO ingest_log (file_path, chunks_count) VALUES (?, ?)").run(filePath, fileIngested);
-        totalIngested += fileIngested;
-
-        if (fileIngested > 0) {
-          console.log(`  ${file}: ${fileIngested} chunks`);
-        }
-      } catch (err) {
-        totalErrors++;
-        console.error(`  Error ${file}: ${(err as Error).message}`);
       }
     }
-  }
 
-  console.log(`\nDone: ${totalIngested} ingested, ${totalSkipped} skipped (already done), ${totalErrors} errors`);
+    console.log(`\nDone: ${totalIngested} ingested${totalDelta > 0 ? ` (${totalDelta} delta updates)` : ''}, ${totalSkipped} skipped, ${totalErrors} errors`);
+  } finally {
+    releaseLock();
+  }
 }
 
 // Run CLI if called directly

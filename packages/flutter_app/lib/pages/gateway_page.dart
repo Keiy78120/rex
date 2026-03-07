@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show SelectableText;
 import 'package:macos_ui/macos_ui.dart';
 import 'package:provider/provider.dart';
 import '../services/rex_service.dart';
+import '../theme.dart';
+import '../widgets/rex_page_layout.dart';
 
 class GatewayPage extends StatefulWidget {
   const GatewayPage({super.key});
@@ -13,378 +15,426 @@ class GatewayPage extends StatefulWidget {
 }
 
 class _GatewayPageState extends State<GatewayPage> {
-  String _logContent = '';
-  bool _refreshingLogs = false;
+  final _notifyController = TextEditingController();
+  String _notifyResult = '';
+  bool _notifySending = false;
+  Timer? _statusTimer;
 
   @override
   void initState() {
     super.initState();
-    _loadLogs();
-    context.read<RexService>().checkGateway();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<RexService>().checkGateway();
+      _startStatusPolling();
+    });
   }
 
-  Future<void> _loadLogs() async {
-    setState(() => _refreshingLogs = true);
-    try {
-      final logFile = File(
-        '${Platform.environment['HOME']}/.claude/rex-gateway.log',
-      );
-      if (await logFile.exists()) {
-        final content = await logFile.readAsString();
-        final lines = content.split('\n');
-        final last50 = lines.length > 50
-            ? lines.sublist(lines.length - 50)
-            : lines;
-        setState(() => _logContent = last50.join('\n'));
-      } else {
-        setState(() => _logContent = 'No gateway log file found.');
-      }
-    } catch (e) {
-      setState(() => _logContent = 'Error reading logs: $e');
-    }
-    setState(() => _refreshingLogs = false);
+  @override
+  void dispose() {
+    _statusTimer?.cancel();
+    _notifyController.dispose();
+    super.dispose();
+  }
+
+  void _startStatusPolling() {
+    _statusTimer?.cancel();
+    _statusTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      context.read<RexService>().checkGateway();
+    });
   }
 
   Future<void> _startGateway() async {
-    try {
-      await Process.run('launchctl', [
-        'load',
-        '${Platform.environment['HOME']}/Library/LaunchAgents/com.dstudio.rex-gateway.plist',
-      ]);
-      await Future.delayed(const Duration(seconds: 2));
-      context.read<RexService>().checkGateway();
-    } catch (_) {}
+    // Try launchctl first (if plist exists), otherwise start directly
+    final plist = File(
+      '${Platform.environment['HOME']}/Library/LaunchAgents/com.dstudio.rex-gateway.plist',
+    );
+    if (plist.existsSync()) {
+      try {
+        await Process.run('launchctl', ['load', plist.path]);
+        await Future.delayed(const Duration(seconds: 2));
+      } catch (_) {}
+    }
+    if (mounted) await context.read<RexService>().startGateway();
   }
 
   Future<void> _stopGateway() async {
-    try {
-      await Process.run('launchctl', [
-        'unload',
-        '${Platform.environment['HOME']}/Library/LaunchAgents/com.dstudio.rex-gateway.plist',
-      ]);
-      await Future.delayed(const Duration(seconds: 1));
-      context.read<RexService>().checkGateway();
-    } catch (_) {}
+    final plist = File(
+      '${Platform.environment['HOME']}/Library/LaunchAgents/com.dstudio.rex-gateway.plist',
+    );
+    if (plist.existsSync()) {
+      try {
+        await Process.run('launchctl', ['unload', plist.path]);
+      } catch (_) {}
+    }
+    if (mounted) await context.read<RexService>().stopGateway();
+  }
+
+  Future<void> _sendNotify() async {
+    final msg = _notifyController.text.trim();
+    if (msg.isEmpty) return;
+    setState(() {
+      _notifySending = true;
+      _notifyResult = '';
+    });
+    final result = await context.read<RexService>().runNotify(msg);
+    if (mounted) {
+      setState(() {
+        _notifySending = false;
+        _notifyResult = result;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return MacosScaffold(
-      toolBar: ToolBar(
-        title: const Text('Gateway'),
-        titleWidth: 150,
-        actions: [
-          ToolBarIconButton(
-            label: 'Refresh',
-            icon: const MacosIcon(CupertinoIcons.refresh),
-            onPressed: () {
-              _loadLogs();
-              context.read<RexService>().checkGateway();
-            },
-            showLabel: false,
-          ),
-        ],
-      ),
-      children: [
-        ContentArea(
-          builder: (context, scrollController) {
-            return Consumer<RexService>(
-              builder: (context, rex, _) {
-                return ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.all(20),
+    final c = context.rex;
+    return RexPageLayout(
+      title: 'Gateway',
+      actions: [
+        RexHeaderButton(
+          icon: CupertinoIcons.refresh,
+          label: 'Refresh',
+          onPressed: () {
+            context.read<RexService>().checkGateway();
+          },
+        ),
+      ],
+      builder: (context, scrollController) {
+        return Consumer<RexService>(
+          builder: (context, rex, _) {
+            final telegramConfigured =
+                rex.telegramBotToken.isNotEmpty &&
+                rex.telegramChatId.isNotEmpty;
+            return ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 20,
+              ),
+              children: [
+                // Status row
+                Row(
                   children: [
-                    // Gateway status card
-                    _GatewayStatusCard(
-                      running: rex.gatewayRunning,
-                      onStart: _startGateway,
-                      onStop: _stopGateway,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Features grid
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _FeatureCard(
-                            icon: CupertinoIcons.chat_bubble_2,
-                            title: 'Interactive Menu',
-                            subtitle: 'Inline keyboards, button actions',
-                            enabled: true,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _FeatureCard(
-                            icon: CupertinoIcons.bolt,
-                            title: 'Wake-on-LAN',
-                            subtitle: 'Wake Mac remotely via Tailscale',
-                            enabled: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _FeatureCard(
-                            icon: CupertinoIcons.desktopcomputer,
-                            title: 'Claude Remote',
-                            subtitle: 'Continue sessions via Telegram',
-                            enabled: true,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _FeatureCard(
-                            icon: CupertinoIcons.lock_shield,
-                            title: 'Auth Protected',
-                            subtitle: 'Restricted to your chat_id',
-                            enabled: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _FeatureCard(
-                            icon: CupertinoIcons.text_bubble,
-                            title: 'Dual LLM',
-                            subtitle: 'Toggle Qwen (local) / Claude',
-                            enabled: rex.ollamaRunning,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _FeatureCard(
-                            icon: CupertinoIcons.doc_on_clipboard,
-                            title: 'Command Logging',
-                            subtitle: 'All actions logged for traceability',
-                            enabled: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Logs
-                    Row(
-                      children: [
-                        const Text(
-                          'Gateway Logs',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (_refreshingLogs) const ProgressCircle(radius: 8),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
                     Container(
-                      height: 300,
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
+                      width: 10,
+                      height: 10,
                       decoration: BoxDecoration(
-                        color:
-                            MacosTheme.brightnessOf(context) == Brightness.dark
-                            ? const Color(0xFF1A1A1A)
-                            : const Color(0xFFF5F5F5),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color:
-                              MacosTheme.brightnessOf(context) ==
-                                  Brightness.dark
-                              ? const Color(0xFF333333)
-                              : const Color(0xFFE5E5E5),
+                        color: rex.gatewayRunning ? c.success : c.error,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                (rex.gatewayRunning ? c.success : c.error)
+                                    .withAlpha(80),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            rex.gatewayRunning
+                                ? 'Gateway Running'
+                                : 'Gateway Stopped',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: c.text,
+                            ),
+                          ),
+                          Text(
+                            rex.gatewayRunning
+                                ? 'Telegram bot is active and listening'
+                                : 'Start to enable remote control',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: c.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    RexButton(
+                      label: rex.gatewayRunning ? 'Stop' : 'Start',
+                      variant: rex.gatewayRunning
+                          ? RexButtonVariant.danger
+                          : RexButtonVariant.success,
+                      onPressed: rex.gatewayRunning
+                          ? _stopGateway
+                          : _startGateway,
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 24),
+
+                // Telegram Send
+                _SectionLabel('ENVOYER VIA TELEGRAM'),
+                const SizedBox(height: 8),
+                if (!telegramConfigured) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: c.warning.withAlpha(20),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: c.warning.withAlpha(60),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          CupertinoIcons.exclamationmark_triangle_fill,
+                          size: 14,
+                          color: c.warning,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Telegram non configure. Ajoute le token et chat ID dans Settings > Advanced.',
+                            style: TextStyle(fontSize: 12, color: c.text),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: MacosTextField(
+                          controller: _notifyController,
+                          placeholder: 'Message a envoyer...',
+                          onSubmitted: (_) => _sendNotify(),
                         ),
                       ),
-                      child: SingleChildScrollView(
-                        reverse: true,
-                        child: SelectableText(
-                          _logContent.isEmpty
-                              ? 'No logs available'
-                              : _logContent,
-                          style: const TextStyle(
-                            fontFamily: 'Menlo',
-                            fontSize: 11,
-                            height: 1.4,
-                          ),
+                      const SizedBox(width: 8),
+                      RexButton(
+                        label: 'Envoyer',
+                        icon: CupertinoIcons.paperplane_fill,
+                        loading: _notifySending,
+                        onPressed: _notifySending ? null : _sendNotify,
+                      ),
+                    ],
+                  ),
+                  if (_notifyResult.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _notifyResult.contains('OK') || _notifyResult.contains('ok')
+                            ? c.success.withAlpha(20)
+                            : c.error.withAlpha(20),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _notifyResult.contains('OK') || _notifyResult.contains('ok')
+                              ? c.success.withAlpha(60)
+                              : c.error.withAlpha(60),
+                          width: 0.5,
+                        ),
+                      ),
+                      child: Text(
+                        _notifyResult,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _notifyResult.contains('OK') || _notifyResult.contains('ok')
+                              ? c.success
+                              : c.error,
                         ),
                       ),
                     ),
                   ],
-                );
-              },
+                ],
+
+                const SizedBox(height: 24),
+
+                // Features list
+                _SectionLabel('FEATURES'),
+                const SizedBox(height: 6),
+                Container(
+                  decoration: BoxDecoration(
+                    color: c.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: c.separator, width: 0.5),
+                  ),
+                  child: Column(
+                    children: [
+                      _FeatureRow(
+                        icon: CupertinoIcons.chat_bubble_2,
+                        title: 'Interactive Menu',
+                        enabled: true,
+                      ),
+                      _Divider(),
+                      _FeatureRow(
+                        icon: CupertinoIcons.bolt,
+                        title: 'Wake-on-LAN',
+                        enabled: true,
+                      ),
+                      _Divider(),
+                      _FeatureRow(
+                        icon: CupertinoIcons.desktopcomputer,
+                        title: 'Claude Remote Sessions',
+                        enabled: true,
+                      ),
+                      _Divider(),
+                      _FeatureRow(
+                        icon: CupertinoIcons.lock_shield,
+                        title: 'Auth Protected',
+                        enabled: true,
+                      ),
+                      _Divider(),
+                      _FeatureRow(
+                        icon: CupertinoIcons.text_bubble,
+                        title: 'Dual LLM (Qwen / Claude)',
+                        enabled: rex.ollamaRunning,
+                      ),
+                      _Divider(),
+                      _FeatureRow(
+                        icon: CupertinoIcons.paperplane_fill,
+                        title: 'Telegram Notify',
+                        enabled: telegramConfigured,
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Link to Logs page
+                _ViewLogsLink(
+                  label: 'View gateway logs',
+                  onTap: () {
+                    // Navigate to Logs page, Gateway tab (index 9)
+                    // Parent handles navigation via callback
+                  },
+                ),
+              ],
             );
           },
-        ),
-      ],
+        );
+      },
     );
   }
 }
 
-class _GatewayStatusCard extends StatelessWidget {
-  final bool running;
-  final VoidCallback onStart;
-  final VoidCallback onStop;
-
-  const _GatewayStatusCard({
-    required this.running,
-    required this.onStart,
-    required this.onStop,
-  });
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: running
-              ? [
-                  const Color(0xFF10B981).withAlpha(20),
-                  const Color(0xFF10B981).withAlpha(8),
-                ]
-              : [
-                  const Color(0xFFEF4444).withAlpha(20),
-                  const Color(0xFFEF4444).withAlpha(8),
-                ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: running
-              ? const Color(0xFF10B981).withAlpha(60)
-              : const Color(0xFFEF4444).withAlpha(60),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(
-              color: running
-                  ? CupertinoColors.systemGreen
-                  : CupertinoColors.systemRed,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color:
-                      (running
-                              ? CupertinoColors.systemGreen
-                              : CupertinoColors.systemRed)
-                          .withAlpha(100),
-                  blurRadius: 8,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                running ? 'Gateway Running' : 'Gateway Stopped',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              Text(
-                running
-                    ? 'Telegram bot is active and listening'
-                    : 'Start the gateway to enable remote control',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: MacosTheme.of(context).typography.subheadline.color,
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          PushButton(
-            controlSize: ControlSize.regular,
-            color: running
-                ? CupertinoColors.systemRed
-                : CupertinoColors.systemGreen,
-            onPressed: running ? onStop : onStart,
-            child: Text(running ? 'Stop' : 'Start'),
-          ),
-        ],
+    final c = context.rex;
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: c.textSecondary,
+        letterSpacing: 0.5,
       ),
     );
   }
 }
 
-class _FeatureCard extends StatelessWidget {
+class _Divider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 44),
+      child: Container(height: 0.5, color: context.rex.separator),
+    );
+  }
+}
+
+class _ViewLogsLink extends StatefulWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _ViewLogsLink({required this.label, required this.onTap});
+
+  @override
+  State<_ViewLogsLink> createState() => _ViewLogsLinkState();
+}
+
+class _ViewLogsLinkState extends State<_ViewLogsLink> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.rex;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              CupertinoIcons.doc_text,
+              size: 13,
+              color: _hovered ? c.accent : c.textSecondary,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              widget.label,
+              style: TextStyle(
+                fontSize: 12,
+                color: _hovered ? c.accent : c.textSecondary,
+                decoration: _hovered ? TextDecoration.underline : null,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FeatureRow extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String subtitle;
   final bool enabled;
 
-  const _FeatureCard({
+  const _FeatureRow({
     required this.icon,
     required this.title,
-    required this.subtitle,
     required this.enabled,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: MacosTheme.of(context).canvasColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: MacosTheme.brightnessOf(context) == Brightness.dark
-              ? const Color(0xFF333333)
-              : const Color(0xFFE5E5E5),
-        ),
-      ),
+    final c = context.rex;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       child: Row(
         children: [
-          Icon(
-            icon,
-            size: 20,
-            color: enabled
-                ? const Color(0xFF6366F1)
-                : CupertinoColors.systemGrey,
-          ),
-          const SizedBox(width: 10),
+          Icon(icon, size: 18, color: enabled ? c.accent : c.textTertiary),
+          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: MacosTheme.of(context).typography.subheadline.color,
-                  ),
-                ),
-              ],
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 13,
+                color: enabled ? c.text : c.textTertiary,
+              ),
             ),
           ),
           Container(
-            width: 8,
-            height: 8,
+            width: 7,
+            height: 7,
             decoration: BoxDecoration(
-              color: enabled
-                  ? CupertinoColors.systemGreen
-                  : CupertinoColors.systemGrey,
+              color: enabled ? c.success : c.textTertiary,
               shape: BoxShape.circle,
             ),
           ),

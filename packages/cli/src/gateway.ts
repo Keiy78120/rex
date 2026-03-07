@@ -3,12 +3,52 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSy
 import { join, basename, extname } from 'node:path'
 import { execSync, execFileSync } from 'node:child_process'
 
+// --- PID lockfile (single instance guard) ---
+
+const LOCK_FILE = join(homedir(), '.rex-memory', 'gateway.lock')
+
+function acquireLock(): boolean {
+  const pid = process.pid
+  try {
+    if (existsSync(LOCK_FILE)) {
+      const existing = parseInt(readFileSync(LOCK_FILE, 'utf-8').trim(), 10)
+      if (existing && existing !== pid) {
+        // Check if process is still alive
+        try {
+          process.kill(existing, 0) // signal 0 = check existence
+          return false // another instance is running
+        } catch {
+          // Process dead, stale lock — take over
+        }
+      }
+    }
+    const dir = join(homedir(), '.rex-memory')
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    writeFileSync(LOCK_FILE, String(pid))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function releaseLock() {
+  try {
+    if (existsSync(LOCK_FILE)) {
+      const content = readFileSync(LOCK_FILE, 'utf-8').trim()
+      if (parseInt(content, 10) === process.pid) {
+        unlinkSync(LOCK_FILE)
+      }
+    }
+  } catch {}
+}
+
 // --- Config (loaded from settings.json) ---
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 const STATE_FILE = join(homedir(), '.rex-memory', 'gateway-state.json')
 const LOG_FILE = join(homedir(), '.claude', 'rex-gateway-commands.log')
 const UPLOADS_ROOT = join(homedir(), '.rex-memory', 'gateway-uploads')
+const NOTIFS_FILE = join(homedir(), '.rex-memory', 'notifications.json')
 const MAX_UPLOADS = 200
 const UPLOAD_RETENTION_DAYS = Math.max(1, parseInt(process.env.REX_UPLOAD_RETENTION_DAYS || '10', 10) || 10)
 const MAX_MEDIA_MB = Math.max(1, parseInt(process.env.REX_GATEWAY_MAX_MEDIA_MB || '20', 10) || 20)
@@ -56,6 +96,8 @@ function loadConfig(): GatewayConfig {
 
 interface GatewayState {
   mode: 'qwen' | 'claude'
+  localModel: string | null   // null = auto-detect
+  claudeModel: string | null  // null = default (sonnet-4-6)
   lastActivity: string
   sessionsCount: number
   uploads: UploadEntry[]
@@ -80,13 +122,15 @@ function loadState(): GatewayState {
       const parsed = JSON.parse(readFileSync(STATE_FILE, 'utf-8')) as Partial<GatewayState>
       return {
         mode: parsed.mode === 'claude' ? 'claude' : 'qwen',
+        localModel: parsed.localModel || null,
+        claudeModel: parsed.claudeModel || null,
         lastActivity: parsed.lastActivity || new Date().toISOString(),
         sessionsCount: typeof parsed.sessionsCount === 'number' ? parsed.sessionsCount : 0,
         uploads: Array.isArray(parsed.uploads) ? parsed.uploads as UploadEntry[] : [],
       }
     }
   } catch {}
-  return { mode: 'qwen', lastActivity: new Date().toISOString(), sessionsCount: 0, uploads: [] }
+  return { mode: 'qwen', localModel: null, claudeModel: null, lastActivity: new Date().toISOString(), sessionsCount: 0, uploads: [] }
 }
 
 function saveState(state: GatewayState) {
@@ -99,6 +143,111 @@ function saveState(state: GatewayState) {
 
 let state = loadState()
 let config = loadConfig()
+let activeStreamController: AbortController | null = null
+
+// --- Notifications ---
+
+interface Notification {
+  id: string
+  ts: string
+  project: string
+  title: string
+  message: string
+  priority: 'urgent' | 'high' | 'normal' | 'low'
+  read: boolean
+}
+
+function loadNotifications(): Notification[] {
+  try {
+    return JSON.parse(readFileSync(NOTIFS_FILE, 'utf-8'))
+  } catch {
+    return []
+  }
+}
+
+function saveNotifications(notifs: Notification[]) {
+  try {
+    const dir = join(homedir(), '.rex-memory')
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    writeFileSync(NOTIFS_FILE, JSON.stringify(notifs.slice(-500), null, 2))
+  } catch {}
+}
+
+function addNotification(project: string, title: string, message: string, priority: Notification['priority'] = 'normal') {
+  const notifs = loadNotifications()
+  notifs.push({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    ts: new Date().toISOString(),
+    project,
+    title,
+    message,
+    priority,
+    read: false,
+  })
+  saveNotifications(notifs)
+}
+
+function priorityEmoji(p: string): string {
+  return p === 'urgent' ? '🚨' : p === 'high' ? '🔴' : p === 'low' ? '🔵' : '🔔'
+}
+
+function timeAgo(ts: string): string {
+  const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000)
+  if (diff < 60) return `${diff}s`
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`
+  return `${Math.floor(diff / 86400)}j`
+}
+
+function buildNotifsMessage(project: string | null, page: number): { text: string; buttons: any[][] } {
+  const allNotifs = loadNotifications()
+  const filtered = project && project !== 'all' ? allNotifs.filter(n => n.project === project) : allNotifs
+  const sorted = [...filtered].reverse()
+  const PAGE_SIZE = 5
+  const total = sorted.length
+  const start = page * PAGE_SIZE
+  const items = sorted.slice(start, start + PAGE_SIZE)
+  const projects = [...new Set(allNotifs.map(n => n.project))].sort()
+
+  const header = project && project !== 'all'
+    ? `🔔 *Notifs — ${project}*`
+    : `🔔 *Notifications* (${total})`
+  const unread = filtered.filter(n => !n.read).length
+  const subtitle = unread > 0 ? `_${unread} non lue(s)_` : '_Tout lu_'
+
+  if (items.length === 0) {
+    return {
+      text: `${header}\n\n_Aucune notification_`,
+      buttons: [[{ text: '◀️ Menu', callback_data: 'menu' }]],
+    }
+  }
+
+  const lines = items.map(n => {
+    const status = n.read ? '✅' : priorityEmoji(n.priority)
+    const proj = n.project
+    const msg = n.message ? `\n   _${n.message.slice(0, 100)}_` : ''
+    return `${status} *[${proj}]* ${n.title} — _${timeAgo(n.ts)} ago_${msg}`
+  })
+  const text = `${header}\n${subtitle}\n\n${lines.join('\n\n')}`
+
+  // Project filter row
+  const filterBtns = [{ text: project === 'all' || !project ? '• Toutes •' : 'Toutes', callback_data: 'notif_filter_all' }]
+  for (const p of projects.slice(0, 5)) {
+    filterBtns.push({ text: p === project ? `• ${p} •` : p, callback_data: `notif_filter_${p}` })
+  }
+
+  // Nav + actions row
+  const navBtns: any[] = []
+  if (start > 0) navBtns.push({ text: '◀', callback_data: `notif_page_${page - 1}_${project || 'all'}` })
+  if (start + PAGE_SIZE < total) navBtns.push({ text: '▶', callback_data: `notif_page_${page + 1}_${project || 'all'}` })
+  if (unread > 0) navBtns.push({ text: '✅ Tout lire', callback_data: `notif_markall_${project || 'all'}` })
+
+  const buttons: any[][] = [filterBtns]
+  if (navBtns.length) buttons.push(navBtns)
+  buttons.push([{ text: '◀️ Menu', callback_data: 'menu' }])
+
+  return { text, buttons }
+}
 
 function ensureUploadsDir() {
   if (!existsSync(UPLOADS_ROOT)) mkdirSync(UPLOADS_ROOT, { recursive: true })
@@ -202,8 +351,15 @@ async function tg(token: string, method: string, body: Record<string, any>) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    return await res.json() as any
-  } catch { return null }
+    const json = await res.json() as any
+    if (!json?.ok && method !== 'getUpdates') {
+      console.error(`${COLORS.dim}TG ${method} failed: ${json?.description || res.status}${COLORS.reset}`)
+    }
+    return json
+  } catch (e: any) {
+    console.error(`${COLORS.dim}TG ${method} error: ${e?.message || e}${COLORS.reset}`)
+    return null
+  }
 }
 
 async function send(token: string, chatId: string, text: string, keyboard?: any[][]) {
@@ -259,7 +415,10 @@ function mainMenu() {
       { text: '📝 Logs', callback_data: 'logs' },
       { text: '📎 Files', callback_data: 'files_menu' },
     ],
-    [{ text: '🧭 Advanced', callback_data: 'advanced_menu' }],
+    [
+      { text: '🔔 Notifs', callback_data: 'notifs' },
+      { text: '🧭 Advanced', callback_data: 'advanced_menu' },
+    ],
   ]
 }
 
@@ -291,7 +450,29 @@ function advancedMenu() {
       { text: '🧪 Audit', callback_data: 'audit' },
       { text: '📝 Logs', callback_data: 'logs' },
     ],
+    [{ text: '🎛 Modèles', callback_data: 'models_menu' }],
     [{ text: '◀️ Menu', callback_data: 'menu' }],
+  ]
+}
+
+function modelsMenu() {
+  const local = state.localModel || 'auto'
+  const claude = state.claudeModel || 'sonnet-4-6'
+  return [
+    [{ text: `🧠 Local: ${local}`, callback_data: 'models_local_menu' }],
+    [
+      { text: `qwen2.5:1.5b`, callback_data: 'set_local_qwen2.5:1.5b' },
+      { text: `qwen3.5:4b`, callback_data: 'set_local_qwen3.5:4b' },
+      { text: `qwen3.5:9b`, callback_data: 'set_local_qwen3.5:9b' },
+      { text: `auto`, callback_data: 'set_local_auto' },
+    ],
+    [{ text: `🤖 Claude: ${claude}`, callback_data: 'models_claude_menu' }],
+    [
+      { text: `haiku-4-5`, callback_data: 'set_claude_claude-haiku-4-5-20251001' },
+      { text: `sonnet-4-6`, callback_data: 'set_claude_claude-sonnet-4-6' },
+      { text: `opus-4-6`, callback_data: 'set_claude_claude-opus-4-6' },
+    ],
+    [{ text: '◀️ Advanced', callback_data: 'advanced_menu' }],
   ]
 }
 
@@ -660,7 +841,7 @@ async function analyzeUpload(upload: UploadEntry, task: string, mode?: 'qwen' | 
   ].join('\n')
 
   if (activeMode === 'claude') {
-    return claudeSession(prompt)
+    return askClaude(prompt)
   }
   return askLLM(prompt)
 }
@@ -795,37 +976,300 @@ async function askQwen(prompt: string): Promise<string> {
     return '⚠️ Ollama not running. Wake Mac first.'
   }
 
-  const out = run(`rex llm "${prompt.replace(/"/g, '\\"').replace(/`/g, '\\`')}"`, 60000)
+  const out = runRex(['llm', prompt], 60000)
   if (!out || out.includes('rex-claude') || out.includes('Commands:')) {
     return '⚠️ LLM returned no useful response'
   }
   return truncate(out)
 }
 
-async function askClaude(prompt: string): Promise<string> {
-  try {
-    // Use Claude Code CLI in print mode for single-shot queries
-    const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/`/g, '\\`')
-    const out = run(`claude -p "${escapedPrompt}" 2>/dev/null`, 120000)
-    if (out) return truncate(out)
-    return '⚠️ Claude CLI not available or returned empty'
-  } catch {
-    return '⚠️ Claude CLI error'
+/** Streaming Qwen via Ollama /api/chat — sends progressive edits to Telegram */
+async function askQwenStream(token: string, chatId: string, prompt: string): Promise<string> {
+  // Model detection: use pinned model from state, else auto-detect
+  let model = state.localModel || 'qwen3.5:4b'
+  if (!state.localModel) {
+    try {
+      const tags = await fetch(`${OLLAMA_URL}/api/tags`)
+      if (!tags.ok) return '⚠️ Ollama not running.'
+      const data = (await tags.json()) as { models: Array<{ name: string }> }
+      const names = data.models.map(m => m.name)
+      for (const pref of ['qwen3.5:9b', 'qwen3.5:4b', 'qwen2.5:1.5b']) {
+        const base = pref.split(':')[0]
+        const match = names.find(n => n.includes(base))
+        if (match) { model = match; break }
+      }
+    } catch {
+      return '⚠️ Ollama not running.'
+    }
+  } else {
+    // Quick health check
+    try {
+      const check = await fetch(`${OLLAMA_URL}/api/tags`)
+      if (!check.ok) return '⚠️ Ollama not running.'
+    } catch {
+      return '⚠️ Ollama not running.'
+    }
   }
+
+  // Send initial "thinking" message to get message_id for edits
+  const initMsg = await tg(token, 'sendMessage', {
+    chat_id: chatId,
+    text: '🧠 _Qwen thinking..._',
+    parse_mode: 'Markdown',
+  }) as { result?: { message_id: number } }
+  const msgId = initMsg?.result?.message_id
+  if (!msgId) return '⚠️ Failed to send initial message'
+
+  const controller = new AbortController()
+  activeStreamController = controller
+  const streamTimeout = setTimeout(() => controller.abort(), 120_000) // 2min max
+  const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      stream: true,
+      think: false,
+    }),
+    signal: controller.signal,
+  })
+
+  if (!res.ok || !res.body) {
+    await editMessage(token, chatId, msgId, '⚠️ Ollama stream failed')
+    return '⚠️ Ollama stream failed'
+  }
+
+  // Strip <think>...</think> blocks from streaming output (Qwen3 reasoning models)
+  // Also handles incomplete think blocks mid-stream (opens but not yet closed)
+  function stripThinkBlocks(raw: string): string {
+    let clean = raw.replace(/<think>[\s\S]*?<\/think>/g, '') // complete blocks
+    clean = clean.replace(/<think>[\s\S]*$/, '') // incomplete block at end
+    return clean.trim()
+  }
+
+  let rawFull = '' // everything including think tokens
+  let lastEdit = 0
+  let wasThinking = false
+  const EDIT_INTERVAL = 800 // ms between edits (Telegram rate limit)
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          const chunk = JSON.parse(line) as { message?: { content?: string; thinking?: string }; done?: boolean }
+          // Collect content (skip thinking field from Ollama think:true mode)
+          if (chunk.message?.content) {
+            rawFull += chunk.message.content
+          }
+        } catch {}
+      }
+
+      // Progressive edit with rate limiting
+      const now = Date.now()
+      if (now - lastEdit > EDIT_INTERVAL) {
+        const visible = stripThinkBlocks(rawFull)
+        const isThinking = rawFull.includes('<think>') && !rawFull.includes('</think>')
+        if (isThinking && !wasThinking) {
+          // Show thinking indicator only once
+          try { await editMessage(token, chatId, msgId, '🧠 _Réflexion en cours..._') } catch {}
+          wasThinking = true
+        } else if (visible.length > 0) {
+          wasThinking = false
+          const display = visible.length > 4000 ? visible.slice(-4000) : visible
+          try { await editMessage(token, chatId, msgId, `🧠 ${display}`) } catch {}
+        }
+        lastEdit = now
+      }
+    }
+
+    // Process any remaining data in buffer that didn't end with \n
+    if (buffer.trim()) {
+      try {
+        const chunk = JSON.parse(buffer) as { message?: { content?: string } }
+        if (chunk.message?.content) rawFull += chunk.message.content
+      } catch {}
+    }
+  } catch {} finally {
+    clearTimeout(streamTimeout)
+    activeStreamController = null
+  }
+
+  // Final edit with filtered text (no think blocks)
+  const visible = stripThinkBlocks(rawFull)
+  const finalText = truncate(visible || rawFull || '⚠️ Empty response')
+  try {
+    await editMessage(token, chatId, msgId, `🧠 ${finalText}`, [
+      [
+        { text: 'Mode: qwen', callback_data: 'switch_mode' },
+        { text: '◀️ Menu', callback_data: 'menu' },
+      ]
+    ])
+  } catch {}
+
+  return finalText
 }
 
-async function claudeSession(prompt: string, resume?: boolean): Promise<string> {
-  try {
-    const flag = resume ? '--continue' : ''
-    const escapedPrompt = prompt.replace(/"/g, '\\"').replace(/`/g, '\\`')
-    const out = run(`claude ${flag} -p "${escapedPrompt}" 2>/dev/null`, 180000)
+function formatClaudeError(e: any, label: string): string {
+  const stderr = e?.stderr?.toString?.()?.trim?.() || ''
+  if (e?.killed || e?.signal === 'SIGTERM') {
+    console.error(`${label}: timed out`)
+    return `⚠️ ${label}: timed out — try a shorter prompt`
+  }
+  const msg = e?.message || 'unknown'
+  console.error(`${label}: ${msg}${stderr ? `\nstderr: ${stderr}` : ''}`)
+  return `⚠️ ${label}: ${stderr || msg}`.slice(0, 500)
+}
+
+// Build a clean env for claude CLI — unset CLAUDECODE so it can run
+// even when the gateway itself was started inside a Claude Code session
+function claudeEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  delete env.CLAUDECODE
+  return env
+}
+
+/** Run claude CLI asynchronously with animated progress edits */
+async function runClaudeAsync(
+  args: string[],
+  timeoutMs: number,
+  onProgress?: (frameIdx: number) => Promise<void>
+): Promise<{ stdout: string; stderr: string }> {
+  const { spawn } = require('node:child_process')
+
+  // Inject model flag if set in state
+  const modelArgs = state.claudeModel ? ['--model', state.claudeModel, ...args] : args
+
+  return new Promise((resolve) => {
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+
+    let child: ReturnType<typeof spawn>
+    try {
+      child = spawn('claude', modelArgs, { env: claudeEnv() })
+    } catch (e: any) {
+      resolve({ stdout: '', stderr: e?.message || 'spawn failed' })
+      return
+    }
+
+    child.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
+    child.stderr?.on('data', (d: Buffer) => { stderr += d.toString() })
+
+    // Animated progress updates (every 3s)
+    let frameIdx = 0
+    const timer = onProgress ? setInterval(() => {
+      if (!settled) onProgress(frameIdx++).catch(() => {})
+    }, 3000) : null
+
+    const done = () => {
+      if (settled) return
+      settled = true
+      if (timer) clearInterval(timer)
+      resolve({ stdout: stdout.trim(), stderr: stderr.trim() })
+    }
+
+    child.on('close', done)
+    child.on('error', (e: Error) => {
+      if (settled) return
+      settled = true
+      if (timer) clearInterval(timer)
+      const code = (e as NodeJS.ErrnoException).code
+      resolve({ stdout: '', stderr: code === 'ENOENT' ? 'claude CLI not found in PATH' : e.message })
+    })
+
+    // Hard timeout
+    const to = setTimeout(() => {
+      if (!settled) {
+        settled = true
+        if (timer) clearInterval(timer)
+        try { child.kill() } catch {}
+        resolve({ stdout: '', stderr: `Claude CLI timed out after ${Math.round(timeoutMs / 1000)}s` })
+      }
+    }, timeoutMs)
+
+    child.on('close', () => clearTimeout(to))
+  })
+}
+
+function parseClaudeError(stderr: string): string {
+  const s = stderr.toLowerCase()
+  if (s.includes('nested session') || s.includes('claudecode') || s.includes('cannot be launched inside')) {
+    return '⚠️ Claude: nested session conflict — restart gateway outside Claude Code'
+  }
+  if (s.includes('not logged in') || s.includes('authenticate') || s.includes('unauthorized') || s.includes('401')) {
+    return '⚠️ Claude: not authenticated — run `claude auth login`'
+  }
+  if (s.includes('rate limit') || s.includes('429') || s.includes('quota exceeded')) {
+    return '⚠️ Claude: rate limit — réessaie dans quelques minutes'
+  }
+  if (s.includes('timed out')) {
+    return '⚠️ Claude: timeout — requête trop longue'
+  }
+  if (s.includes('not found in path') || s.includes('enoent')) {
+    return '⚠️ Claude CLI introuvable — vérifie l\'installation'
+  }
+  if (s.includes('network') || s.includes('econnrefused') || s.includes('fetch failed')) {
+    return '⚠️ Claude: erreur réseau — vérifie la connexion'
+  }
+  return `⚠️ Claude: ${stderr.slice(0, 400)}`
+}
+
+async function askClaude(prompt: string): Promise<string> {
+  const { stdout, stderr } = await runClaudeAsync(['-p', prompt], 120000)
+  if (stdout) return truncate(stdout)
+  if (stderr) {
+    console.error(`Claude CLI stderr: ${stderr.slice(0, 300)}`)
+    return parseClaudeError(stderr)
+  }
+  return '⚠️ Claude CLI returned empty'
+}
+
+/** Ask Claude with animated progress message edits */
+async function askClaudeWithProgress(
+  token: string, chatId: string, msgId: number,
+  args: string[]
+): Promise<string> {
+  const frames = [
+    '🤖 _Claude réfléchit..._',
+    '🤖 _Claude réfléchit.._',
+    '🤖 _Claude réfléchit._',
+    '🤖 _Claude réfléchit..._',
+  ]
+  const { stdout, stderr } = await runClaudeAsync(args, 180000, async (idx) => {
+    try { await editMessage(token, chatId, msgId, frames[idx % frames.length]) } catch {}
+  })
+  if (stdout) return truncate(stdout)
+  if (stderr) {
+    console.error(`Claude session stderr: ${stderr.slice(0, 300)}`)
+    return parseClaudeError(stderr)
+  }
+  return '⚠️ No response from Claude'
+}
+
+async function claudeSession(
+  token: string, chatId: string, msgId: number,
+  prompt: string, resume?: boolean
+): Promise<string> {
+  const args = resume ? ['--continue', '-p', prompt] : ['-p', prompt]
+  const result = await askClaudeWithProgress(token, chatId, msgId, args)
+  if (!result.startsWith('⚠️')) {
     state.sessionsCount++
     saveState(state)
-    if (out) return truncate(out)
-    return '⚠️ No response from Claude session'
-  } catch {
-    return '⚠️ Claude session error'
   }
+  return result
 }
 
 // --- Callback handler ---
@@ -833,6 +1277,8 @@ async function claudeSession(prompt: string, resume?: boolean): Promise<string> 
 async function handleCallback(token: string, chatId: string, messageId: number, callbackId: string, data: string, from: string) {
   await answerCallback(token, callbackId)
   logCommand(from, `[btn] ${data}`, 'ok')
+  // Reload state from disk to stay in sync with mode changes
+  state = loadState()
 
   switch (data) {
     case 'menu':
@@ -996,7 +1442,7 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
 
     case 'claude_continue': {
       await editMessage(token, chatId, messageId, '📂 _Continuing last session..._')
-      const out = await claudeSession('Continue the previous task. What was I working on?', true)
+      const out = await claudeSession(token, chatId, messageId, 'Continue the previous task. What was I working on?', true)
       await editMessage(token, chatId, messageId,
         `📂 *Session Continued*\n${out}`,
         [[
@@ -1218,6 +1664,69 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
       )
       break
     }
+
+    case 'models_menu': {
+      await editMessage(token, chatId, messageId,
+        `🎛 *Modèles actifs*\n🧠 Local: \`${state.localModel || 'auto'}\`\n🤖 Claude: \`${state.claudeModel || 'sonnet-4-6 (défaut)'}\``,
+        modelsMenu()
+      )
+      break
+    }
+
+    case 'notifs': {
+      const { text: t, buttons } = buildNotifsMessage(null, 0)
+      await editMessage(token, chatId, messageId, t, buttons)
+      break
+    }
+
+    default: {
+      if (data.startsWith('set_local_')) {
+        const model = data.replace('set_local_', '')
+        state.localModel = model === 'auto' ? null : model
+        saveState(state)
+        await editMessage(token, chatId, messageId,
+          `🧠 Modèle local → \`${state.localModel || 'auto-detect'}\``,
+          modelsMenu()
+        )
+        break
+      }
+      if (data.startsWith('set_claude_')) {
+        const model = data.replace('set_claude_', '')
+        state.claudeModel = model
+        saveState(state)
+        await editMessage(token, chatId, messageId,
+          `🤖 Modèle Claude → \`${model}\``,
+          modelsMenu()
+        )
+        break
+      }
+      if (data.startsWith('notif_filter_')) {
+        const proj = data.replace('notif_filter_', '')
+        const { text: t, buttons } = buildNotifsMessage(proj === 'all' ? null : proj, 0)
+        await editMessage(token, chatId, messageId, t, buttons)
+        break
+      }
+      if (data.startsWith('notif_page_')) {
+        const parts = data.replace('notif_page_', '').split('_')
+        const page = parseInt(parts[0], 10) || 0
+        const proj = parts.slice(1).join('_') || null
+        const { text: t, buttons } = buildNotifsMessage(proj === 'all' ? null : proj, page)
+        await editMessage(token, chatId, messageId, t, buttons)
+        break
+      }
+      if (data.startsWith('notif_markall_')) {
+        const proj = data.replace('notif_markall_', '')
+        const notifs = loadNotifications()
+        for (const n of notifs) {
+          if (proj === 'all' || n.project === proj) n.read = true
+        }
+        saveNotifications(notifs)
+        const { text: t, buttons } = buildNotifsMessage(proj === 'all' ? null : proj, 0)
+        await editMessage(token, chatId, messageId, t, buttons)
+        break
+      }
+      break
+    }
   }
 }
 
@@ -1279,10 +1788,43 @@ async function handleText(token: string, chatId: string, text: string, from: str
     return
   }
 
+  if (cmd === '/notifs' || cmd === '/notif' || cmd.startsWith('/notifs ')) {
+    const filter = cmd.startsWith('/notifs ') ? text.replace(/^\/notifs\s+/i, '').trim() : null
+    const { text: t, buttons } = buildNotifsMessage(filter || null, 0)
+    await send(token, chatId, t, buttons)
+    logCommand(from, '/notifs', filter || 'all')
+    return
+  }
+
+  // /notify [-p project] [-P priority] "title" [message]
+  if (cmd.startsWith('/notify ')) {
+    const raw = text.replace(/^\/notify\s+/i, '')
+    const parts = raw.match(/(?:-p\s+(\S+))?\s*(?:-P\s+(\S+))?\s*(.*)/i) || []
+    let project = 'general'
+    let priority: Notification['priority'] = 'normal'
+    let rest = raw
+
+    const pMatch = raw.match(/-p\s+(\S+)/)
+    const PMatch = raw.match(/-P\s+(urgent|high|normal|low)/i)
+    if (pMatch) { project = pMatch[1]; rest = rest.replace(pMatch[0], '').trim() }
+    if (PMatch) { priority = PMatch[1].toLowerCase() as Notification['priority']; rest = rest.replace(PMatch[0], '').trim() }
+    const [title = rest, ...msgParts] = rest.split('|')
+    const message = msgParts.join('|').trim()
+
+    addNotification(project, title.trim(), message, priority)
+    const emoji = priorityEmoji(priority)
+    await send(token, chatId,
+      `${emoji} *Notification enregistrée*\n*Projet:* ${project}\n*Titre:* ${title.trim()}${message ? `\n*Détail:* ${message}` : ''}`,
+      [[{ text: '🔔 Voir notifs', callback_data: 'notifs' }, { text: '◀️ Menu', callback_data: 'menu' }]]
+    )
+    logCommand(from, '/notify', `${project}: ${title.trim()}`)
+    return
+  }
+
   if (cmd.startsWith('/search ') || cmd.startsWith('/q ')) {
     const query = text.replace(/^\/(search|q)\s+/i, '')
     if (!query) { await send(token, chatId, 'Usage: /search <query>'); return }
-    const out = run(`rex search ${query}`)
+    const out = runRex(['search', query])
     await send(token, chatId,
       out ? `🔍 *Search:* ${query}\n\`\`\`\n${truncate(out, 3000)}\n\`\`\`` : 'No results',
       backButton()
@@ -1323,8 +1865,11 @@ async function handleText(token: string, chatId: string, text: string, from: str
 
   if (cmd.startsWith('/claude ') || cmd.startsWith('/c ')) {
     const prompt = text.replace(/^\/(claude|c)\s+/i, '')
-    await send(token, chatId, '🤖 _Claude is thinking..._')
-    const out = await claudeSession(prompt)
+    const initMsg = await send(token, chatId, '🤖 _Claude is thinking..._') as any
+    const thinkMsgId = initMsg?.result?.message_id
+    const out = thinkMsgId
+      ? await claudeSession(token, chatId, thinkMsgId, prompt)
+      : await askClaude(prompt)
     await send(token, chatId, out, [
       [
         { text: '💬 Continue', callback_data: 'claude_continue' },
@@ -1485,6 +2030,34 @@ async function handleText(token: string, chatId: string, text: string, from: str
     return
   }
 
+  if (cmd.startsWith('/chat ')) {
+    const userMsg = text.replace(/^\/chat\s+/i, '').trim()
+    if (!userMsg) {
+      await send(token, chatId, 'Usage: `/chat <message>` — Talk to the REX Orchestrator')
+      return
+    }
+    await send(token, chatId, '🧠 _Orchestrator thinking..._')
+    // Route to orchestrator agent or fallback to Claude session
+    try {
+      const out = truncate(strip(runRex(['agents', 'run', 'orchestrator', '--task', userMsg, '--once'], 180000)), 3500)
+      await send(token, chatId, `🧠 *Orchestrator*\n${out}`, [
+        [{ text: '💬 Continue', callback_data: 'menu' }],
+      ])
+    } catch {
+      // Fallback: direct Claude session if no orchestrator agent exists
+      const fbMsg = await send(token, chatId, '🤖 _Claude thinking..._') as any
+      const fbMsgId = fbMsg?.result?.message_id
+      const response = fbMsgId
+        ? await claudeSession(token, chatId, fbMsgId, userMsg)
+        : await askClaude(userMsg)
+      await send(token, chatId, `🤖 *Claude*\n${response}`, [
+        [{ text: '💬 Continue', callback_data: 'menu' }],
+      ])
+    }
+    logCommand(from, `/chat ${userMsg.slice(0, 50)}`, 'orchestrator')
+    return
+  }
+
   if (cmd === '/mcp') {
     await send(token, chatId, renderMcpSummary(), mcpMenu())
     logCommand(from, '/mcp', 'listed')
@@ -1534,29 +2107,49 @@ async function handleText(token: string, chatId: string, text: string, from: str
 
   // Free text -> send to current LLM
   if (text.length > 2) {
-    const modeLabel = state.mode === 'qwen' ? '🧠 Qwen' : '🤖 Claude'
-    await send(token, chatId, `${modeLabel} _thinking..._`)
+    // Re-read state from disk to pick up mode changes from other sources (buttons, /mode command)
+    state = loadState()
     state.lastActivity = new Date().toISOString()
     saveState(state)
 
     let response: string
-    if (state.mode === 'claude') {
-      response = await claudeSession(text)
+    if (state.mode === 'qwen') {
+      // Streaming mode for Qwen — sends progressive edits
+      response = await askQwenStream(token, chatId, text)
     } else {
-      response = await askLLM(text)
+      const thinkMsg = await send(token, chatId, '🤖 Claude _thinking..._') as any
+      const thinkId = thinkMsg?.result?.message_id
+      response = thinkId
+        ? await claudeSession(token, chatId, thinkId, text)
+        : await askClaude(text)
+      await send(token, chatId, response, [
+        [
+          { text: 'Mode: claude', callback_data: 'switch_mode' },
+          { text: '💬 Continue', callback_data: 'claude_continue' },
+        ]
+      ])
     }
 
-    await send(token, chatId, response, [
-      [
-        { text: `Mode: ${state.mode}`, callback_data: 'switch_mode' },
-        { text: state.mode === 'claude' ? '💬 Continue' : '◀️ Menu', callback_data: state.mode === 'claude' ? 'claude_continue' : 'menu' },
-      ]
-    ])
     logCommand(from, text.slice(0, 80), response.slice(0, 100))
     return
   }
 
   await send(token, chatId, '🦖 *REX*\nEnvoie un message ou appuie sur Menu :', mainMenu())
+}
+
+// --- Dedup guard (prevents double processing of same update) ---
+const processedUpdateIds = new Set<number>()
+const MAX_PROCESSED_IDS = 500
+
+function markProcessed(updateId: number): boolean {
+  if (processedUpdateIds.has(updateId)) return false // already processed
+  processedUpdateIds.add(updateId)
+  // Keep set bounded
+  if (processedUpdateIds.size > MAX_PROCESSED_IDS) {
+    const oldest = processedUpdateIds.values().next().value
+    if (oldest !== undefined) processedUpdateIds.delete(oldest)
+  }
+  return true
 }
 
 // --- Main loop ---
@@ -1573,6 +2166,13 @@ export async function gateway() {
   config = loadConfig()
   state = loadState()
   cleanupOldUploads()
+
+  // Single instance guard — prevent multiple gateway processes
+  if (!acquireLock()) {
+    console.error(`${COLORS.red}Another REX Gateway instance is already running.${COLORS.reset}`)
+    console.error(`Remove ${LOCK_FILE} if this is stale, or stop the other instance first.`)
+    process.exit(1)
+  }
 
   console.log(`${COLORS.bold}REX Gateway v3${COLORS.reset} — Interactive Telegram bot`)
   console.log(`${COLORS.dim}Chat: ${chatId} | Mode: ${state.mode} | Sessions: ${state.sessionsCount}${COLORS.reset}`)
@@ -1591,26 +2191,44 @@ export async function gateway() {
 
   await send(token, chatId, `🟢 *REX Gateway v3* started\nMode: ${state.mode} | Sessions: ${state.sessionsCount}`, mainMenu())
 
-  process.on('SIGINT', async () => {
-    console.log(`\n${COLORS.dim}Shutting down...${COLORS.reset}`)
+  const shutdown = (signal: string) => async () => {
+    console.log(`\n${COLORS.dim}Shutting down (${signal})...${COLORS.reset}`)
+    // Abort any active Qwen stream
+    activeStreamController?.abort()
     state.lastActivity = new Date().toISOString()
     saveState(state)
-    await send(token, chatId, '🔴 *REX Gateway* stopped')
-    process.exit(0)
-  })
+    releaseLock()
+    await send(token, chatId, `🔴 *REX Gateway* stopped (${signal})`).catch(() => {})
+    process.exit(signal === 'SIGINT' ? 0 : 1)
+  }
 
-  process.on('SIGTERM', async () => {
-    state.lastActivity = new Date().toISOString()
-    saveState(state)
-    await send(token, chatId, '🔴 *REX Gateway* stopped (SIGTERM)')
-    process.exit(0)
+  process.on('SIGINT', shutdown('SIGINT'))
+  process.on('SIGTERM', shutdown('SIGTERM'))
+  process.on('uncaughtException', (err) => {
+    console.error(`${COLORS.red}Uncaught exception:${COLORS.reset} ${err.message}`)
+    releaseLock()
+    process.exit(1)
+  })
+  process.on('unhandledRejection', (reason) => {
+    console.error(`${COLORS.red}Unhandled rejection:${COLORS.reset} ${reason}`)
+    releaseLock()
+    process.exit(1)
   })
 
   while (true) {
     try {
-      const res = await fetch(
-        `https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=${config.pollTimeout}&allowed_updates=["message","callback_query"]`
-      )
+      // Client-side timeout = poll timeout + 15s safety margin (prevents hang if Telegram never responds)
+      const pollController = new AbortController()
+      const pollTimer = setTimeout(() => pollController.abort(), (config.pollTimeout + 15) * 1000)
+      let res: Response
+      try {
+        res = await fetch(
+          `https://api.telegram.org/bot${token}/getUpdates?offset=${offset}&timeout=${config.pollTimeout}&allowed_updates=["message","callback_query"]`,
+          { signal: pollController.signal }
+        )
+      } finally {
+        clearTimeout(pollTimer)
+      }
 
       const data = await res.json() as {
         ok: boolean
@@ -1641,6 +2259,9 @@ export async function gateway() {
       for (const update of data.result) {
         offset = update.update_id + 1
 
+        // Dedup guard — skip if already processed
+        if (!markProcessed(update.update_id)) continue
+
         // Handle callback (button press)
         if (update.callback_query) {
           const cb = update.callback_query
@@ -1655,7 +2276,11 @@ export async function gateway() {
           const from = cb.from?.username ?? '?'
           console.log(`${COLORS.cyan}@${from}${COLORS.reset} [btn] ${cb.data}`)
 
-          await handleCallback(token, chatId, cb.message!.message_id, cb.id, cb.data!, from)
+          if (!cb.message?.message_id || !cb.data) {
+            await answerCallback(token, cb.id, '⚠️ Stale button')
+            continue
+          }
+          await handleCallback(token, chatId, cb.message.message_id, cb.id, cb.data, from)
           continue
         }
 

@@ -1,7 +1,7 @@
 name: rex_app
 description: REX - Claude Code companion. Health checks, memory, gateway, voice.
 publish_to: 'none'
-version: 4.0.0+1
+version: 5.0.0+1
 
 environment:
   sdk: ^3.10.7

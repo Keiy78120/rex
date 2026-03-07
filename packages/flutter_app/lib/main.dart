@@ -11,9 +11,9 @@ import 'pages/gateway_page.dart';
 import 'pages/agents_page.dart';
 import 'pages/mcp_page.dart';
 import 'pages/optimize_page.dart';
+import 'pages/logs_page.dart';
 import 'pages/settings_page.dart';
-
-final themeModeNotifier = ValueNotifier<ThemeMode>(ThemeMode.dark);
+import 'widgets/rex_sidebar.dart';
 
 void main() {
   runApp(
@@ -24,22 +24,18 @@ void main() {
 class RexApp extends StatelessWidget {
   const RexApp({super.key});
 
+  static final _lightTheme = MacosThemeData.light(accentColor: AccentColor.red)
+      .copyWith(canvasColor: const Color(0xFFF7F7F8));
+
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: themeModeNotifier,
-      builder: (context, mode, _) => MacosApp(
-        title: 'REX',
-        theme: MacosThemeData.light(
-          accentColor: AccentColor.red,
-        ).copyWith(canvasColor: const Color(0xFFF5F5F7)),
-        darkTheme: MacosThemeData.dark(
-          accentColor: AccentColor.red,
-        ).copyWith(canvasColor: const Color(0xFF1C1C24)),
-        themeMode: mode,
-        home: const RexMainWindow(),
-        debugShowCheckedModeBanner: false,
-      ),
+    return MacosApp(
+      title: 'REX',
+      theme: _lightTheme,
+      darkTheme: _lightTheme,
+      themeMode: ThemeMode.light,
+      home: const RexMainWindow(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
@@ -59,180 +55,45 @@ class _RexMainWindowState extends State<RexMainWindow> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RexService>().refreshAll();
+      WindowManipulator.overrideMacOSBrightness(dark: false);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return MacosWindow(
-      sidebar: Sidebar(
-        minWidth: 200,
-        builder: (context, scrollController) {
-          return SidebarItems(
-            currentIndex: _pageIndex,
-            onChanged: (index) => setState(() => _pageIndex = index),
-            scrollController: scrollController,
-            itemSize: SidebarItemSize.large,
-            items: const [
-              SidebarItem(
-                leading: MacosIcon(CupertinoIcons.heart_fill),
-                label: Text('Health'),
-              ),
-              SidebarItem(
-                leading: MacosIcon(CupertinoIcons.mic_fill),
-                label: Text('Voice'),
-              ),
-              SidebarItem(
-                leading: MacosIcon(CupertinoIcons.waveform),
-                label: Text('Audio'),
-              ),
-              SidebarItem(
-                leading: MacosIcon(CupertinoIcons.search),
-                label: Text('Memory'),
-              ),
-              SidebarItem(
-                leading: MacosIcon(CupertinoIcons.paperplane_fill),
-                label: Text('Gateway'),
-              ),
-              SidebarItem(
-                leading: MacosIcon(CupertinoIcons.sparkles),
-                label: Text('Agents'),
-              ),
-              SidebarItem(
-                leading: MacosIcon(CupertinoIcons.link),
-                label: Text('MCP'),
-              ),
-              SidebarItem(
-                leading: MacosIcon(CupertinoIcons.bolt_fill),
-                label: Text('Optimize'),
-              ),
-              SidebarItem(
-                leading: MacosIcon(CupertinoIcons.gear),
-                label: Text('Settings'),
-              ),
-            ],
-          );
-        },
-        top: _SidebarHeader(),
-        bottom: _SidebarFooter(),
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        platformBrightness: Brightness.light,
       ),
-      child: IndexedStack(
-        index: _pageIndex,
-        children: const [
-          HealthPage(),
-          VoicePage(),
-          AudioPage(),
-          MemoryPage(),
-          GatewayPage(),
-          AgentsPage(),
-          McpPage(),
-          OptimizePage(),
-          SettingsPage(),
-        ],
-      ),
-    );
-  }
-}
-
-class _SidebarHeader extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<RexService>(
-      builder: (context, rex, _) {
-        final statusColor = rex.healthStatus == 'healthy'
-            ? CupertinoColors.systemGreen
-            : rex.healthStatus == 'degraded'
-            ? CupertinoColors.systemYellow
-            : CupertinoColors.systemRed;
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFE5484D), Color(0xFFC53030)],
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Center(
-                  child: Text(
-                    'R',
-                    style: TextStyle(
-                      color: CupertinoColors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'REX',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  ),
-                  Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        rex.healthStatus.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: MacosTheme.of(
-                            context,
-                          ).typography.subheadline.color,
-                        ),
-                      ),
-                    ],
-                  ),
+      child: MacosTheme(
+        data: RexApp._lightTheme,
+        child: Row(
+          children: [
+            RexSidebar(
+              currentIndex: _pageIndex,
+              onChanged: (i) => setState(() => _pageIndex = i),
+            ),
+            Expanded(
+              child: IndexedStack(
+                index: _pageIndex,
+                children: const [
+                  HealthPage(),
+                  VoicePage(),
+                  AudioPage(),
+                  MemoryPage(),
+                  GatewayPage(),
+                  AgentsPage(),
+                  McpPage(),
+                  OptimizePage(),
+                  LogsPage(),
+                  SettingsPage(),
                 ],
               ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _SidebarFooter extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final isDark = themeModeNotifier.value == ThemeMode.dark;
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          const Text(
-            'v5.0.0',
-            style: TextStyle(fontSize: 11, color: CupertinoColors.systemGrey),
-          ),
-          const Spacer(),
-          PushButton(
-            controlSize: ControlSize.small,
-            secondary: true,
-            onPressed: () {
-              themeModeNotifier.value = isDark
-                  ? ThemeMode.light
-                  : ThemeMode.dark;
-            },
-            child: Text(isDark ? 'Dark' : 'Light'),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+

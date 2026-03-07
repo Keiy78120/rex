@@ -1,9 +1,12 @@
 # REX — Contexte projet pour agents
 
-## Source Of Truth
-- `CLAUDE.md` principal = celui du root de ce repo.
-- Repo principal: `/Users/keiy/Documents/Developer/keiy/rex`
-- Tout clone miroir (ex: `/_config/rex`) doit être synchronisé depuis ce root pour éviter la dérive.
+## Source Of Truth — CRITIQUE
+
+- **Repo OFFICIEL et UNIQUE** : `/Users/keiy/Documents/Developer/keiy/rex`
+- **Branche principale** : `main`
+- **NE JAMAIS cloner ou travailler sur un autre dossier** (ex: `/_config/rex` est un ancien clone, NE PAS L'UTILISER).
+- Si un autre agent travaille sur REX, il DOIT ouvrir ce repo, pas un clone.
+- `CLAUDE.md` du root de ce repo = seule source de verite. Pas de copie ailleurs.
 
 Ce fichier est le point d'entree rapide pour tout agent (Claude, Codex, Garry) qui travaille sur ce repo.
 **Mettre a jour la section "En cours / Terminé" a chaque changement significatif.**
@@ -58,7 +61,7 @@ packages/
 │       ├── pages/context_page.dart
 │       ├── pages/settings_page.dart
 │       └── theme.dart
-└── app/         Ancienne app Tauri (archivee, ignorer)
+└── app/         (supprime, legacy)
 ```
 
 ---
@@ -119,6 +122,13 @@ rex doctor --fix     # Auto-fix then health check
 - **PATH** : le `_env` getter dans `rex_service.dart` injecte manuellement `~/.nvm/versions/node/v22.20.0/bin` dans le PATH. Si rex change de version Node, mettre a jour ce getter.
 - **window_manager crash** : ne JAMAIS re-ajouter `waitUntilReadyToShow` dans `main.dart`. Incompatible avec `MacosWindowUtilsConfig().apply()`. Fix: `ensureInitialized()` + `setPreventClose(true)` seulement.
 - **notifyListeners pendant build** : tous les appels service dans `initState` doivent etre dans `addPostFrameCallback`.
+- **Provider pattern** : toute l'app utilise `context.read<RexService>()` / `Consumer<RexService>`. NE PAS revenir a `widget.service`.
+- **Theme** : `theme.dart` exporte `RexColors` + extension `context.rex`. Accent = rouge `#E5484D`. Dark canvas = `#1C1C24`. Light canvas = `#F5F5F7`.
+- **Theme toggle** : dans `_SidebarFooter` de `main.dart`, utilise `ValueListenableBuilder<ThemeMode>` + `themeModeNotifier` global. Pill toggle animé sun/moon.
+- **Sidebar** : `minWidth: 220`, `isResizable: false` — NE PAS rendre resizable sinon les labels disparaissent.
+- **Install process** : `flutter build macos --debug` puis `cp -R build/.../rex_app.app /Applications/REX.app && xattr -cr && codesign --deep --force --sign -`
+- **9 pages** : Health, Voice, Audio, Memory, Gateway, Agents, MCP, Optimize, Settings
+- **Settings** : 5 onglets (General, Claude, LLM, Files, Advanced) — NE PAS simplifier.
 
 ### Gateway Telegram
 - Long polling (timeout 30s) dans une boucle `while(true)`
@@ -137,7 +147,9 @@ rex doctor --fix     # Auto-fix then health check
 ### Memoire
 - SQLite dans `~/.rex-memory/rex-memory.db`
 - Embeddings via `nomic-embed-text` Ollama
-- Si Ollama off au moment de l'ingest → les chunks bruts vont dans `~/.rex-memory/pending/`
+- Two-phase ingest : chunks TOUJOURS sauvés dans `~/.claude/rex/memory/pending/` d'abord (instant), puis embeddés lazily par `processPending()` (max 30/run, 500ms throttle)
+- Lockfile `~/.claude/rex/memory/ingest.lock` empêche les process concurrents (stale après 10min)
+- Config env : `REX_EMBED_THROTTLE_MS` (défaut 500), `REX_MAX_EMBED_PER_RUN` (défaut 30)
 
 ---
 
@@ -189,7 +201,7 @@ rex doctor --fix     # Auto-fix then health check
 | `rex models` command: routing table avec dots verts/jaunes | `packages/cli/src/index.ts` |
 | llm.ts: detectModel() delegue a pickModel('gateway') | `packages/cli/src/llm.ts` |
 | CCR config optimise: default=qwen3-coder:30b, background=qwen2.5:1.5b, think=deepseek-r1:8b | `~/.claude-code-router/config.json` |
-| Init.ts: suppression reference Tauri → flutter build macos | `packages/cli/src/init.ts` |
+| Init.ts: flutter build macos (ancienne app supprimee) | `packages/cli/src/init.ts` |
 | Gateway: T-Rex animation 🦖↔🦕 sur tous les états de chargement | `packages/cli/src/gateway.ts` |
 | Gateway: askQwenStream utilise pickModel('gateway') au lieu de hardcodé | `packages/cli/src/gateway.ts` |
 | categorize.ts: detectClassifyModel() auto-detect (qwen3.5:9b first) | `packages/memory/src/categorize.ts` |
@@ -210,36 +222,91 @@ rex doctor --fix     # Auto-fix then health check
 | Logger integration: daemon, recategorize, preload, self-improve, projects, migrate, index | all `src/*.ts` files |
 | `rex logs` command (--lines=N, --follow/-f) to view daemon/CLI logs | `packages/cli/src/index.ts` |
 | `--verbose` flag for debug-level logging on any command | `packages/cli/src/index.ts` |
+| Unification 2 clones repo → main@4ea70dc unique | `CLAUDE.md`, git |
+| Flutter: merge rex_service.dart (stash 1077 lignes + agents/mcp/audio methods) | `rex_service.dart` (1606 lignes) |
+| Flutter: restauration settings_page.dart 5 onglets (General/Claude/LLM/Files/Advanced) | `settings_page.dart` (1912 lignes) |
+| Flutter: restauration memory_page.dart (category chips, consolidate, search) | `memory_page.dart` (548 lignes) |
+| Flutter: restauration gateway_page.dart (timer polling 5s, logs combines, start/stop) | `gateway_page.dart` (490 lignes) |
+| Flutter: theme toggle pill animer sun/moon avec ValueListenableBuilder | `main.dart` |
+| Flutter: sidebar fixe 220px non-resizable (fix labels qui disparaissent) | `main.dart` |
+| Flutter: theme.dart RexColors avec accent rouge REX #E5484D | `theme.dart` |
+| Nettoyage apps dupliquees (/Applications/REX.app unique, suppression rex_app.app + symlink) | install process |
+
+### ✅ Terminé (session 2026-03-06 — REX v6)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **Batch 1: UI Overhaul** | |
+| Sidebar 10 items centree + page Logs centralisee | `main.dart`, `rex_sidebar.dart`, `logs_page.dart` |
+| Logs: tabs Daemon/Gateway/Agents/MCP/CLI, auto-refresh, filtre niveau | `logs_page.dart` |
+| Retrait logs des pages individuelles (Gateway, Agents, MCP) | `gateway_page.dart`, `agents_page.dart`, `mcp_page.dart` |
+| Simplification UI globale (collapse forms, separateurs) | toutes pages |
+| **Batch 2: Orchestrator + Chat** | |
+| Profil orchestrator (Opus, 100 turns, supervise agents) | `agents.ts` |
+| Chat UI Flutter pour orchestrator (input + messages scroll) | `agents_page.dart` |
+| Agent teams (`team` field, `--team` flag) | `agents.ts` |
+| Skills system (`rex skills list/add/show`, Markdown templates) | `skills.ts`, `index.ts` |
+| **Batch 3: MCP Hub + Marketplace** | |
+| MCP discover/search/install CLI commands | `mcp_registry.ts`, `index.ts` |
+| Marketplace cache (20 serveurs populaires, `~/.claude/rex/mcp-marketplace.json`) | `mcp_registry.ts` |
+| Flutter MCP page: marketplace search + install UI, collapsed add forms | `mcp_page.dart` |
+| Agent-MCP binding (`mcpServers` field, `--mcp` flag, inject `--mcp-server`) | `agents.ts` |
+| RexService: searchMarketplace, installMarketplace, discoverMcp | `rex_service.dart` |
+| **Batch 4: Gateway + Multi-instance** | |
+| Fix double reponse: `processedUpdateIds` mutex dans polling loop | `gateway.ts` |
+| Qwen streaming: Ollama `/api/chat` stream + `editMessageText` progressif (800ms) | `gateway.ts` |
+| `/chat` command Telegram → orchestrator agent (fallback Claude session) | `gateway.ts` |
+| Multi-instance Claude: `CLAUDE_CONFIG_DIR` isole par agent (`~/.claude-agent-{id}/`) | `agents.ts` |
+| **Batch 5: Cleanup + Docs** | |
+| VPS Deployment section dans CLAUDE.md (systemd, headless, Ollama distant) | `CLAUDE.md` |
+| **Memory + Watchdog** | |
+| Delta ingest (file_size + lines_ingested tracking, re-process growing files) | `packages/memory/src/ingest.ts` |
+| Watchdog agent profile (30min, auto-fix ingest/Ollama/LaunchAgents) | `agents.ts` |
+| Background processes monitoring in Health page (ps aux + restart) | `rex_service.dart`, `health_page.dart` |
+| Two-phase ingest: save to pending/ (instant) + embed lazily (30 chunks/run, 500ms throttle) | `packages/memory/src/ingest.ts` |
+| Lockfile mutex preventing concurrent ingest processes (10min stale detection) | `packages/memory/src/ingest.ts` |
+| Hooks consolidation: 4 Stop hooks → 1 background script (0 impact UX) | `~/.claude/rex-guards/stop-all.sh` |
+| PostToolUse: 4 hooks → 2 combined fast scripts (<2s) | `~/.claude/rex-guards/post-edit-guard.sh`, `post-bash-guard.sh` |
+| LaunchAgent ingest+categorize combo (1h cycle) | `com.dstudio.rex-ingest.plist` |
 
 ### 🔄 En cours / A faire
 
 | Tache | Priorite | Detail |
 |-------|----------|--------|
 | Training pipeline research approfondie | BASSE | Benchmarks reels mlx-lm vs unsloth + eval dataset interne |
-| Rex daemon LaunchAgent (com.dstudio.rex-daemon) | HAUTE | `rex init` installs, KeepAlive, replaces 3 old agents |
 | Flutter Settings: Model Router section | BASSE | Afficher task→model mapping depuis getRouterSnapshot() |
-| Flutter app rebuild requis | HAUTE | `cd packages/flutter_app && flutter build macos --debug` — inclure tous les derniers changements CLI (logger, daemon, recategorize, preload, self-improve, projects, logs command) |
+| MCP compatibility check dans `rex doctor` | MOYENNE | Diagnostic clair si MCP mal configure |
+| Pipeline no memory loss | MOYENNE | Memoire cloud Claude + semantic search locale + resume |
+| Setup one-command doc | BASSE | `rex install` en 5 min (local + Telegram + agents + MCP) |
 
-**Plan complet :** `docs/plans/2026-03-05-rex-gateway-qwen-streaming-training.md`
+---
 
-### TODO MCP + Agents autonomes (a ne pas oublier)
+## VPS Deployment (headless)
 
-- [ ] Definir le scope exact "OpenClaw-like pour REX" : garder seulement ce qui sert en local/macOS + Telegram.
-- [ ] Faire un inventaire compare de ce qui existe deja dans REX vs OpenClaw (local VPS Milo/Garry + docs OpenClaw) et lister les gaps.
-- [x] Creer 3 profils preconfigures d'agents autonomes : `read`, `analyse`, `code-review` + presets `advanced` et `ultimate`.
-- [x] Definir un format de config unique d'agent (nom, modele, outils, limites, cron, memoire, objectifs).
-- [x] Implementer le moteur d'execution agent (boucle plan -> action -> verification -> resume) avec garde-fous anti-boucle.
-- [x] Ajouter cron/wakeup des agents (jobs planifies) + etat d'execution persistant.
-- [x] Integrer gestion erreurs/retry/timeouts avec journaux exploitables (telemetrie locale).
-- [x] Ajouter commandes Telegram pour agents (`/agents`, `create`, `start`, `stop`, `status`, `logs`) + menu simple/advanced.
-- [ ] Brancher un chat de test agent dans l'UI Flutter (demarrage manuel, logs live, arret d'urgence).
-- [x] Concevoir un MCP global interconnecte (serveurs locaux + distants) avec registry et tests de sante.
-- [ ] Ajouter verification de compatibilite MCP au setup (`rex init`/`rex doctor`) et diagnostic clair.
-- [ ] Finaliser pipeline "no memory loss" : memoire cloud Claude + semantic search locale + embeddings + resume local.
-- [ ] Ajouter consolidation auto memoire (dedup/summarize) pour limiter tokens sans perdre l'historique utile.
-- [ ] Completer pipeline call logger : detection event app -> capture audio (entree/sortie) -> transcription -> optimisation prompt.
-- [ ] Documenter le setup one-command complet (local + Telegram + agents + MCP) en mode "install en 5 min".
-- [ ] Ajouter tests d'integration end-to-end (agent autonome, recovery, redemarrage, reprise de contexte).
+REX fonctionne aussi sur un VPS sans GUI. Adaptation :
+
+- **CLI only** : pas de Flutter, installer uniquement `packages/cli` + `packages/memory`
+- **Daemon** : `rex daemon` tourne via systemd au lieu de LaunchAgents
+  ```ini
+  # /etc/systemd/system/rex-daemon.service
+  [Unit]
+  Description=REX Daemon
+  After=network.target
+
+  [Service]
+  Type=simple
+  User=node
+  ExecStart=/usr/local/bin/rex daemon
+  Restart=always
+  Environment=OLLAMA_URL=http://localhost:11434
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+- **Ollama** : peut etre distant via `OLLAMA_URL` (deja configurable)
+- **Gateway Telegram** : interface principale sur VPS (KeepAlive via systemd)
+- **Agents** : `CLAUDE_CONFIG_DIR` isole par agent (multi-instance)
+- **Memory** : SQLite fonctionne partout, embeddings via Ollama local ou distant
 
 ---
 

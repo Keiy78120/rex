@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { execSync } from 'node:child_process'
+import { execSync, execFileSync } from 'node:child_process'
 
 type McpType = 'stdio' | 'sse' | 'http'
 
@@ -211,7 +211,7 @@ async function checkServer(args: string[]) {
     }
 
     try {
-      execSync(`which ${server.command}`, { stdio: 'ignore' })
+      execFileSync('which', [server.command], { stdio: 'ignore' })
       console.log(JSON.stringify({ ok: true, type: 'stdio', command: server.command }, null, 2))
     } catch {
       console.log(JSON.stringify({ ok: false, type: 'stdio', reason: `command not found: ${server.command}` }, null, 2))
@@ -263,6 +263,279 @@ function syncClaudeSettings() {
   console.log(JSON.stringify({ ok: true, synced: enabledStdio.length, settingsPath }, null, 2))
 }
 
+interface MarketplaceEntry {
+  name: string
+  description: string
+  command?: string
+  args?: string[]
+  installCmd?: string
+  type: McpType
+  url?: string
+  tags: string[]
+  source: string
+}
+
+const MARKETPLACE_DIR = join(HOME, '.claude', 'rex')
+const MARKETPLACE_FILE = join(MARKETPLACE_DIR, 'mcp-marketplace.json')
+
+const DEFAULT_MARKETPLACE: MarketplaceEntry[] = [
+  { name: 'context7', description: 'Versioned docs for any library (npm, PyPI)', command: 'npx', args: ['-y', '@upstash/context7-mcp'], installCmd: 'npx -y @upstash/context7-mcp', type: 'stdio', tags: ['docs', 'libraries'], source: 'builtin' },
+  { name: 'playwright', description: 'Browser automation and testing', command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-playwright'], installCmd: 'npx -y @anthropic-ai/mcp-server-playwright', type: 'stdio', tags: ['browser', 'testing', 'automation'], source: 'builtin' },
+  { name: 'filesystem', description: 'Local filesystem access (read/write/search)', command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-filesystem'], installCmd: 'npx -y @anthropic-ai/mcp-server-filesystem', type: 'stdio', tags: ['files', 'local'], source: 'builtin' },
+  { name: 'github', description: 'GitHub API (repos, issues, PRs, actions)', command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-github'], installCmd: 'npm install -g @anthropic-ai/mcp-server-github', type: 'stdio', tags: ['git', 'github', 'ci'], source: 'builtin' },
+  { name: 'slack', description: 'Slack messaging and channel management', command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-slack'], installCmd: 'npx -y @anthropic-ai/mcp-server-slack', type: 'stdio', tags: ['messaging', 'slack'], source: 'builtin' },
+  { name: 'linear', description: 'Linear issue tracker integration', command: 'npx', args: ['-y', 'mcp-linear'], installCmd: 'npx -y mcp-linear', type: 'stdio', tags: ['issues', 'project-management'], source: 'builtin' },
+  { name: 'figma', description: 'Figma design file access and inspection', command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-figma'], installCmd: 'npx -y @anthropic-ai/mcp-server-figma', type: 'stdio', tags: ['design', 'figma', 'ui'], source: 'builtin' },
+  { name: 'brave-search', description: 'Web search via Brave Search API', command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-brave-search'], installCmd: 'npx -y @anthropic-ai/mcp-server-brave-search', type: 'stdio', tags: ['search', 'web'], source: 'builtin' },
+  { name: 'puppeteer', description: 'Headless Chrome browser automation', command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-puppeteer'], installCmd: 'npx -y @anthropic-ai/mcp-server-puppeteer', type: 'stdio', tags: ['browser', 'scraping'], source: 'builtin' },
+  { name: 'sequential-thinking', description: 'Step-by-step reasoning and problem solving', command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-sequential-thinking'], installCmd: 'npx -y @anthropic-ai/mcp-server-sequential-thinking', type: 'stdio', tags: ['reasoning', 'thinking'], source: 'builtin' },
+  { name: 'memory', description: 'Persistent memory via knowledge graph', command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-memory'], installCmd: 'npx -y @anthropic-ai/mcp-server-memory', type: 'stdio', tags: ['memory', 'knowledge'], source: 'builtin' },
+  { name: 'postgres', description: 'PostgreSQL database access', command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-postgres'], installCmd: 'npx -y @anthropic-ai/mcp-server-postgres', type: 'stdio', tags: ['database', 'postgres', 'sql'], source: 'builtin' },
+  { name: 'sqlite', description: 'SQLite database access', command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-sqlite'], installCmd: 'npx -y @anthropic-ai/mcp-server-sqlite', type: 'stdio', tags: ['database', 'sqlite', 'sql'], source: 'builtin' },
+  { name: 'docker', description: 'Docker container management', command: 'npx', args: ['-y', 'mcp-docker'], installCmd: 'npx -y mcp-docker', type: 'stdio', tags: ['docker', 'containers', 'devops'], source: 'builtin' },
+  { name: 'kubernetes', description: 'Kubernetes cluster management', command: 'npx', args: ['-y', 'mcp-kubernetes'], installCmd: 'npx -y mcp-kubernetes', type: 'stdio', tags: ['kubernetes', 'k8s', 'devops'], source: 'builtin' },
+  { name: 'sentry', description: 'Sentry error tracking integration', command: 'npx', args: ['-y', 'mcp-sentry'], installCmd: 'npx -y mcp-sentry', type: 'stdio', tags: ['monitoring', 'errors', 'sentry'], source: 'builtin' },
+  { name: 'notion', description: 'Notion workspace access', command: 'npx', args: ['-y', 'mcp-notion'], installCmd: 'npx -y mcp-notion', type: 'stdio', tags: ['notion', 'docs', 'wiki'], source: 'builtin' },
+  { name: 'google-drive', description: 'Google Drive file access', command: 'npx', args: ['-y', 'mcp-google-drive'], installCmd: 'npx -y mcp-google-drive', type: 'stdio', tags: ['google', 'drive', 'files'], source: 'builtin' },
+  { name: 'exa', description: 'Exa AI-powered web search', command: 'npx', args: ['-y', 'mcp-exa'], installCmd: 'npx -y mcp-exa', type: 'stdio', tags: ['search', 'web', 'ai'], source: 'builtin' },
+  { name: 'firecrawl', description: 'Web scraping and crawling', command: 'npx', args: ['-y', 'mcp-firecrawl'], installCmd: 'npx -y mcp-firecrawl', type: 'stdio', tags: ['scraping', 'crawling', 'web'], source: 'builtin' },
+]
+
+function readMarketplace(): MarketplaceEntry[] {
+  try {
+    if (existsSync(MARKETPLACE_FILE)) {
+      const parsed = JSON.parse(readFileSync(MARKETPLACE_FILE, 'utf-8'))
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed as MarketplaceEntry[]
+    }
+  } catch {
+    // noop
+  }
+  // Create default cache
+  if (!existsSync(MARKETPLACE_DIR)) mkdirSync(MARKETPLACE_DIR, { recursive: true })
+  writeFileSync(MARKETPLACE_FILE, JSON.stringify(DEFAULT_MARKETPLACE, null, 2))
+  return DEFAULT_MARKETPLACE
+}
+
+async function discoverServer(args: string[], jsonMode: boolean) {
+  const idOrName = args[0]
+  if (!idOrName) {
+    console.log('Usage: rex mcp discover <id|name>')
+    process.exit(1)
+  }
+
+  const registry = readRegistry()
+  const server = findServer(registry, idOrName)
+  if (!server) {
+    console.log(`Server not found: ${idOrName}`)
+    process.exit(1)
+  }
+
+  if (server.type !== 'stdio' && server.url) {
+    // URL-based server: send JSON-RPC tools/list
+    const controller = new AbortController()
+    const t = setTimeout(() => controller.abort(), 10000)
+    try {
+      const res = await fetch(server.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 }),
+        signal: controller.signal,
+      })
+      clearTimeout(t)
+      if (!res.ok) {
+        console.log(`Could not discover tools for ${server.name} (HTTP ${res.status})`)
+        return
+      }
+      const body = await res.json() as any
+      const tools = body?.result?.tools || []
+      if (jsonMode) {
+        console.log(JSON.stringify(tools, null, 2))
+      } else if (tools.length === 0) {
+        console.log(`No tools found for ${server.name}`)
+      } else {
+        for (const tool of tools) {
+          console.log(`  ${tool.name || 'unnamed'}  ${tool.description || ''}`)
+        }
+      }
+    } catch {
+      clearTimeout(t)
+      console.log(`Could not discover tools for ${server.name}`)
+    }
+    return
+  }
+
+  // stdio server: try spawning with MCP protocol init + tools/list
+  if (!server.command) {
+    console.log(`Could not discover tools for ${server.name} (no command)`)
+    return
+  }
+
+  try {
+    const { spawn } = await import('node:child_process')
+    const child = spawn(server.command, [...(server.args || [])], {
+      cwd: server.cwd || undefined,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+
+    let output = ''
+    let done = false
+    const timeout = setTimeout(() => {
+      if (!done) { done = true; child.kill(); }
+    }, 10000)
+
+    child.stdout.on('data', (chunk: Buffer) => { output += chunk.toString() })
+
+    // Send MCP initialize then tools/list
+    const initMsg = JSON.stringify({ jsonrpc: '2.0', method: 'initialize', id: 0, params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'rex', version: '1.0' } } }) + '\n'
+    const toolsMsg = JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', id: 1 }) + '\n'
+
+    child.stdin.write(initMsg)
+    // Small delay before sending tools/list
+    setTimeout(() => { child.stdin.write(toolsMsg) }, 500)
+    // Give time for response
+    setTimeout(() => {
+      if (!done) {
+        done = true
+        clearTimeout(timeout)
+        child.kill()
+
+        // Parse tools from output (look for tools/list response)
+        const lines = output.split('\n').filter(Boolean)
+        let tools: any[] = []
+        for (const line of lines) {
+          try {
+            const parsed = JSON.parse(line)
+            if (parsed.id === 1 && parsed.result?.tools) {
+              tools = parsed.result.tools
+              break
+            }
+          } catch {
+            // skip non-JSON lines
+          }
+        }
+
+        if (jsonMode) {
+          console.log(JSON.stringify(tools, null, 2))
+        } else if (tools.length === 0) {
+          console.log(`Could not discover tools for ${server.name}`)
+        } else {
+          console.log(`Tools for ${server.name}:`)
+          for (const tool of tools) {
+            console.log(`  ${tool.name || 'unnamed'}  ${tool.description || ''}`)
+          }
+        }
+      }
+    }, 3000)
+
+    // Wait for the child to finish
+    await new Promise<void>((resolve) => {
+      child.on('close', () => resolve())
+      child.on('error', () => { if (!done) { done = true; clearTimeout(timeout) }; resolve() })
+      setTimeout(() => resolve(), 12000)
+    })
+  } catch {
+    console.log(`Could not discover tools for ${server.name}`)
+  }
+}
+
+function searchMarketplace(args: string[], jsonMode: boolean) {
+  const query = args.filter((a) => !a.startsWith('--')).join(' ').toLowerCase()
+  if (!query) {
+    console.log('Usage: rex mcp search <query>')
+    process.exit(1)
+  }
+
+  const marketplace = readMarketplace()
+  const matches = marketplace.filter((entry) => {
+    const haystack = `${entry.name} ${entry.description} ${entry.tags.join(' ')}`.toLowerCase()
+    return query.split(/\s+/).every((word) => haystack.includes(word))
+  })
+
+  if (jsonMode) {
+    console.log(JSON.stringify(matches, null, 2))
+    return
+  }
+
+  if (matches.length === 0) {
+    console.log(`No servers found matching "${query}"`)
+    return
+  }
+
+  console.log(`Found ${matches.length} server(s):\n`)
+  for (const entry of matches) {
+    console.log(`  ${entry.name.padEnd(22)} ${entry.description}`)
+    if (entry.installCmd) console.log(`    install: ${entry.installCmd}`)
+    if (entry.tags.length) console.log(`    tags: ${entry.tags.join(', ')}`)
+    console.log('')
+  }
+}
+
+async function installFromMarketplace(args: string[]) {
+  const name = args[0]
+  if (!name) {
+    console.log('Usage: rex mcp install <name>')
+    process.exit(1)
+  }
+
+  const marketplace = readMarketplace()
+  const entry = marketplace.find((e) => e.name === name)
+  if (!entry) {
+    console.log(`Server "${name}" not found in marketplace. Run "rex mcp search ${name}" to check.`)
+    process.exit(1)
+  }
+
+  if (!entry.installCmd) {
+    console.log(`No install command for "${name}".`)
+    if (entry.command) {
+      console.log(`You can add it manually: rex mcp add ${name} --command ${entry.command} --args ${(entry.args || []).join(',')}`)
+    }
+    return
+  }
+
+  console.log(`Installing ${name}...`)
+  console.log(`  $ ${entry.installCmd}\n`)
+
+  // Validate install command starts with a safe prefix
+  const safePrefix = ['npx ', 'npm ', 'pip ', 'pip3 ', 'brew ', 'docker ']
+  if (!safePrefix.some(p => entry.installCmd.startsWith(p))) {
+    console.log(`\n⚠️ Install command rejected (unsafe prefix): ${entry.installCmd}`)
+    return
+  }
+
+  try {
+    execSync(entry.installCmd, { stdio: 'inherit', timeout: 120_000 })
+  } catch {
+    console.log(`\nInstall command failed. You may need to run it manually: ${entry.installCmd}`)
+    return
+  }
+
+  // Auto-add to registry
+  const registry = readRegistry()
+  const existing = findServer(registry, name)
+  if (existing) {
+    console.log(`\nServer "${name}" already in registry (id=${existing.id}). Skipping auto-add.`)
+    return
+  }
+
+  const now = new Date().toISOString()
+  const newEntry: McpServerEntry = {
+    id: `${slug(name)}-${Date.now().toString().slice(-6)}`,
+    name: entry.name,
+    type: entry.type,
+    command: entry.command,
+    args: entry.args || [],
+    enabled: true,
+    tags: entry.tags,
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  registry.servers.push(newEntry)
+  writeRegistry(registry)
+  console.log(`\nAdded to registry: ${newEntry.id}`)
+  console.log(JSON.stringify({ ok: true, server: newEntry }, null, 2))
+}
+
 function showExport() {
   const registry = readRegistry()
   const enabledStdio = registry.servers.filter((s) => s.enabled && s.type === 'stdio' && s.command)
@@ -310,7 +583,16 @@ export async function mcpRegistry(args: string[]) {
     case 'export':
       showExport()
       return
+    case 'discover':
+      await discoverServer(rest, jsonMode)
+      return
+    case 'search':
+      searchMarketplace(rest, jsonMode)
+      return
+    case 'install':
+      await installFromMarketplace(rest)
+      return
     default:
-      console.log('Usage: rex mcp <list|add|add-url|remove|enable|disable|check|sync-claude|export> ...')
+      console.log('Usage: rex mcp <list|add|add-url|remove|enable|disable|check|sync-claude|export|discover|search|install> ...')
   }
 }
