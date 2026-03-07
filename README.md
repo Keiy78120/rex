@@ -2,182 +2,235 @@
 
 # REX
 
-**The missing layer between you and Claude Code.**
+**A local-first operating layer for Claude Code.**
 
-Claude Code is powerful. But it forgets everything, ships half-done work, makes the same mistakes twice, and you can't control it when you're away from your desk.
-
-REX fixes all of that.
+Make Claude Code safer, less forgetful, cheaper to run, and easier to control across your machines.
 
 [![npm](https://img.shields.io/npm/v/rex-claude?color=blue&label=npm)](https://www.npmjs.com/package/rex-claude)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-![platform](https://img.shields.io/badge/macOS-black)
+![platform](https://img.shields.io/badge/macOS-primary-black)
+![cli](https://img.shields.io/badge/CLI-available-444)
 ![claude](https://img.shields.io/badge/Claude_Code-compatible-purple)
 
 </div>
 
 ---
 
-## What REX actually is
+## Why REX
 
-REX is a **full companion system for Claude Code** — not just a plugin.
+Claude Code is strong at producing code.
+It is weaker at persistence, guardrails, memory, cost control, and remote operation.
 
-It runs 24/7 in the background. It watches every action Claude takes. It indexes everything Claude produces. It gives Claude a persistent memory it would otherwise never have. It lets you talk to Claude from your phone. It blocks the dumb mistakes before they happen. And it brings you features that normally cost money — completely free and local.
+REX adds that missing layer:
 
-Think of it as the infra layer Claude Code never shipped.
+- **Memory**: searchable local memory instead of starting from zero every session
+- **Guards**: block dangerous or low-quality actions before they land
+- **Control**: operate through CLI, Telegram, and a Flutter desktop app
+- **Cost routing**: use what you already own before paying for more inference
+- **Topology awareness**: useful with one machine, a small cluster, or a larger fleet
 
----
-
-## What you stop paying for
-
-Claude Code out of the box gives you a capable agent with zero memory and zero guardrails. REX changes that — using open source models running locally.
-
-| Feature | Without REX | With REX |
-|---------|------------|---------|
-| **Voice transcription** | ~$0.006/min (Whisper API) | Free — local Whisper via Ollama |
-| **Persistent memory** | Not available | Free — SQLite + nomic-embed-text, local |
-| **Talk to Claude on mobile** | Not available | Free — Telegram gateway |
-| **Error learning** | Claude forgets instantly | Logged, categorized, searchable forever |
-| **Session history search** | Not available | Free — semantic vector search |
-| **Auto-categorized knowledge** | Not available | Free — Qwen auto-tags every session |
-| **Task notifications** | Nothing | Free — Telegram /notifs with project filter |
+> REX is not a theme, wrapper, or dashboard gimmick.
+> It is meant to become a practical developer control plane.
 
 ---
 
-## What REX prevents
+## What Exists Today
 
-Claude Code is good at writing code. It is less good at not breaking things.
+| Area | Current state |
+|------|---------------|
+| **CLI** | Health checks, memory ingest/search, guards, agents, logs, audit |
+| **Memory** | Local SQLite + embeddings via Ollama, semantic search, pending queue |
+| **Guards** | 8 hook-based safeguards for dangerous commands, weak completions, UI issues, and more |
+| **Gateway** | Telegram control surface |
+| **App** | Flutter macOS desktop app |
+| **Ops** | LaunchAgents, doctor checks, audit command |
 
-REX installs **6 guards** that hook into every Claude action before it executes:
+### Current strengths
 
-| Guard | What it blocks |
-|-------|---------------|
-| **Dangerous Command** | `rm -rf`, `git push --force main`, `DROP TABLE` — blocks before execution |
-| **Completion** | Claude saying "done" when TODO, FIXME, or empty functions remain |
-| **Test Protector** | Claude deleting or weakening tests to make them pass instead of fixing code |
-| **Scope Guard** | Touching more than 8 files at once without understanding why |
-| **Session Summary** | Saves git state, branch, modified files, and last commit at every session end |
-| **Error Pattern** | Detects repeated error signatures and surfaces them before Claude retries blind |
-
-These run silently. Zero UX impact. You only hear from them when something is wrong.
+- **Local-first**: memory and many workflows run without paid APIs
+- **Actually usable now**: this is not only a future architecture document
+- **Honest scope**: macOS is the main supported desktop app today; CLI remains the durable base
 
 ---
 
-## Memory that actually works
+## What Makes REX Different
 
-Every Claude Code session is automatically indexed into a local vector database.
+| Without REX | With REX |
+|-------------|----------|
+| Claude forgets previous work | Local searchable memory and session context injection |
+| Expensive defaults become normal | Owned hardware, scripts, CLIs, and free tiers are considered first |
+| Remote control is awkward | Telegram + CLI + app surfaces |
+| "Done" can still be fake | Guards catch TODOs, weak test fixes, dangerous commands, and repeated failures |
+| Every workflow is repeated manually | Successful patterns can become reusable runbooks |
 
-```bash
-rex ingest                               # index latest sessions (runs hourly via LaunchAgent)
-rex categorize                           # auto-tag by topic: bug, pattern, lesson, refactor...
-rex search "how did I fix the JWT bug"   # semantic search across all your sessions
+---
+
+## Core Principles
+
+REX is being shaped around a few hard rules:
+
+1. **Use what the user already has**: script, local CLI, local service, owned hardware, free tier, then paid API.
+2. **CLI first for execution**: CLI before MCP, MCP before API, API before anything heavier.
+3. **Headless parity**: critical operations cannot depend only on the GUI.
+4. **No fake complexity**: if open source already solves a low-level problem well, REX integrates it instead of rebuilding it.
+5. **Zero-loss before fancy sync**: append-only logs, queues, ack, replay, then real-time niceties.
+6. **Flutter is the main operator UI, not the brain**: the system must still run on a headless VPS.
+7. **Continuity beats immediacy**: if one node survives, REX should preserve, spool, organize, and replay rather than lose work.
+
+---
+
+## Vision
+
+REX is moving toward a stricter v7 shape:
+
+- **One brain, multiple machines**: Mac, VPS, GPU node, NAS
+- **User-owned resources first**: scripts, installed CLIs, local services, and owned hardware before paid inference
+- **Governed tool registry**: many tools can be known, but external ones stay disabled until the user enables them
+- **Flutter-first operator console**: no default rewrite into a noisy web dashboard
+- **Cross-platform target**: macOS today, desktop target later is macOS + Windows + Linux
+- **Topology-aware**: one machine, 2-5 machines, or 10-30+ nodes must all degrade cleanly
+- **OpenClaw-inspired capabilities**: central routing and remote control, not its interface style
+- **Living memory**: failures become lessons, successes become runbooks
+- **Optional secure hub**: VPS preferred when available, never required for single-machine usefulness
+
+---
+
+## Roadmap
+
+REX is being built in practical layers, not as a giant rewrite.
+
+### Phase 1 — Strong Local Base
+
+- [ ] make local memory and pending queues harder to lose
+- [ ] improve resource inventory: scripts, CLIs, services, hardware, quotas
+- [ ] promote repeatable successes into runbooks
+- [ ] keep solo-machine mode fully useful
+
+### Phase 2 — Reliable Background System
+
+- [ ] unify background jobs around reconcile / organize / reflect / prune
+- [ ] preserve gateway messages, tasks, and observations before processing
+- [ ] keep organizing work possible through scripts, local LLMs, or free tiers
+- [ ] strengthen audit and doctor flows
+
+### Phase 3 — Secure Multi-Machine REX
+
+- [ ] add secure hub API for nodes, tasks, events, and health
+- [ ] add durable sync with queue, ack, and replay
+- [ ] make Tailscale the default networking layer
+- [ ] support clean fallback when the preferred hub goes down
+
+### Phase 4 — Better Operator Surfaces
+
+- [ ] extend the Flutter operator app beyond the current macOS-first state
+- [ ] add better views for nodes, queue health, degraded mode, and incidents
+- [ ] keep remote dashboard support secondary to the shared API
+- [ ] keep the UI minimal, fast, and readable
+
+### Phase 5 — Governed Tooling
+
+- [ ] expand the MCP/tool registry without auto-enabling everything
+- [ ] keep tool activation explicit and explainable
+- [ ] prefer CLI first, then MCP, then API
+- [ ] integrate existing OSS where it already solves the low-level problem well
+
+### Phase 6 — Install and Fleet Readiness
+
+- [ ] one-command install profiles for local dev, desktop full, headless node, hub VPS, and GPU node
+- [ ] clearer fleet behaviors for 10-30+ machines
+- [ ] group/tag-based targeting and aggregate health
+- [ ] better packaging and setup on macOS, Linux, Windows, and VPS
+
+---
+
+## Docs Map
+
+Internal planning docs are now split by usage:
+
+| Doc | Use it for |
+|-----|------------|
+| `docs/plans/action.md` | launch work with an agent team |
+| `docs/plans/backend-functions.md` | backend logic, gateway, memory, sync, hub |
+| `docs/plans/frontend-design.md` | Flutter UI, operator UX, page priorities |
+| `docs/plans/sources.md` | source hierarchy, OSS reuse, anti-duplication |
+| `docs/plans/2026-03-07-rex-v7-openclaw-addendum.md` | architecture guardrails |
+| `docs/plans/2026-03-07-rex-v7-master-plan.md` | long-form reference only |
+
+For one-shot agent execution, the intended entrypoint is:
+
+```text
+Read docs/plans/action.md and follow only the references it gives you.
 ```
 
-Powered by **Ollama** + `nomic-embed-text` + SQLite. Everything stays local. No API calls. No cost.
+---
 
-When you start a new session in a project, REX injects the most relevant memories directly into Claude's context — so it already knows what was done last time, what broke, and what patterns you use.
+## Coming Next
 
-```
-[REX Context] Project: my-app | next.js, typescript, drizzle
-Last: Fixed race condition in optimistic updates — used mutex pattern
-Lessons:
-  - useEffect cleanup needed when fetch is cancelled mid-flight
-  - Drizzle transactions must await all queries before returning
-Skills: ux-flow, ui-craft, ui-review, db-design, seo, perf
-```
+<details>
+<summary><strong>Planned Implementations</strong></summary>
 
-Claude reads this at session start. It doesn't start from zero anymore.
+### Near-term
+
+- Secure REX hub API for nodes, tasks, health, and events
+- Resource inventory: scripts, installed tools, services, quotas, hardware
+- Durable queue + replay between machines
+- Success memory and reusable runbooks
+- Tailscale-first networking with explicit fallbacks
+- MCP registry with recommendation-only defaults and explicit activation
+- Better one-shot agent-team execution through a single `action.md` entrypoint
+
+### Product direction
+
+- Flutter desktop surface extended beyond macOS
+- Remote dashboard as a view on the same API, not a second brain
+- Better operator views for nodes, queue health, and incidents
+- Meeting/transcription bots through existing OSS where possible
+- One-command install strategy for macOS, Linux, Windows, and VPS
+- Clearer fleet behavior for larger machine sets
+
+### Explicit non-goals
+
+- Rebuilding low-level sandbox engines when existing OSS already works
+- Duplicating the product with a separate full web app by default
+- Routing paid LLMs before owned/free options
+- Treating multi-node as required for basic usefulness
+
+</details>
+
+<details>
+<summary><strong>Topology Rules</strong></summary>
+
+### 1 machine
+
+- No hub required
+- No Tailscale required
+- Local mode must stay fully useful
+- Multi-node features should hide or degrade cleanly
+
+### 2 to 5 machines
+
+- Preferred standard mode
+- Stable hub if available, otherwise a main machine can temporarily lead
+- Tailscale, wake, and health checks become valuable
+
+### 10 to 30+ machines
+
+- Inventory, tags, groups, and aggregate health become mandatory
+- No noisy full-sync assumptions everywhere
+- Scheduling and rate limiting must target groups, not only individual nodes
+
+</details>
 
 ---
 
-## Control Claude from your phone
+## Interfaces
 
-REX includes a full Telegram bot that keeps running 24/7.
-
-```
-/claude build me a pricing page with dstudio-ui
-/qwen explain this regex: ^(?=.*[A-Z])(?=.*\d).{8,}$
-/models → switch between Haiku · Sonnet · Opus · Qwen 1.5b · 4b · 9b
-/memory auth bug fix             → semantic search on the fly
-/notifs                          → browse task completions by project
-/status                          → full health check, LaunchAgent status
-```
-
-- **Qwen runs local** — zero cost, streams token by token, think-blocks filtered
-- **Claude streams too** — animated progress while it processes, not a black box
-- **Model switching** — change between Haiku/Sonnet/Opus live from Telegram, persists
-- **Silent notifications** — task completions stored silently in `/notifs`, never spam your chat
-
-Start it once, the LaunchAgent keeps it alive forever:
-
-```bash
-rex gateway
-```
-
----
-
-## 28 skills that make Claude smarter
-
-Skills are instruction sets Claude loads on demand. REX ships **28 battle-tested skills** that cover the full dev workflow.
-
-When you open a project, REX detects your stack from `package.json` and tells Claude which skills are available — automatically.
-
-### Design
-| Skill | When it activates |
-|-------|------------------|
-| `ux-flow` | Building any page or form — maps all states before writing code |
-| `ui-craft` | Visual execution — hierarchy, 4px grid, typography scale, motion |
-| `ui-review` | Post-build audit — WCAG AA, responsive, composition, a11y |
-
-### Engineering
-| Skill | Stack detection |
-|-------|---------------|
-| `perf` | react, next, vue → Core Web Vitals, bundle, N+1 queries |
-| `api-design` | express, hono, fastify → REST conventions, envelopes, pagination |
-| `db-design` | prisma, drizzle → schema, indexes, safe migrations |
-| `auth-patterns` | next-auth, passport → JWT, sessions, RBAC, rate limiting |
-| `test-strategy` | vitest, jest, playwright → pyramid, mocking rules, coverage |
-| `error-handling` | any backend → boundaries, logging, async flows |
-| `seo` | next → metadata API, OG images, sitemap, structured data |
-| `i18n` | next-intl → locale routing, pluralization, date formatting |
-
-### Dev workflow
-`code-review` · `build-validate` · `debug-assist` · `fix-issue` · `pr-review-loop` · `deploy-checklist` · `new-rule` · `research` · `context-loader` · `token-guard` · `notify` · `rex-boot` · `one-shot` · `project-init` · `spec-interview` · `figma-workflow` · `dstudio-design-system`
-
----
-
-## Voice — free transcription
-
-REX includes voice transcription powered by local Whisper (via Ollama). No API key. No per-minute cost.
-
-- Record → transcribe → optionally optimize the transcript as a prompt via local LLM
-- Auto start/stop recording tied to call detection (Hammerspoon on macOS)
-- Accessible from the macOS app or `rex voice transcribe`
-
----
-
-## Health monitoring
-
-```bash
-rex doctor    # 55+ checks across 9 categories — guards, hooks, LaunchAgents, Ollama, models
-rex status    # one-line summary
-rex logs -f   # tail live logs from all background services
-```
-
-REX checks itself. If a LaunchAgent died, if Ollama is down, if a guard is broken — `rex doctor` finds it and `rex doctor --fix` repairs it.
-
----
-
-## macOS native app
-
-A Flutter desktop app for when you want a GUI instead of the terminal.
-
-9 pages: **Health** · **Memory** · **Gateway** · **Voice** · **Agents** · **MCP** · **Optimize** · **Logs** · **Settings**
-
-- Browse and search your memory with category chips
-- Start/stop the Telegram gateway with one click
-- Live log viewer with tabs per service
-- 5-tab settings (General · Claude · LLM · Files · Advanced)
-- System tray with hide-to-tray and quick actions
+| Interface | Role |
+|-----------|------|
+| **CLI** | Primary execution surface |
+| **Flutter app** | Main operator UI |
+| **Telegram** | Remote control and notifications |
+| **Hub API** | Future shared control plane for app, CLI, gateway, and nodes |
 
 ---
 
@@ -185,84 +238,194 @@ A Flutter desktop app for when you want a GUI instead of the terminal.
 
 ```bash
 npm install -g rex-claude
-rex init      # installs guards, hooks, skills, LaunchAgents
-rex setup     # installs Ollama + nomic-embed-text + Qwen (optional but recommended)
+rex init
+rex setup
 ```
 
-That's it. Everything runs in the background from here.
+What this does:
+
+- installs guards and hooks
+- installs skills
+- configures background services
+- optionally sets up Ollama models for local memory and local tasks
 
 ---
 
-## All commands
+## Quick Commands
 
-| Command | What it does |
-|---------|-------------|
-| `rex init` | Install guards, hooks, skills, LaunchAgents |
+| Command | Purpose |
+|---------|---------|
+| `rex init` | Install guards, hooks, skills, and background setup |
 | `rex setup` | Install Ollama dependencies and models |
-| `rex doctor` | Full health check (55+ checks) |
+| `rex doctor` | Full health check |
 | `rex doctor --fix` | Auto-repair common issues |
-| `rex status` | One-line status |
-| `rex gateway` | Start Telegram bot (or let LaunchAgent handle it) |
+| `rex status` | One-line system summary |
+| `rex gateway` | Start Telegram gateway |
+| `rex audit` | Run integration audit |
 | `rex ingest` | Index Claude Code sessions into memory |
-| `rex categorize` | Auto-tag memories by topic |
-| `rex search <query>` | Semantic search over all indexed sessions |
-| `rex optimize` | Analyze and improve your CLAUDE.md |
-| `rex context` | Project context snapshot |
-| `rex skills list` | List all installed skills |
-| `rex skills show <name>` | Show a skill's content |
-| `rex logs` | View logs from all background services |
-| `rex logs -f` | Tail live logs |
-| `rex agents list` | List configured autonomous agents |
+| `rex categorize` | Auto-tag memories |
+| `rex search <query>` | Semantic memory search |
+| `rex logs -f` | Tail background logs |
+
+<details>
+<summary><strong>More Commands</strong></summary>
+
+| Command | Purpose |
+|---------|---------|
+| `rex optimize` | Analyze and improve your `CLAUDE.md` |
+| `rex context` | Show project context snapshot |
+| `rex skills list` | List installed skills |
+| `rex skills show <name>` | Show one skill |
+| `rex agents list` | List autonomous agents |
+| `rex logs` | View logs from background services |
+
+</details>
 
 ---
 
-## Architecture
+## App Surface
 
+The Flutter app already builds today on macOS.
+
+```bash
+cd packages/flutter_app
+flutter build macos --debug
 ```
-rex-claude (npm, ~90KB)
+
+Current pages:
+
+- Health
+- Memory
+- Gateway
+- Voice
+- Agents
+- MCP
+- Optimize
+- Logs
+- Settings
+
+Design direction for future UI work:
+
+- keep the operator surface minimal
+- show essentials first: health, nodes, queue, memory pending, incidents
+- avoid dashboard bloat
+- keep remote and desktop surfaces aligned with the same API
+
+---
+
+## Memory
+
+REX indexes Claude Code sessions into a local vector database.
+
+```bash
+rex ingest
+rex categorize
+rex search "how did I fix the JWT bug"
+```
+
+Current memory stack:
+
+- **SQLite** for local storage
+- **Ollama + nomic-embed-text** for embeddings
+- **pending queue** for safer ingest before processing
+- **context reinjection** at session start
+
+This is the direction for memory over time:
+
+- failures become lessons
+- successes become runbooks
+- repetitive workflows become scripts or reusable procedures
+
+---
+
+## Guardrails
+
+REX currently ships **8 guards** around Claude Code activity.
+
+| Guard | Purpose |
+|-------|---------|
+| Dangerous Command | Block risky shell/database operations |
+| Completion | Catch false "done" claims |
+| Test Protector | Stop deleting or weakening tests |
+| Scope Guard | Warn on wide, unjustified file changes |
+| Session Summary | Save repo state at session end |
+| Error Pattern | Surface repeated failure signatures |
+| UI Checklist | Catch missing loading/empty/error states |
+| Notify Telegram | Push important events to a quiet notification flow |
+
+---
+
+## Skills
+
+REX ships a large built-in skill set for design, engineering, review, delivery, and project setup.
+
+<details>
+<summary><strong>Skill Groups</strong></summary>
+
+### Design
+
+`ux-flow` · `ui-craft` · `ui-review`
+
+### Engineering
+
+`perf` · `api-design` · `db-design` · `auth-patterns` · `test-strategy` · `error-handling` · `seo` · `i18n`
+
+### Workflow
+
+`code-review` · `build-validate` · `debug-assist` · `fix-issue` · `pr-review-loop` · `deploy-checklist` · `new-rule` · `research` · `context-loader` · `token-guard` · `notify` · `rex-boot` · `one-shot` · `project-init` · `spec-interview` · `figma-workflow` · `dstudio-design-system`
+
+</details>
+
+---
+
+## Architecture Snapshot
+
+```text
+rex-claude
 ├── CLI (TypeScript/Node)
-│   ├── gateway.ts      Telegram bot — Qwen stream, Claude async, model switching
-│   ├── ingest.ts       Session indexer — pending queue, lockfile, throttling
-│   ├── preload.ts      SessionStart context injector — memory + skill detection
-│   ├── agents.ts       Autonomous agent profiles (orchestrator, watchdog, etc.)
-│   ├── skills.ts       Skills system — list, show, add, delete
-│   └── guards/         6 bash guards hooked via Claude Code hooks
-│
-├── Memory (SQLite + sqlite-vec)
-│   ├── ~/.rex-memory/rex-memory.db          Vector embeddings store
-│   └── ~/.rex-memory/notifications.json     Silent notification queue
-│
-├── Config (~/.claude/)
-│   ├── rex-guards/     Guard scripts (SessionStart, Stop, PreToolUse, PostToolUse)
-│   ├── skills/         28 skills, auto-installed by rex init
-│   ├── rules/          Custom rules per project
-│   └── settings.json   Credentials (Telegram, Ollama URLs)
-│
-├── LaunchAgents (macOS, always-on)
-│   ├── com.dstudio.rex-doctor.plist    Health check every hour
-│   ├── com.dstudio.rex-ingest.plist    Ingest + categorize every hour
-│   └── com.dstudio.rex-gateway.plist   Telegram bot (KeepAlive, auto-restart)
-│
-└── Flutter App (macOS native)
-    └── 9 pages: Health · Memory · Gateway · Voice · Agents · MCP · Optimize · Logs · Settings
+├── Memory (SQLite + embeddings)
+├── Guards (Claude hooks)
+├── Telegram gateway
+├── Flutter desktop app
+└── Future secure hub for multi-node control
 ```
+
+### Planned hub shape
+
+- **Hub**: always-on daemon on a VPS or other stable machine
+- **Nodes**: Mac, Linux, GPU box, NAS
+- **Routing**: cache -> script/tool -> owned hardware -> free provider -> paid provider
+- **Tool policy**: CLI/script -> MCP -> API -> other
+- **Transport**: Tailscale first
+- **Reliability**: no sync feature before durable journaling and replay
 
 ---
 
-## Prerequisites
+## Platform Status
 
-**Required:**
-- Node.js 20+
-- Claude Code (`claude` CLI)
-- macOS (Linux: CLI works, app and LaunchAgents are macOS-only)
+| Platform | Status |
+|----------|--------|
+| **macOS** | Primary experience today |
+| **Linux** | CLI/headless direction is valid; desktop app is not the main surface today |
+| **Windows** | Future desktop target; current focus is not native parity yet |
+| **VPS** | Expected to run headless via CLI, daemon, gateway, and API |
 
-**Optional (enables memory, local chat, and voice):**
-- [Ollama](https://ollama.ai) + `nomic-embed-text` + `qwen2.5:1.5b` (or larger)
-- `whisper` for voice transcription
-- Telegram bot token + chat ID for the gateway
+---
+
+## Project Intent
+
+This repo should stay:
+
+- **simple to understand**
+- **fast to scan on GitHub**
+- **clear about what exists vs what is planned**
+- **consistent with the real architecture documents**
+- **useful to both users and contributors**
+
+If REX becomes powerful but unreadable, the project loses.
 
 ---
 
 ## License
 
-[MIT](LICENSE) — D-Studio
+[MIT](LICENSE) - D-Studio
