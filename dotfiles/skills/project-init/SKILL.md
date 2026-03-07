@@ -1,21 +1,43 @@
 ---
 name: project-init
-description: Initialize a new project with CLAUDE.md, proper git setup, and documentation cache. Use when starting a new project or onboarding an existing one.
+description: Initialize a project with perfect structure — GitHub, CI, docs, design system. Use when starting any new project or onboarding an existing one.
 ---
-
-# Project Init
+# Project Init — Setup parfait
 
 Initialize project: $ARGUMENTS (path or name)
 
-## For new projects
-1. Create project directory structure
-2. Generate `CLAUDE.md` with project-specific instructions
-3. Detect stack from user input, create appropriate config files
-4. Load relevant docs from `~/.claude/docs/` or fetch via Context7
-5. Git init, create `.gitignore`, initial commit
-6. Save project context: `rex_learn("Project X uses stack Y, structure Z", "architecture")`
+## 1. GitHub Setup
+```bash
+# Si pas de repo GitHub
+gh repo create <nom> --private --source=. --remote=origin --push
+# Branch protection
+gh api repos/{owner}/{repo}/branches/main/protection --method PUT \
+  --field required_status_checks='{"strict":true,"contexts":["ci"]}' \
+  --field enforce_admins=true \
+  --field required_pull_request_reviews='{"required_approving_review_count":1}'
+```
 
-## For existing projects (onboarding)
+## 2. Fichiers obligatoires à créer
+- `CLAUDE.md` — contexte projet complet
+- `FRONTEND.md` — si projet avec UI (design tokens, règles visuelles)
+- `docs/ARCHITECTURE.md` — structure technique
+- `docs/CHANGELOG.md` — suivi des changements
+- `docs/DECISIONS.md` — ADR (Architecture Decision Records)
+- `.github/PULL_REQUEST_TEMPLATE.md` — template PR
+- `.github/ISSUE_TEMPLATE/bug_report.md`
+- `.github/ISSUE_TEMPLATE/feature_request.md`
+
+## 3. GitHub Actions à configurer
+- CI lint + test sur chaque PR
+- Gemini Code Review automatique sur chaque PR
+- Dependabot pour les dépendances
+
+## 4. Workflow Git
+- `main` = production, protégée
+- `dev` = intégration
+- Features : `feat/nom`, Bugs : `fix/nom`, Hotfix : `hotfix/nom`
+
+## 5. Pour les projets existants (onboarding)
 1. Read existing `package.json` / `composer.json` / config files to detect stack
 2. Read existing `CLAUDE.md` if present, or create one
 3. Scan project structure: key directories, entry points, routing

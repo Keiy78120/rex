@@ -342,6 +342,26 @@ async function main() {
       break
     }
 
+    case 'accounts': {
+      const { accounts } = await import('./accounts.js')
+      await accounts(process.argv.slice(3))
+      break
+    }
+
+    case 'project': {
+      const sub = process.argv[3]
+      if (sub === 'init') {
+        const { projectInit } = await import('./project_init.js')
+        const noGithub = process.argv.includes('--no-github')
+        const isPublic = process.argv.includes('--public')
+        await projectInit({ github: !noGithub, public: isPublic })
+      } else {
+        console.log(`Unknown project subcommand: ${sub ?? '(none)'}`)
+        console.log('Usage: rex project init [--no-github] [--public]')
+      }
+      break
+    }
+
     case 'recategorize': {
       const { recategorize } = await import('./recategorize.js')
       const batchArg = process.argv.find(a => a.startsWith('--batch='))
@@ -443,6 +463,18 @@ ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex preload [path]   Show pre-loaded context for a path
   rex context [path]   Analyze project, recommend MCP/skills
   rex projects         Scan and index all dev projects
+
+${COLORS.bold}Multi-Account:${COLORS.reset}
+  rex accounts list              List configured Claude accounts
+  rex accounts add <name>        Create a new isolated account
+  rex accounts switch <name>     Print export command (eval with: eval \$(rex accounts switch <name>))
+  rex accounts remove <name>     Remove account entry (config dir preserved)
+  rex accounts aliases           Generate shell aliases for all accounts
+
+${COLORS.bold}Project Init:${COLORS.reset}
+  rex project init               Initialize project (GitHub, CI, docs, design system)
+  rex project init --no-github   Skip GitHub repo creation
+  rex project init --public      Create public repo (default: private)
 
 ${COLORS.bold}Background:${COLORS.reset}
   rex daemon           Start persistent background daemon

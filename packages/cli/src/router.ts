@@ -7,23 +7,49 @@
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 
 export type TaskType =
-  | 'background'  // fast reads, summaries, quick ops
-  | 'categorize'  // classify dev session chunks
-  | 'consolidate' // merge/summarize memory clusters
-  | 'reason'      // deep reasoning, architecture analysis
-  | 'code'        // code generation, review
-  | 'gateway'     // Telegram bot responses (balanced)
-  | 'optimize'    // CLAUDE.md analysis
+  | 'background'       // fast reads, summaries, quick ops
+  | 'categorize'       // classify dev session chunks
+  | 'consolidate'      // merge/summarize memory clusters
+  | 'reason'           // deep reasoning, architecture analysis
+  | 'code'             // code generation, review
+  | 'gateway'          // Telegram bot responses (balanced)
+  | 'optimize'         // CLAUDE.md analysis
+  | 'script-simple'    // simple scripting, one-off automation
+  | 'web-search-summary' // summarize web search results
+  | 'pr-description'   // write PR descriptions
+  | 'code-review-simple' // basic code review comments
+  | 'architecture'     // high-level architecture decisions (always Claude)
+  | 'debug-complex'    // deep debugging, root cause analysis (always Claude)
+  | 'ui-design'        // creative UI + technical (always Claude)
+  | 'security-audit'   // security review, CVE analysis (always Claude)
 
 // Ordered by preference — first available wins
+// 'claude' sentinel = no local model; caller should use Claude API instead
 const TASK_PREFERENCES: Record<TaskType, string[]> = {
-  background:  ['qwen2.5:1.5b', 'qwen3.5:latest', 'qwen3.5:9b'],
-  consolidate: ['qwen2.5:1.5b', 'qwen3.5:latest', 'qwen3.5:9b'],
-  categorize:  ['qwen3.5:9b', 'qwen3.5:latest', 'qwen2.5:1.5b', 'deepseek-r1:8b'],
-  gateway:     ['qwen3.5:9b', 'qwen3.5:latest', 'deepseek-r1:8b', 'qwen2.5:1.5b'],
-  optimize:    ['qwen3.5:9b', 'qwen3.5:latest', 'deepseek-r1:8b'],
-  reason:      ['deepseek-r1:8b', 'qwen3.5:9b', 'qwen3.5:latest'],
-  code:        ['qwen3-coder:30b', 'qwen2.5-coder:32b-instruct-q4_K_M', 'qwen3.5:9b'],
+  background:          ['qwen2.5:1.5b', 'qwen3.5:latest', 'qwen3.5:9b'],
+  consolidate:         ['qwen2.5:1.5b', 'qwen3.5:latest', 'qwen3.5:9b'],
+  categorize:          ['qwen3.5:9b', 'qwen3.5:latest', 'qwen2.5:1.5b', 'deepseek-r1:8b'],
+  gateway:             ['qwen3.5:9b', 'qwen3.5:latest', 'deepseek-r1:8b', 'qwen2.5:1.5b'],
+  optimize:            ['qwen3.5:9b', 'qwen3.5:latest', 'deepseek-r1:8b'],
+  reason:              ['deepseek-r1:8b', 'qwen3.5:9b', 'qwen3.5:latest'],
+  code:                ['qwen3-coder:30b', 'qwen2.5-coder:32b-instruct-q4_K_M', 'qwen3.5:9b'],
+  // Simple tasks — small local models sufficient
+  'script-simple':     ['qwen2.5:1.5b', 'qwen3.5:latest'],
+  'web-search-summary':['qwen2.5:1.5b', 'qwen3.5:latest'],
+  'pr-description':    ['qwen2.5:7b', 'qwen3.5:9b', 'qwen3.5:latest'],
+  'code-review-simple':['qwen2.5:7b', 'qwen3.5:9b', 'deepseek-r1:8b'],
+  // Complex tasks — always route to Claude (no local fallback)
+  architecture:        ['claude'],
+  'debug-complex':     ['claude'],
+  'ui-design':         ['claude'],
+  'security-audit':    ['claude'],
+}
+
+/**
+ * Returns true if the given task should always use Claude (no local model).
+ */
+export function requiresClaude(task: TaskType): boolean {
+  return TASK_PREFERENCES[task][0] === 'claude'
 }
 
 let _cachedModels: string[] | null = null
@@ -81,18 +107,26 @@ export async function showModelRouter(): Promise<void> {
   const gen = available.filter(m => !m.includes('embed') && !m.includes('nomic'))
 
   const line = '─'.repeat(52)
-  const tasks: TaskType[] = ['background', 'categorize', 'consolidate', 'gateway', 'optimize', 'reason', 'code']
+  const coreTasks: TaskType[] = ['background', 'categorize', 'consolidate', 'gateway', 'optimize', 'reason', 'code']
+  const routedTasks: TaskType[] = ['script-simple', 'web-search-summary', 'pr-description', 'code-review-simple']
+  const claudeTasks: TaskType[] = ['architecture', 'debug-complex', 'ui-design', 'security-audit']
 
   console.log(`\n\x1b[1mREX Model Router\x1b[0m`)
   console.log(line)
   console.log(`\x1b[2mInstalled: ${gen.length} generation, ${embed.length} embedding\x1b[0m\n`)
 
-  for (const task of tasks) {
+  console.log(`\x1b[2m  — Local tasks —\x1b[0m`)
+  for (const task of [...coreTasks, ...routedTasks]) {
     const chosen = await pickModel(task)
     const prefs = TASK_PREFERENCES[task]
     const isOptimal = prefs[0] === chosen || available.includes(prefs[0])
     const dot = isOptimal ? '\x1b[32m●\x1b[0m' : '\x1b[33m●\x1b[0m'
-    console.log(`  ${dot}  \x1b[1m${task.padEnd(12)}\x1b[0m → ${chosen}`)
+    console.log(`  ${dot}  \x1b[1m${task.padEnd(22)}\x1b[0m → ${chosen}`)
+  }
+
+  console.log(`\n\x1b[2m  — Always Claude —\x1b[0m`)
+  for (const task of claudeTasks) {
+    console.log(`  \x1b[36m●\x1b[0m  \x1b[1m${task.padEnd(22)}\x1b[0m → claude`)
   }
 
   console.log(`\n  \x1b[2membeddings  → ${embed[0] ?? 'nomic-embed-text (not found)'}\x1b[0m`)
@@ -101,7 +135,7 @@ export async function showModelRouter(): Promise<void> {
   if (gen.length === 0) {
     console.log(`\n  \x1b[33m!\x1b[0m No Ollama models found — run: ollama pull qwen3.5:latest`)
   } else {
-    const missingOptimal = tasks.filter(t => {
+    const missingOptimal = [...coreTasks, ...routedTasks].filter(t => {
       const pref = TASK_PREFERENCES[t][0]
       const base = pref.split(':')[0]
       return !available.some(a => a.startsWith(base))
@@ -127,10 +161,14 @@ export async function showModelRouter(): Promise<void> {
  * Get a JSON snapshot of the current routing for the Flutter app.
  */
 export async function getRouterSnapshot(): Promise<Record<string, string>> {
-  const tasks: TaskType[] = ['background', 'categorize', 'consolidate', 'gateway', 'optimize', 'reason', 'code']
+  const tasks: TaskType[] = [
+    'background', 'categorize', 'consolidate', 'gateway', 'optimize', 'reason', 'code',
+    'script-simple', 'web-search-summary', 'pr-description', 'code-review-simple',
+    'architecture', 'debug-complex', 'ui-design', 'security-audit',
+  ]
   const snap: Record<string, string> = {}
   for (const t of tasks) {
-    snap[t] = await pickModel(t)
+    snap[t] = requiresClaude(t) ? 'claude' : await pickModel(t)
   }
   return snap
 }
