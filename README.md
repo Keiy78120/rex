@@ -115,9 +115,9 @@ rex gateway
 
 ---
 
-## 28 skills that make Claude smarter
+## 33 skills that make Claude smarter
 
-Skills are instruction sets Claude loads on demand. REX ships **28 battle-tested skills** that cover the full dev workflow.
+Skills are instruction sets Claude loads on demand. REX ships **33 battle-tested skills** that cover the full dev workflow.
 
 When you open a project, REX detects your stack from `package.json` and tells Claude which skills are available — automatically.
 
@@ -125,7 +125,7 @@ When you open a project, REX detects your stack from `package.json` and tells Cl
 | Skill | When it activates |
 |-------|------------------|
 | `ux-flow` | Building any page or form — maps all states before writing code |
-| `ui-craft` | Visual execution — hierarchy, 4px grid, typography scale, motion |
+| `ui-craft` | Visual execution — 4px grid, typography scale, hierarchy, motion. Bans AI slop defaults |
 | `ui-review` | Post-build audit — WCAG AA, responsive, composition, a11y |
 
 ### Engineering
@@ -141,7 +141,70 @@ When you open a project, REX detects your stack from `package.json` and tells Cl
 | `i18n` | next-intl → locale routing, pluralization, date formatting |
 
 ### Dev workflow
-`code-review` · `build-validate` · `debug-assist` · `fix-issue` · `pr-review-loop` · `deploy-checklist` · `new-rule` · `research` · `context-loader` · `token-guard` · `notify` · `rex-boot` · `one-shot` · `project-init` · `spec-interview` · `figma-workflow` · `dstudio-design-system`
+`code-review` · `build-validate` · `debug-assist` · `fix-issue` · `pr-review` · `pr-review-loop` · `deploy-checklist` · `doc-updater` · `new-rule` · `research` · `context-loader` · `token-guard` · `notify` · `rex-boot` · `one-shot` · `project-init` · `spec-interview` · `figma-workflow` · `dstudio-design-system`
+
+### New in this release
+| Skill | What it does |
+|-------|-------------|
+| `ui-craft` | Enforces 4px grid, font selection, WCAG AA, motion rules. Bans the "AI slop" defaults |
+| `pr-review` | Pre-merge checklist — code quality, tests, docs, security, performance |
+| `doc-updater` | Keeps docs in sync after every significant change. Formats CHANGELOG automatically |
+| `deploy-checklist` | Zero-error production checklist — git, tests, DB migrations, monitoring, smoke tests |
+
+---
+
+## Multi-Account — isolate Claude identities
+
+REX lets you run multiple Claude accounts on the same machine, fully isolated via `CLAUDE_CONFIG_DIR`.
+
+```bash
+rex accounts add work        # Create isolated "work" account at ~/.claude-work/
+rex accounts add personal    # Create isolated "personal" account
+rex accounts list            # Show all accounts and which is active
+rex accounts aliases         # Generate shell aliases for .zshrc
+eval $(rex accounts switch work)   # Activate the "work" account in current shell
+```
+
+Each account has its own config, settings, and auth. Switch accounts in seconds without logging out.
+
+---
+
+## Project Init — one command, perfect structure
+
+`rex project init` sets up a new project with everything you need from day one:
+
+```bash
+rex project init              # Private GitHub repo + full structure
+rex project init --public     # Public repo
+rex project init --no-github  # Local only
+```
+
+What it creates:
+- `CLAUDE.md` — project context for Claude Code
+- `FRONTEND.md` — design tokens, typography, spacing rules
+- `docs/` — ARCHITECTURE.md, CHANGELOG.md, DECISIONS.md (ADR)
+- `.github/` — PR template, bug report, feature request templates
+- `.github/workflows/ci.yml` — lint + test on every PR
+- `.github/workflows/gemini-review.yml` — free AI code review on every PR
+- `.github/dependabot.yml` — weekly dependency updates
+- GitHub branch protection on `main` (requires PR + CI passing)
+
+---
+
+## GitHub CI/CD — included in dotfiles
+
+The `dotfiles/.github/` directory ships a complete CI/CD setup you can copy into any project:
+
+| File | What it does |
+|------|-------------|
+| `workflows/ci.yml` | Lint + test on every push and PR to main/dev |
+| `workflows/gemini-review.yml` | Free AI code review via Gemini on every PR |
+| `dependabot.yml` | Automated weekly dependency updates |
+| `PULL_REQUEST_TEMPLATE.md` | PR checklist — type, tests, changelog, screenshots |
+| `ISSUE_TEMPLATE/bug_report.md` | Structured bug reports |
+| `ISSUE_TEMPLATE/feature_request.md` | Structured feature requests |
+
+Add your `GEMINI_API_KEY` secret to GitHub to enable the AI review — it's free with a Google account.
 
 ---
 
@@ -227,6 +290,10 @@ That's it. Everything runs in the background from here.
 | `rex logs` | View logs from all background services |
 | `rex logs -f` | Tail live logs |
 | `rex agents list` | List configured autonomous agents |
+| `rex accounts list` | List configured Claude accounts |
+| `rex accounts add <name>` | Create isolated Claude account |
+| `rex accounts switch <name>` | Switch active account (eval output) |
+| `rex project init` | Initialize project with full REX structure |
 
 ---
 

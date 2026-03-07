@@ -1,53 +1,52 @@
 ---
 name: deploy-checklist
-description: Pre-deployment checklist. Use when user says "deploy", "push to prod", "push to beta", "ship it", or before any deployment. Runs verification steps before allowing deploy.
+description: Pre-deploy checklist — zero error guarantee. Always run before any production deployment. Use when user says "deploy", "push to prod", "push to beta", "ship it".
 disable-model-invocation: true
 ---
 
-# Deploy Checklist
+# Deploy Checklist — Production Zero-Error
 
 Run this checklist BEFORE any deployment. $ARGUMENTS can specify the target (beta/prod).
 
-## Pre-Deploy Verification
+## Avant le deploy
 
-1. **Check git status**:
-   - All changes committed? No uncommitted work?
-   - On the correct branch?
-   - Branch is up to date with remote?
+### Code
+- [ ] Tous les tests passent localement
+- [ ] Build de production réussit (`npm run build`)
+- [ ] Pas de warning dans le build output
+- [ ] Variables d'env de production configurées
 
-2. **Run tests** (if test suite exists):
-   ```bash
-   # Detect and run project tests
-   # PHP: composer test or vendor/bin/phpunit
-   # Node/Angular: npm test
-   # Flutter: flutter test
-   # Python: pytest
-   ```
+### Git
+- [ ] All changes committed? No uncommitted work?
+- [ ] On the correct branch?
+- [ ] Branch is up to date with remote?
 
-3. **Run linter/formatter** (if configured):
-   ```bash
-   # Detect and run linter
-   # PHP: composer lint or vendor/bin/phpcs
-   # Node: npm run lint
-   # Flutter: flutter analyze
-   ```
+### Base de données
+- [ ] Migrations testées sur staging
+- [ ] Backup de la DB de production créé
+- [ ] Rollback plan documenté
 
-4. **Build check**:
-   - Run production build to catch compile errors
-   - Verify build output exists and looks correct
+### Infrastructure
+- [ ] Monitoring actif (uptime, erreurs)
+- [ ] Logs configurés
+- [ ] Alertes configurées
 
-5. **Environment check**:
-   - Verify environment config points to the correct target (beta vs prod)
-   - NEVER deploy with local/dev config pointing to wrong DB or API
-   - Check for hardcoded localhost URLs
+### PR status (if deploying from a PR)
+- [ ] All CI checks passing?
+- [ ] Gemini Code Assist review: any critical issues?
+- [ ] GitHub Copilot review: any critical issues?
 
-6. **PR status** (if deploying from a PR):
-   - All CI checks passing?
-   - Gemini Code Assist review: any critical issues?
-   - GitHub Copilot review: any critical issues?
+### Post-deploy
+- [ ] Smoke tests sur l'URL de production
+- [ ] Vérifier les métriques 15min après deploy
+- [ ] Notifier l'équipe
+
+## En cas de problème
+1. Rollback immédiat si erreur critique
+2. Investiguer les logs
+3. Documenter dans DECISIONS.md
 
 ## Deploy Decision
-
 - If ANY check fails: STOP and report to user
 - If all checks pass: proceed with deploy and confirm target with user
 
