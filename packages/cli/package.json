@@ -1,7 +1,7 @@
 {
   "name": "rex-claude",
-  "version": "5.0.0",
-  "description": "Claude Code sous steroides — guards, health checks, memory RAG",
+  "version": "6.0.0",
+  "description": "REX — dev assistant with Telegram gateway, memory RAG, guards, model switching, and macOS native app",
   "type": "module",
   "bin": {
     "rex": "./dist/index.js"
@@ -22,7 +22,12 @@
     "productivity",
     "ai-assistant",
     "guards",
-    "hooks"
+    "hooks",
+    "telegram",
+    "memory",
+    "rag",
+    "ollama",
+    "qwen"
   ],
   "author": "Kevin <kevin@dstudio.company>",
   "license": "MIT",
