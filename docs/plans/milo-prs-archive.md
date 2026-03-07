@@ -42,7 +42,7 @@
 
 #### .claude/rules/decisions.md (49 lignes)
 Decisions techniques prises pendant le dev REX :
-- Choix Flutter vs Tauri (Flutter pour macOS native)
+- Choix app desktop : Flutter natif, dashboard distant futur seulement si utile via Next.js/React
 - SQLite-vec vs ChromaDB (SQLite pour portabilite)
 - LaunchAgents vs daemon custom (les deux)
 - Two-phase ingest pattern

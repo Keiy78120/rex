@@ -2283,7 +2283,7 @@ REX Hub (VPS)
       └── Quick Actions (delegate, review, deploy)
 ```
 
-Framework : simple HTML + HTMX (pas de React/Next — c'est un dashboard leger).
+Framework : Next.js/React si un dashboard distant browser est vraiment necessaire, sinon aucune UI web supplementaire.
 WebSocket pour les mises a jour temps reel.
 Auth : JWT (meme que l'API Hub).
 Accessible depuis n'importe quel device avec un navigateur (telephone, tablette, TV).

@@ -109,7 +109,7 @@ Le choix par defaut est verrouille :
 
 - **UI operateur principale** : app Flutter desktop
 - **Remote control** : API securisee + gateway Telegram + CLI
-- **Pas de rewrite Next.js par defaut**
+- **Dashboard distant futur** : Next.js/React seulement si une vue browser est utile, jamais comme nouvelle source de verite
 
 Si Flutter est indisponible sur une machine, REX doit rester totalement operable en mode headless.
 
@@ -341,7 +341,7 @@ Le plan cible doit assumer :
 
 - app Flutter desktop pour macOS, Windows et Linux
 - API hub mono-repo
-- dashboard distant optionnel consomme la meme API
+- dashboard distant optionnel Next.js/React consomme la meme API
 - mobile futur optionnel consomme la meme API
 - VPS operable sans UI Flutter : daemon + CLI + gateway + API uniquement
 

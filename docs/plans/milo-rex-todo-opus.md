@@ -14,7 +14,7 @@ REX n'est pas un linter. C'est un **compagnon de développement senior** qui :
 - Enseigne les bonnes pratiques en temps réel
 - Ne ment jamais — si pas sûr → dit "je ne sais pas"
 
-Stack : TypeScript monorepo (pnpm), Tauri+React (app), SQLite (storage), bash (guards).
+Stack : TypeScript monorepo (pnpm), Flutter desktop app, SQLite (storage), bash (guards).
 
 ---
 
@@ -59,13 +59,13 @@ rex context --inject # injecte dans CLAUDE.md du projet courant
 **Nouveau package :** `packages/logger/`
 
 - Enregistrement audio continu en background (optionnel, on/off)
-- Transcription via Whisper local (whisper.cpp déjà dans Tauri app)
+- Transcription via Whisper local integree a l'app desktop et aux commandes headless
 - Storage : `~/.rex/logs/audio/YYYY-MM-DD/HH-MM.md`
 - Format : timestamp + transcript + speaker diarization si possible
 - Cron : transcription différée toutes les 30 min si Whisper tourne en local
 
 ### 2.2 Clipboard logger
-- Hook sur clipboard change (macOS API via Tauri)
+- Hook sur clipboard change (si un jour retenu, via couche native dediee, pas via shell bricolé)
 - Log tout ce qui est copié : texte, URL, code
 - Storage : `~/.rex/logs/clipboard/YYYY-MM-DD.jsonl`
 - Filtre : ne pas logger les passwords (détecter via patterns type `sk-`, `ghp_`, etc.)
@@ -79,7 +79,7 @@ rex context --inject # injecte dans CLAUDE.md du projet courant
 
 ### 2.4 Action logger générique
 - Log app focus, URL visitées, fichiers ouverts
-- Via macOS Accessibility API + Tauri
+- Via macOS Accessibility API + couche native dediee si la feature redevient utile
 - Storage : `~/.rex/logs/actions/YYYY-MM-DD.jsonl`
 
 ---

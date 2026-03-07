@@ -86,7 +86,7 @@ REX is moving toward a stricter v7 shape:
 - **One brain, multiple machines**: Mac, VPS, GPU node, NAS
 - **User-owned resources first**: scripts, installed CLIs, local services, and owned hardware before paid inference
 - **Governed tool registry**: many tools can be known, but external ones stay disabled until the user enables them
-- **Flutter-first operator console**: no default rewrite into a noisy web dashboard
+- **Flutter-first operator console**: keep the main app in Flutter; if a remote dashboard is needed later, use a light Next.js/React surface on the same API
 - **Cross-platform target**: macOS today, desktop target later is macOS + Windows + Linux
 - **Topology-aware**: one machine, 2-5 machines, or 10-30+ nodes must all degrade cleanly
 - **OpenClaw-inspired capabilities**: central routing and remote control, not its interface style

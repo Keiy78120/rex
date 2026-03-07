@@ -785,7 +785,7 @@ Phase 5 — L'Interface (semaine 5-6)
 
 | Erreur Milo | Correction |
 |-------------|------------|
-| "Tauri+React (app)" | Flutter macOS native (pas Tauri) |
+| "Desktop app web hybride" | Flutter macOS native; dashboard distant futur uniquement si utile via Next.js/React |
 | Paths `~/.rex/` | Migre vers `~/.claude/rex/` |
 | Bloc 2 keylogger/clipboard | SUPPRIME — trop invasif, problemes privacy, hors scope |
 | Bloc 3 "auto-setup modeles" | Deja fait dans v6 (`router.ts`, `rex models`) |

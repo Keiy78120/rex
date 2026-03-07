@@ -313,7 +313,8 @@ UI future :
 
 - Flutter desktop = surface principale
 - mobile = telecommande / observateur
-- dashboard distant = vue secondaire sur la meme API
+- dashboard distant = surface secondaire Next.js/React sur la meme API
+- acces distant = Tailscale d'abord, Traefik seulement si une exposition HTTP hors tailnet est necessaire
 
 ---
 
