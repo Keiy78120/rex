@@ -69,7 +69,7 @@ REX adds that missing layer:
 
 REX is being shaped around a few hard rules:
 
-1. **Use what the user already has**: script, local CLI, local service, owned hardware, free tier, then paid API.
+1. **Use what the user already has**: script, local CLI, local service, owned hardware, free tier, subscriptions, then paid API.
 2. **CLI first for execution**: CLI before MCP, MCP before API, API before anything heavier.
 3. **Headless parity**: critical operations cannot depend only on the GUI.
 4. **No fake complexity**: if open source already solves a low-level problem well, REX integrates it instead of rebuilding it.
@@ -140,27 +140,6 @@ REX is being built in practical layers, not as a giant rewrite.
 - [ ] clearer fleet behaviors for 10-30+ machines
 - [ ] group/tag-based targeting and aggregate health
 - [ ] better packaging and setup on macOS, Linux, Windows, and VPS
-
----
-
-## Docs Map
-
-Internal planning docs are now split by usage:
-
-| Doc | Use it for |
-|-----|------------|
-| `docs/plans/action.md` | launch work with an agent team |
-| `docs/plans/backend-functions.md` | backend logic, gateway, memory, sync, hub |
-| `docs/plans/frontend-design.md` | Flutter UI, operator UX, page priorities |
-| `docs/plans/sources.md` | source hierarchy, OSS reuse, anti-duplication |
-| `docs/plans/2026-03-07-rex-v7-openclaw-addendum.md` | architecture guardrails |
-| `docs/plans/2026-03-07-rex-v7-master-plan.md` | long-form reference only |
-
-For one-shot agent execution, the intended entrypoint is:
-
-```text
-Read docs/plans/action.md and follow only the references it gives you.
-```
 
 ---
 
@@ -236,18 +215,35 @@ Read docs/plans/action.md and follow only the references it gives you.
 
 ## Install
 
+**Option A - npm (recommended)**
+
+```bash
+npm install -g rex-claude
+rex install
+```
+
+`rex install` is the intended one-command path when available. It runs the equivalent of init + setup + doctor with clearer install defaults.
+
+**Option B - explicit steps**
+
 ```bash
 npm install -g rex-claude
 rex init
 rex setup
 ```
 
-What this does:
+This path remains useful when you want finer control over setup stages.
 
-- installs guards and hooks
-- installs skills
-- configures background services
-- optionally sets up Ollama models for local memory and local tasks
+**Option C - clone the repo directly**
+
+```bash
+git clone https://github.com/Keiy78120/rex
+cd rex && ./install.sh
+```
+
+`install.sh` handles the same setup for the dotfiles and MCP server.
+It auto-detects your OS: Hammerspoon and LaunchAgents are macOS-only.
+On Linux, see `docs/linux-setup.md` if present in the repo branch you use.
 
 ---
 

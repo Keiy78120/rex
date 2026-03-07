@@ -7,6 +7,8 @@
 - **NE JAMAIS cloner ou travailler sur un autre dossier** (ex: `/_config/rex` est un ancien clone, NE PAS L'UTILISER).
 - Si un autre agent travaille sur REX, il DOIT ouvrir ce repo, pas un clone.
 - `CLAUDE.md` du root de ce repo = seule source de verite. Pas de copie ailleurs.
+- `docs/plans/action.md` = document d'execution one-shot. Il porte les regles operatoires pour lead agent et sous-agents.
+- Si une doc secondaire contredit ce fichier ou `action.md`, corriger la doc secondaire.
 
 Ce fichier est le point d'entree rapide pour tout agent (Claude, Codex, Garry) qui travaille sur ce repo.
 **Mettre a jour la section "En cours / Terminé" a chaque changement significatif.**
@@ -18,9 +20,24 @@ Ce fichier est le point d'entree rapide pour tout agent (Claude, Codex, Garry) q
 REX est un companion pour Claude Code : guards automatiques, memoire semantique, gateway Telegram, app macOS Flutter.
 
 - **Repo :** `~/Documents/Developer/keiy/rex`
-- **npm :** `rex-claude` v5.0.0 — `~/.nvm/versions/node/v22.20.0/bin/rex`
+- **npm :** `rex-claude` v6.0.0 — `~/.nvm/versions/node/v22.20.0/bin/rex`
 - **Monorepo :** pnpm workspaces
 - **Stack :** TypeScript/Node (CLI), Dart/Flutter (app macOS), SQLite (memoire)
+- **Principe operatoire :** centraliser dynamiquement scripts, outils installes, hardware, services locaux, quotas et providers; proposer local/gratuit/owned-first, payant en dernier recours
+- **Ordre d'integration :** CLI/script local d'abord, MCP ensuite, API ensuite, autre adaptation en dernier recours
+- **Politique tools :** registry large autorise, mais integrations externes desactivees par defaut jusqu'au choix explicite du user
+- **Topologie :** REX doit rester utile en mode 1 machine, petit parc (2-5) ou flotte large (10-30+) avec degradation propre
+- **Continuite :** gateway, sync, memory et background doivent preserver puis rejouer; reponse differee acceptable, perte non
+- **Doc d'execution one-shot :** `docs/plans/action.md` doit suffire a orienter un agent sans navigation supplementaire obligatoire
+- **Separation des roles doc :** `CLAUDE.md` fixe le cap projet, `action.md` explique comment executer
+- **Plans actifs :**
+  - `docs/plans/action.md`
+  - `docs/plans/backend-functions.md`
+  - `docs/plans/frontend-design.md`
+  - `docs/plans/sources.md`
+  - `docs/plans/2026-03-07-rex-v7-openclaw-addendum.md`
+  - `docs/plans/2026-03-07-rex-install-optimization-plan.md`
+  - `docs/plans/2026-03-07-rex-v7-master-plan.md` (reference longue)
 
 ---
 
@@ -145,7 +162,7 @@ rex doctor --fix     # Auto-fix then health check
 - Rotation auto dans le daemon (10k lignes max, garde 5k)
 
 ### Memoire
-- SQLite dans `~/.rex-memory/rex-memory.db`
+- SQLite dans `~/.claude/rex/memory/rex.sqlite`
 - Embeddings via `nomic-embed-text` Ollama
 - Two-phase ingest : chunks TOUJOURS sauvés dans `~/.claude/rex/memory/pending/` d'abord (instant), puis embeddés lazily par `processPending()` (max 30/run, 500ms throttle)
 - Lockfile `~/.claude/rex/memory/ingest.lock` empêche les process concurrents (stale après 10min)
@@ -193,7 +210,7 @@ rex doctor --fix     # Auto-fix then health check
 | Flutter Gateway: logs combinés + auto-refresh 10s | `packages/flutter_app/lib/pages/gateway_page.dart` |
 | Training pipeline research (draft) | `docs/research/training-pipeline.md` |
 | README mis a jour | `README.md` |
-| Plan detaille gateway streaming + training | `docs/plans/2026-03-05-rex-gateway-qwen-streaming-training.md` |
+| Plan v7 actif (master + execution + addendum OpenClaw) | `docs/plans/2026-03-07-rex-v7-master-plan.md`, `docs/plans/action.md`, `docs/plans/2026-03-07-rex-v7-openclaw-addendum.md` |
 | Hybrid semantic consolidation (cosine 0.82 + Qwen summarize) | `packages/memory/src/categorize.ts`, `packages/cli/src/index.ts` |
 | Memory page: bouton Consolidate + HOW IT WORKS section | `memory_page.dart` |
 | Health page: Run Doctor button + Rex Setup quick action | `health_page.dart` |
@@ -269,14 +286,36 @@ rex doctor --fix     # Auto-fix then health check
 | PostToolUse: 4 hooks → 2 combined fast scripts (<2s) | `~/.claude/rex-guards/post-edit-guard.sh`, `post-bash-guard.sh` |
 | LaunchAgent ingest+categorize combo (1h cycle) | `com.dstudio.rex-ingest.plist` |
 
+### ✅ Terminé (session 2026-03-07 — audit plan v7)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| Verification repo officiel `~/Documents/Developer/keiy/rex` (et rejet du clone `_config/rex`) | `CLAUDE.md` |
+| Audit executable confirme : `pnpm build`, `pnpm test`, `rex audit --strict`, `flutter build macos --debug` | repo |
+| Addendum architecture OpenClaw booste: hub securise, Flutter-first, headless parity, brain VPS, no-memory-loss, Tailscale, WOL/doctor, pixel agents, LangGraph spike | `docs/plans/2026-03-07-rex-v7-openclaw-addendum.md`, `docs/plans/action.md`, `docs/plans/2026-03-07-rex-v7-master-plan.md` |
+
 ### 🔄 En cours / A faire
 
 | Tache | Priorite | Detail |
 |-------|----------|--------|
+| Hub securise type OpenClaw, vue minimale | HAUTE | Centraliser nodes, taches, sante, files pending, memory queue via API/routes securisees, sans recopier une UI web surchargee |
+| Resource inventory + recommandations dynamiques | HAUTE | Detecter scripts, CLIs, services, machines et quotas possedes; proposer la meilleure ressource disponible avant tout appel payant |
+| Registry tools gouverne | HAUTE | Connaitre beaucoup d'outils facon OpenClaw, mais les garder desactives par defaut; proposer CLI d'abord, MCP ensuite, API ensuite |
+| Clarifier surface d'operation unique | HAUTE | Flutter reste l'UI operateur principale; parity obligatoire via CLI + gateway + API headless, pas de rewrite Next.js par defaut |
+| Brain VPS + sync durable | HAUTE | VPS = hub prefere si dispo; event journal append-only + queue + ack pour ne rien perdre meme offline |
+| Tailscale + auto-heal | HAUTE | Join nodes via Tailscale, `rex doctor` automatique, Wake-on-LAN si un node requis est hors ligne |
+| Tunnels persistants et fallback remote control | HAUTE | Verifier direct/peer-relay Tailscale; fallback Tailscale SSH/SSH key, RustDesk ou Input Leap selon besoin |
+| Success memory / runbooks | HAUTE | Memoriser les workflows qui reussissent et les reinjecter au moment opportun |
+| Cross-platform desktop + API hub | HAUTE | Cible Flutter desktop macOS/Windows/Linux + API mono-repo pour dashboard distant via Tailscale ou VPS reverse proxy |
 | Training pipeline research approfondie | BASSE | Benchmarks reels mlx-lm vs unsloth + eval dataset interne |
 | Flutter Settings: Model Router section | BASSE | Afficher task→model mapping depuis getRouterSnapshot() |
 | MCP compatibility check dans `rex doctor` | MOYENNE | Diagnostic clair si MCP mal configure |
 | Pipeline no memory loss | MOYENNE | Memoire cloud Claude + semantic search locale + resume |
+| Meeting bots type Otter AI | MOYENNE | Rechercher integration OSS prioritaire, setup automatise par scripts/agents, transcription + memoire |
+| Alternative lightweight a Ollama | MOYENNE | Evaluer `llamafile`, `llama.cpp` ou LocalAI derriere `llm.backend`, sans rajouter une UI dediee |
+| Pixel agents fallback | MOYENNE | Integrer un fallback de nommage/execution type `$machine@launch_pixel_agents` uniquement sur machines compatibles, jamais comme dependance VPS |
+| LangGraph spike borne | BASSE | Evaluer seulement apres stabilisation orchestrator + queue + state machine de base |
+| One-command install + optimization side plan | MOYENNE | `docs/plans/2026-03-07-rex-install-optimization-plan.md` pour macOS/Windows/Linux/VPS |
 | Setup one-command doc | BASSE | `rex install` en 5 min (local + Telegram + agents + MCP) |
 
 ---
