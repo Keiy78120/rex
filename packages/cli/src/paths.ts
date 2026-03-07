@@ -14,6 +14,7 @@ export const SELF_IMPROVEMENT_DIR = join(REX_DIR, 'self-improvement')
 export const CONFIG_PATH = join(REX_DIR, 'config.json')
 export const VAULT_PATH = join(REX_DIR, 'vault.md')
 export const DAEMON_LOG_PATH = join(REX_DIR, 'daemon.log')
+export const GITHUB_TEMPLATES_DIR = join(HOME, '.claude', '.github')  // dotfiles/.github/ symlinked here
 export const REFERENCES_DIR = join(REX_DIR, 'references')
 export const INSPIRATIONS_DIR = join(REX_DIR, 'inspirations')
 

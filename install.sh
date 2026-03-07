@@ -28,7 +28,7 @@ check_deps
 # 1. Symlink dotfiles → ~/.claude/
 echo "→ Syncing dotfiles..."
 mkdir -p "$CLAUDE_DIR"
-for item in CLAUDE.md commands rules agents skills templates; do
+for item in CLAUDE.md commands rules agents skills templates .github; do
   src="$REX_DIR/dotfiles/$item"
   dest="$CLAUDE_DIR/$item"
   if [ -e "$src" ]; then
