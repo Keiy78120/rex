@@ -183,11 +183,25 @@ A Flutter desktop app for when you want a GUI instead of the terminal.
 
 ## Install
 
+**Option A — npm (recommended)**
+
 ```bash
 npm install -g rex-claude
-rex init      # installs guards, hooks, skills, LaunchAgents
-rex setup     # installs Ollama + nomic-embed-text + Qwen (optional but recommended)
+rex install   # one command: init + setup + audit
 ```
+
+`rex install` runs `rex init` (guards, hooks, skills, LaunchAgents/systemd) then `rex setup` (Ollama deps) then `rex doctor`.
+
+**Option B — clone the repo directly** (no npm global required)
+
+```bash
+git clone https://github.com/Keiy78120/rex
+cd rex && ./install.sh
+```
+
+`install.sh` handles the same setup for the dotfiles and MCP server.
+It auto-detects your OS: Hammerspoon and LaunchAgents are macOS-only.
+On Linux, see [docs/linux-setup.md](docs/linux-setup.md) for systemd setup.
 
 That's it. Everything runs in the background from here.
 
