@@ -29,6 +29,7 @@ export async function llm(prompt: string, system?: string, model?: string): Prom
       prompt,
       system,
       stream: false,
+      think: false,
       keep_alive: '30s',
     }),
   })
