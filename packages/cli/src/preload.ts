@@ -1,13 +1,64 @@
 import Database from 'better-sqlite3'
 import * as sqliteVec from 'sqlite-vec'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { MEMORY_DB_PATH } from './paths.js'
 import { findProject } from './projects.js'
 import { createLogger } from './logger.js'
 
 const log = createLogger('preload')
 
-const MAX_TOKENS = 200  // Hard limit for pre-loaded context
+const MAX_TOKENS = 300  // Hard limit for pre-loaded context
+
+// ─── Skill detection ─────────────────────────────────────────
+
+interface SkillRule {
+  deps?: string[]        // match any of these in package.json deps
+  files?: string[]       // match any of these file paths in project root
+  skills: string[]       // skills to suggest
+}
+
+const SKILL_RULES: SkillRule[] = [
+  // Frontend frameworks → UI/UX skills
+  { deps: ['next', 'react', 'vue', 'nuxt', '@angular/core'], skills: ['ux-flow', 'ui-craft', 'ui-review'] },
+  // API layers → API design
+  { deps: ['express', 'fastify', 'hono', 'koa', '@hapi/hapi'], skills: ['api-design', 'error-handling'] },
+  // Database ORMs → DB design
+  { deps: ['drizzle-orm', 'prisma', 'typeorm', 'mongoose', 'sequelize', 'knex'], skills: ['db-design'] },
+  // Auth libraries → auth patterns
+  { deps: ['next-auth', 'lucia', 'passport', 'jose', 'jsonwebtoken', '@auth/core'], skills: ['auth-patterns'] },
+  // i18n
+  { deps: ['next-intl', 'i18next', 'react-i18next', 'vue-i18n'], skills: ['i18n'] },
+  // Testing
+  { deps: ['vitest', 'jest', '@testing-library/react', 'playwright', 'cypress'], skills: ['test-strategy'] },
+  // Next.js specifically → SEO worth mentioning
+  { deps: ['next'], skills: ['seo', 'perf'] },
+  // Any project → performance
+  { deps: ['react', 'vue', 'angular'], skills: ['perf'] },
+]
+
+function detectRelevantSkills(projectRoot: string): string[] {
+  const pkgPath = join(projectRoot, 'package.json')
+  if (!existsSync(pkgPath)) return []
+
+  let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> } = {}
+  try { pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) } catch { return [] }
+
+  const allDeps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })
+  const suggested = new Set<string>()
+
+  for (const rule of SKILL_RULES) {
+    if (rule.deps && rule.deps.some(d => allDeps.includes(d))) {
+      rule.skills.forEach(s => suggested.add(s))
+    }
+    if (rule.files) {
+      const matched = rule.files.some(f => existsSync(join(projectRoot, f)))
+      if (matched) rule.skills.forEach(s => suggested.add(s))
+    }
+  }
+
+  return [...suggested]
+}
 
 export async function preload(cwd: string): Promise<string> {
   if (!existsSync(MEMORY_DB_PATH)) {
@@ -68,6 +119,14 @@ export async function preload(cwd: string): Promise<string> {
     }
   } finally {
     db.close()
+  }
+
+  // 4. Skill suggestions based on project stack
+  if (project?.path) {
+    const skills = detectRelevantSkills(project.path)
+    if (skills.length > 0) {
+      sections.push(`Skills: ${skills.join(', ')}`)
+    }
   }
 
   const output = sections.join('\n')

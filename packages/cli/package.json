@@ -1,6 +1,6 @@
 {
   "name": "rex-claude",
-  "version": "6.1.0",
+  "version": "6.2.0",
   "description": "REX — dev assistant with Telegram gateway, memory RAG, guards, model switching, and macOS native app",
   "type": "module",
   "bin": {
