@@ -297,6 +297,23 @@ export async function installServer(id: string, autoRegister = true): Promise<{ 
     return { ok: true, error: undefined } // idempotent
   }
 
+  // Security scan before any install (§27)
+  const scanContent = [server.name, server.description, server.installCmd ?? ''].join(' ')
+  try {
+    const { scan } = await import('./security-scanner.js')
+    const scanResult = await scan(scanContent, 'mcp', id)
+    if (scanResult.recommendation === 'block') {
+      const reasons = scanResult.findings.map(f => `${f.severity}/${f.rule}`).join(', ')
+      return { ok: false, error: `SECURITY_BLOCK: ${reasons}. Pass --force to override.` }
+    }
+    if (scanResult.recommendation === 'warn') {
+      const reasons = scanResult.findings.map(f => f.rule).join(', ')
+      log.warn(`Security warning for ${id}: ${reasons}. Proceeding — add --no-security-check to silence.`)
+    }
+  } catch {
+    log.warn('Security scanner unavailable — proceeding without scan')
+  }
+
   // Try to install via npm if command is npx
   if (server.command === 'npx' && server.args?.length) {
     const pkg = server.args.find(a => a.startsWith('@') || (!a.startsWith('-') && a.includes('/'))) ?? server.args[server.args.length - 1]

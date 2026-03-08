@@ -1194,6 +1194,30 @@ async function main() {
       break
     }
 
+    case 'lint-loop': {
+      const targetPath = process.argv[3] ?? process.cwd()
+      const maxIterations = Number(process.argv.find(a => a.startsWith('--max='))?.split('=')[1] ?? 5)
+      const analyzerType = process.argv.includes('--eslint') ? 'eslint'
+        : process.argv.includes('--secrets') ? 'secrets'
+        : 'tsc'
+
+      const { lintLoop, tscAnalyzer, eslintAnalyzer, secretScanAnalyzer } = await import('./lint-loop.js')
+      const analyzer = analyzerType === 'eslint' ? eslintAnalyzer(targetPath)
+        : analyzerType === 'secrets' ? secretScanAnalyzer(targetPath)
+        : tscAnalyzer(targetPath)
+
+      console.log(`Running lint loop (${analyzerType}, max ${maxIterations} iterations)...`)
+      const result = await lintLoop({ targetPath, analyzer, maxIterations, verbose: true })
+
+      if (result.converged) {
+        console.log(`\x1b[32m✓\x1b[0m Converged in ${result.iterations} iteration(s) — clean.`)
+      } else {
+        console.log(`\x1b[33m!\x1b[0m Stopped after ${result.iterations} iteration(s) (${result.reason})`)
+        if (result.finalReport) console.log(result.finalReport.slice(0, 500))
+      }
+      break
+    }
+
     case 'debt': {
       // List TODO / FIXME / HACK comments across the project (zero LLM)
       const cwd = process.cwd()
