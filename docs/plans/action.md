@@ -696,3 +696,147 @@ Profile: bug-fix (high) | MCPs: github | Skills: /debug-assist, /test-strategy
 - Si des MCPs du profil sont dans `~/.claude/settings.json mcpServers` → n'activer que ceux-là
 - Si aucun n'est installé → suggérer tous (l'user voit ce qu'il peut installer)
 - Fallback silencieux si settings.json inaccessible (Set vide → tous suggérés)
+
+---
+
+## Section 21 — REX Launcher + Node Mesh Fabric
+
+### rex-launcher.ts — Single Entry Point
+
+**Principe** : l'user tape `rex` (sans sous-commande) au lieu de `claude`. REX devient le point d'entrée unique.
+
+**Flux complet** :
+```
+rex → detectIntent() → buildContextProfile() → patchSettingsForProfile()
+    → spawn('claude') → writePid() → monitor PID
+    → on exit: saveRecovery() + check intent drift
+```
+
+**Fichiers** :
+
+| Fichier | Rôle |
+|---------|------|
+| `packages/cli/src/rex-launcher.ts` | Launcher principal |
+| `~/.claude/rex/launcher.pid` | PID du subprocess claude actif |
+| `~/.claude/rex/recovery-state.json` | Intent + profil de la dernière session |
+
+**Exports** : `launchRex(cwd?)`, `killRex()`, `relaunchRex(cwd?)`
+
+**Commandes CLI** :
+```
+rex            → launchRex()   (défaut, no subcommand)
+rex kill       → killRex()     (SIGTERM)
+rex relaunch   → relaunchRex() (kill + relaunch avec nouveau profil)
+```
+
+**Settings patching (additif, jamais destructif)** :
+- Vérifie que `dangerous-cmd-guard` est dans `PreToolUse` hooks
+- Log les MCPs actifs vs suggérés mais ne les installe pas
+- Ne supprime jamais les hooks existants
+
+**Recovery + intent drift** :
+- À chaque exit, `recovery-state.json` sauvegarde intent + profil + CWD + exit code
+- Re-détecte l'intent → si drift high-confidence → affiche suggestion `rex relaunch`
+- Session suivante affiche "Previous session: bug-fix (12m ago)"
+
+### node-mesh.ts — REX Fabric Layer
+
+**Principe** : chaque nœud (Mac/VPS/RPi/GPU) détecte et publie ses capacités. Le hub route les tâches vers le meilleur nœud disponible.
+
+**Détection locale (zero LLM — pure script)** :
+
+| Capacité | Méthode |
+|----------|---------|
+| `claude` | `which claude` |
+| `codex` | `which codex` |
+| `ollama` | `curl localhost:11434/api/tags` |
+| `embed` | tag nomic-embed/mxbai dans la réponse Ollama |
+| `docker` | `which docker` |
+| `ffmpeg` | `which ffmpeg` |
+| `tailscale` | `tailscale status --json` → BackendState: Running |
+| `gpu` | macOS: Metal via system_profiler / Linux: nvidia-smi |
+| `ssh` | `pgrep sshd` |
+
+**Exports** :
+```typescript
+detectLocalCapabilities(): NodeCapabilities
+buildLocalNodeInfo(): MeshNode
+registerWithHub(nodeInfo?): Promise<boolean>     // POST /api/nodes/register
+routeTask(type: TaskType): Promise<MeshNode|null> // best node for task type
+printMeshStatus(): Promise<void>                  // rex mesh / rex nodes
+upsertNode(map, info): MeshNode                   // hub-side helper
+getMeshStatus(map): { nodes, healthy, stale, offline }  // hub-side helper
+```
+
+**Routing des tâches** :
+
+| TaskType | Capacités requises |
+|----------|--------------------|
+| `llm` | ollama |
+| `gpu` | gpu |
+| `embed` | embed |
+| `docker` | docker |
+| `transcribe` | ffmpeg + ollama |
+| `claude` | claude |
+| `codex` | codex |
+
+**Intégrations** :
+- `daemon.ts` : `buildLocalNodeInfo()` + `registerWithHub()` toutes les 60s
+- `hub.ts` : `GET /api/nodes/status` via `getMeshStatus()`; `POST /api/nodes/register` via `upsertNode()`
+- `gateway.ts` : `routeTask('llm')` avant chaque traitement local (hook point, forwarding Phase 3)
+- `index.ts` : `rex mesh` / `rex nodes` → `printMeshStatus()`
+
+**Cache offline** : `~/.claude/rex/mesh-cache.json` — snapshot des nœuds hub pour usage hors-ligne
+
+---
+
+## Section 22 — Token Economy (règles obligatoires)
+
+**Règle absolue** : script avant LLM. Jamais de LLM quand un script suffit.
+
+| Contexte | Modèle |
+|----------|--------|
+| Scan / lecture / classif | Haiku (rapide, cheap) |
+| Code standard | Sonnet |
+| Review finale | Opus uniquement |
+
+**Patterns obligatoires** :
+
+1. **Batch reads** : `Promise.all([...])` jamais séquentiel
+2. **Semantic cache** : `semantic-cache.ts` avant tout appel LLM — si hit, skip
+3. **Preload budget** : max 5 faits injectés, jamais la mémoire complète
+4. **Lazy-load MCPs** : activés au lancement de session seulement (`context-loader.ts`)
+5. **Early exit** : si l'intent est clair (confidence=high), ne pas relire tout le repo
+6. **Scope narrow** : pour un fix simple, lire seulement les 2-3 fichiers concernés
+
+---
+
+## Section 23 — REX uses REX (règle de routing interne)
+
+**Principe** : chaque appel LLM interne DOIT passer par la chaîne officielle.
+
+```
+semantic-cache.ts → router.ts → free-tiers.ts → Ollama local → free tier → subscription
+```
+
+**Jamais** : importer directement `anthropic`, `openai` ou tout SDK dans le code interne REX.
+
+**Chaîne de routing** :
+```typescript
+// ✅ Correct
+import { orchestrate } from './orchestrator.js'
+const result = await orchestrate(prompt, { task: 'classify' })
+
+// ❌ Interdit
+import Anthropic from '@anthropic-ai/sdk'
+const client = new Anthropic()
+```
+
+**Affectation par tâche** :
+- `self-improve`, `categorize`, réponses gateway simples → Ollama/Haiku via router
+- Code generation → Sonnet via router
+- Review finale → Opus via router (dernier recours)
+
+**node-mesh.ts dans le routing** : le router interroge node-mesh pour savoir quel nœud a Ollama actif en ce moment. Si le nœud local n'a pas Ollama, router fallback vers nœud distant ou free tier.
+
+**Audit** : `gateway.ts` est le premier candidat à auditer — certains appels LLM peuvent encore bypasser le router.
