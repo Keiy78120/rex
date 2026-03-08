@@ -2077,6 +2077,80 @@ $transcript
 
   // ── End Sandbox ────────────────────────────────────────────────────────
 
+  // ── Agent Factory (B2B clients) ─────────────────────────────────────────
+
+  List<Map<String, dynamic>> _clients = [];
+  bool _isLoadingClients = false;
+  bool _isCreatingClient = false;
+
+  List<Map<String, dynamic>> get clients => _clients;
+  bool get isLoadingClients => _isLoadingClients;
+  bool get isCreatingClient => _isCreatingClient;
+
+  Future<void> loadClients() async {
+    _isLoadingClients = true;
+    notifyListeners();
+    try {
+      final output = await _runRexArgs(['clients', 'list', '--json']);
+      final json = _extractJson(output);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is List) {
+          _clients = parsed.whereType<Map<String, dynamic>>().toList();
+        }
+      }
+    } catch (_) {}
+    _isLoadingClients = false;
+    notifyListeners();
+  }
+
+  Future<void> createClient({
+    required String name,
+    required String trade,
+    String? phone,
+    String plan = 'pro',
+  }) async {
+    _isCreatingClient = true;
+    notifyListeners();
+    try {
+      final args = [
+        'create-client',
+        '--name=$name',
+        '--trade=$trade',
+        '--plan=$plan',
+        '--json',
+        if (phone != null && phone.isNotEmpty) '--phone=$phone',
+      ];
+      await _runRexArgs(args, timeout: 180);
+    } catch (_) {}
+    _isCreatingClient = false;
+    await loadClients();
+  }
+
+  Future<void> pauseClient(String id) async {
+    try {
+      await _runRexArgs(['clients', 'pause', id]);
+    } catch (_) {}
+    await loadClients();
+  }
+
+  Future<void> resumeClient(String id) async {
+    try {
+      await _runRexArgs(['clients', 'resume', id]);
+    } catch (_) {}
+    await loadClients();
+  }
+
+  Future<void> removeClient(String id, {bool purge = false}) async {
+    try {
+      final args = ['clients', 'remove', id, if (purge) '--purge'];
+      await _runRexArgs(args);
+    } catch (_) {}
+    await loadClients();
+  }
+
+  // ── End Agent Factory ───────────────────────────────────────────────────
+
   @override
   void dispose() {
     _recordingTimer?.cancel();

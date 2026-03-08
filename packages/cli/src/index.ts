@@ -1165,6 +1165,75 @@ async function main() {
       break
     }
 
+    // ── Agent Factory ──────────────────────────────────────────────────────
+    case 'create-client': {
+      // rex create-client --name "Jean Martin" --trade "plombier" [--plan=pro] [--phone=...] [--email=...] [--dry-run]
+      const { createClient, printClientDetail } = await import('./client-factory.js')
+      const nameArg  = process.argv.find(a => a.startsWith('--name='))?.split('=').slice(1).join('=')
+          || (process.argv.indexOf('--name')  !== -1 ? process.argv[process.argv.indexOf('--name') + 1]  : undefined)
+      const tradeArg = process.argv.find(a => a.startsWith('--trade='))?.split('=').slice(1).join('=')
+          || (process.argv.indexOf('--trade') !== -1 ? process.argv[process.argv.indexOf('--trade') + 1] : undefined)
+      const planArg  = (process.argv.find(a => a.startsWith('--plan='))?.split('=')[1] ?? 'pro') as 'starter' | 'pro' | 'enterprise'
+      const phoneArg = process.argv.find(a => a.startsWith('--phone='))?.split('=').slice(1).join('=')
+      const emailArg = process.argv.find(a => a.startsWith('--email='))?.split('=').slice(1).join('=')
+      const dryRun   = process.argv.includes('--dry-run')
+      if (!nameArg || !tradeArg) {
+        console.error('Usage: rex create-client --name "Jean Martin" --trade "plombier" [--plan=pro] [--phone=+33...] [--email=...] [--dry-run]')
+        process.exit(1)
+      }
+      const client = await createClient({ name: nameArg, trade: tradeArg, plan: planArg, phone: phoneArg, email: emailArg, dryRun })
+      printClientDetail(client)
+      break
+    }
+
+    case 'clients': {
+      // rex clients [list|status <id>|pause <id>|resume <id>|remove <id> [--purge]]
+      const { listClients, getClient, pauseClient, resumeClient, removeClient, printClients, printClientDetail } = await import('./client-factory.js')
+      const sub = process.argv[3]
+      switch (sub) {
+        case 'status': {
+          const id = process.argv[4]
+          if (!id) { console.error('Usage: rex clients status <id>'); process.exit(1) }
+          const c = getClient(id)
+          if (!c) { console.error(`Client not found: ${id}`); process.exit(1) }
+          printClientDetail(c)
+          break
+        }
+        case 'pause': {
+          const id = process.argv[4]
+          if (!id) { console.error('Usage: rex clients pause <id>'); process.exit(1) }
+          await pauseClient(id)
+          console.log(`Paused: ${id}`)
+          break
+        }
+        case 'resume': {
+          const id = process.argv[4]
+          if (!id) { console.error('Usage: rex clients resume <id>'); process.exit(1) }
+          await resumeClient(id)
+          console.log(`Resumed: ${id}`)
+          break
+        }
+        case 'remove': {
+          const id = process.argv[4]
+          if (!id) { console.error('Usage: rex clients remove <id> [--purge]'); process.exit(1) }
+          await removeClient(id, { purge: process.argv.includes('--purge') })
+          console.log(`Removed: ${id}`)
+          break
+        }
+        case 'list':
+        default: {
+          const jsonOut = process.argv.includes('--json')
+          const cs = listClients()
+          if (jsonOut) {
+            console.log(JSON.stringify(cs, null, 2))
+          } else {
+            printClients(cs)
+          }
+        }
+      }
+      break
+    }
+
     case undefined: {
       // First run? Run the wizard so the user gets the "wow moment" before launching
       const { isFirstRun, setupWizard } = await import('./setup-wizard.js')
@@ -1252,6 +1321,15 @@ ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex intent [path]    Detect project intent from git signals (new/feature/fix/refactor)
   rex intent --debug   Show raw signals used for detection
   rex intent --json    JSON output
+
+${COLORS.bold}Agent Factory (B2B):${COLORS.reset}
+  rex create-client --name "..." --trade "plombier" [--plan=pro] [--phone=...] [--email=...] [--dry-run]
+                     Provision a client agent stack (Dify + n8n + Twenty CRM)
+  rex clients list             List all client agents
+  rex clients status <id>      Show client detail + URLs
+  rex clients pause <id>       Stop client docker stack
+  rex clients resume <id>      Restart client docker stack
+  rex clients remove <id>      Mark removed (--purge to delete all data)
 
 ${COLORS.bold}Account Pool:${COLORS.reset}
   rex pool             List Claude accounts in the pool

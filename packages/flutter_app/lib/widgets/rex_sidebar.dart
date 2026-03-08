@@ -24,6 +24,7 @@ class RexSidebar extends StatelessWidget {
     (icon: CupertinoIcons.sparkles, label: 'Agents'),
     (icon: CupertinoIcons.link, label: 'MCP'),
     (icon: CupertinoIcons.bolt_fill, label: 'Optimize'),
+    (icon: CupertinoIcons.person_2_fill, label: 'Clients'),
     (icon: CupertinoIcons.checkmark_shield_fill, label: 'Review'),
     (icon: CupertinoIcons.square_stack_3d_up, label: 'Sandbox'),
     (icon: CupertinoIcons.doc_text, label: 'Logs'),

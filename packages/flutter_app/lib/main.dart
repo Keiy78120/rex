@@ -13,6 +13,7 @@ import 'pages/gateway_page.dart';
 import 'pages/agents_page.dart';
 import 'pages/mcp_page.dart';
 import 'pages/optimize_page.dart';
+import 'pages/clients_page.dart';
 import 'pages/review_page.dart';
 import 'pages/sandbox_page.dart';
 import 'pages/logs_page.dart';
@@ -91,6 +92,7 @@ class _RexMainWindowState extends State<RexMainWindow> {
                   AgentsPage(),
                   McpPage(),
                   OptimizePage(),
+                  ClientsPage(),
                   ReviewPage(),
                   SandboxPage(),
                   LogsPage(),
