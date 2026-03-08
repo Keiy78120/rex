@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { hostname, platform } from 'node:os'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
+import { FREE_TIER_PROVIDERS, getApiKey } from './free-tiers.js'
 
 const log = createLogger('inventory')
 
@@ -203,16 +204,17 @@ async function detectModels(): Promise<ResourceInventory['models']> {
 
 function detectProviders(services: ResourceInventory['services']): ResourceInventory['providers'] {
   const providers: ResourceInventory['providers'] = []
+  const HOME = process.env.HOME || '~'
 
   // Claude Code
   const claudePath = whichCli('claude')
   providers.push({
     name: 'Claude',
     configured: !!claudePath,
-    details: claudePath ? 'Claude Code CLI' : undefined,
+    details: claudePath ? 'Claude Code CLI (subscription)' : undefined,
   })
 
-  // Ollama
+  // Ollama (detected via services)
   const ollamaService = services.find(s => s.name === 'Ollama')
   providers.push({
     name: 'Ollama',
@@ -220,8 +222,18 @@ function detectProviders(services: ResourceInventory['services']): ResourceInven
     details: ollamaService?.status === 'running' ? ollamaService.url : undefined,
   })
 
+  // All free tier providers (Groq, Cerebras, Together, Mistral, OpenRouter, DeepSeek)
+  for (const p of FREE_TIER_PROVIDERS) {
+    if (p.name === 'Ollama') continue  // already handled above
+    const key = getApiKey(p.envKey)
+    providers.push({
+      name: p.name,
+      configured: !!key,
+      details: key ? `${p.rpmLimit} RPM · ${p.defaultModel}` : `set ${p.envKey}`,
+    })
+  }
+
   // Telegram
-  const HOME = process.env.HOME || '~'
   let telegramConfigured = false
   if (process.env.REX_TELEGRAM_BOT_TOKEN && process.env.REX_TELEGRAM_CHAT_ID) {
     telegramConfigured = true
@@ -242,6 +254,118 @@ function detectProviders(services: ResourceInventory['services']): ResourceInven
   })
 
   return providers
+}
+
+// ── Dynamic Recommendations ────────────────────────────
+
+export type RecommendationPriority = 'critical' | 'high' | 'medium' | 'low'
+
+export interface Recommendation {
+  priority: RecommendationPriority
+  category: 'capability' | 'cost' | 'performance' | 'reliability'
+  action: string
+  reason: string
+  command?: string
+}
+
+/**
+ * Analyze inventory and return actionable recommendations,
+ * ordered by priority. Zero LLM — pure rule-based.
+ */
+export function generateRecommendations(inv: ResourceInventory): Recommendation[] {
+  const recs: Recommendation[] = []
+
+  const ollama = inv.services.find(s => s.name === 'Ollama')
+  const ollamaRunning = ollama?.status === 'running'
+
+  // Ollama not running → most features degraded
+  if (!ollamaRunning) {
+    recs.push({
+      priority: 'critical',
+      category: 'capability',
+      action: 'Start Ollama',
+      reason: 'Required for local LLM inference, memory embeddings, and classification',
+      command: 'ollama serve',
+    })
+  }
+
+  // No embedding model → semantic memory disabled
+  if (inv.models.embedding.length === 0 && ollamaRunning) {
+    recs.push({
+      priority: 'critical',
+      category: 'capability',
+      action: 'Install nomic-embed-text',
+      reason: 'Semantic memory search requires an embedding model',
+      command: 'ollama pull nomic-embed-text',
+    })
+  }
+
+  // No free tier configured → Claude is sole fallback (costly)
+  const freeTierNames = FREE_TIER_PROVIDERS.filter(p => p.requiresKey).map(p => p.name)
+  const freeTierConfigured = inv.providers.filter(p =>
+    freeTierNames.includes(p.name) && p.configured
+  ).length
+  if (freeTierConfigured === 0) {
+    recs.push({
+      priority: 'high',
+      category: 'cost',
+      action: 'Add a free tier API key (Groq recommended)',
+      reason: 'Reduces Claude subscription usage for lightweight tasks (routing, triage, summarization)',
+      command: '# groq.com → free tier → set GROQ_API_KEY in ~/.claude/settings.json env',
+    })
+  }
+
+  // No small fast model → classify tasks are slow
+  const hasSmallModel = inv.models.generation.some(m =>
+    m.includes('1.5b') || m.includes('3b') || m.includes('4b') || m.includes('0.5b')
+  )
+  if (!hasSmallModel && ollamaRunning) {
+    recs.push({
+      priority: 'medium',
+      category: 'performance',
+      action: 'Add a sub-4B model for fast classification',
+      reason: 'A small model speeds up routing, categorization, and intent detection',
+      command: 'ollama pull qwen2.5:1.5b',
+    })
+  }
+
+  // Tailscale not running → no mesh/WOL
+  const tailscale = inv.services.find(s => s.name === 'Tailscale')
+  if (!tailscale || tailscale.status !== 'running') {
+    recs.push({
+      priority: 'medium',
+      category: 'reliability',
+      action: 'Enable Tailscale',
+      reason: 'Secure mesh networking enables multi-node REX, Wake-on-LAN, and VPS brain',
+      command: 'tailscale up',
+    })
+  }
+
+  // No gh CLI → PR workflow limited
+  const hasGh = inv.clis.some(c => c.name === 'gh')
+  if (!hasGh) {
+    recs.push({
+      priority: 'low',
+      category: 'capability',
+      action: 'Install GitHub CLI (gh)',
+      reason: 'Enables PR review, issue management, and workflow automation',
+      command: 'brew install gh && gh auth login',
+    })
+  }
+
+  // No generation models at all
+  if (inv.models.generation.length === 0 && ollamaRunning) {
+    recs.push({
+      priority: 'high',
+      category: 'capability',
+      action: 'Pull at least one generation model',
+      reason: 'Ollama is running but has no generation models',
+      command: 'ollama pull qwen3.5:latest',
+    })
+  }
+
+  const ORDER: RecommendationPriority[] = ['critical', 'high', 'medium', 'low']
+  return recs.sort((a, b) => ORDER.indexOf(a.priority) - ORDER.indexOf(b.priority))
 }
 
 // ── Resource Ranking ───────────────────────────────────
@@ -320,10 +444,20 @@ export function rankResources(inv: ResourceInventory): Resource[] {
   }
 
   // Providers — cost varies
+  const PROVIDER_COST: Record<string, ResourceCost> = {
+    Claude: 'subscription',
+    Ollama: 'free',
+    Telegram: 'free',
+    // Free tier API providers (free quota, key required)
+    Groq: 'free',
+    Cerebras: 'free',
+    'Together AI': 'free',
+    Mistral: 'free',
+    OpenRouter: 'free',
+    DeepSeek: 'free',
+  }
   for (const p of inv.providers) {
-    let cost: ResourceCost = 'free'
-    if (p.name === 'Claude') cost = 'subscription'
-    if (p.name === 'Telegram') cost = 'free'
+    const cost: ResourceCost = PROVIDER_COST[p.name] ?? 'free'
     resources.push({
       name: p.name,
       type: 'provider',
@@ -471,7 +605,25 @@ export async function showInventory(): Promise<void> {
       ? `${C.green}configured${C.reset}`
       : `${C.dim}not configured${C.reset}`
     const detail = p.details ? `  ${C.dim}${p.details}${C.reset}` : ''
-    console.log(`   ${dot}  ${p.name.padEnd(12)} ${label}${detail}`)
+    console.log(`   ${dot}  ${p.name.padEnd(16)} ${label}${detail}`)
+  }
+
+  // Recommendations
+  const recs = generateRecommendations(inv)
+  if (recs.length > 0) {
+    console.log(`\n${C.cyan}\uD83D\uDCA1  Recommendations${C.reset}`)
+    const PRIORITY_COLOR: Record<RecommendationPriority, string> = {
+      critical: C.red,
+      high: C.yellow,
+      medium: C.cyan,
+      low: C.dim,
+    }
+    for (const r of recs) {
+      const col = PRIORITY_COLOR[r.priority]
+      console.log(`   ${col}[${r.priority}]${C.reset}  ${r.action}`)
+      console.log(`          ${C.dim}${r.reason}${C.reset}`)
+      if (r.command) console.log(`          ${C.dim}$ ${r.command}${C.reset}`)
+    }
   }
 
   console.log(`\n${LINE}`)
