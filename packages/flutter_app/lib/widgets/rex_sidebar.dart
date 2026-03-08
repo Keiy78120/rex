@@ -15,6 +15,8 @@ class RexSidebar extends StatelessWidget {
 
   static const _items = [
     (icon: CupertinoIcons.heart_fill, label: 'Health'),
+    (icon: CupertinoIcons.globe, label: 'Network'),
+    (icon: CupertinoIcons.layers_fill, label: 'Providers'),
     (icon: CupertinoIcons.mic_fill, label: 'Voice'),
     (icon: CupertinoIcons.waveform, label: 'Audio'),
     (icon: CupertinoIcons.search, label: 'Memory'),

@@ -294,29 +294,98 @@ rex doctor --fix     # Auto-fix then health check
 | Audit executable confirme : `pnpm build`, `pnpm test`, `rex audit --strict`, `flutter build macos --debug` | repo |
 | Addendum architecture OpenClaw booste: hub securise, Flutter-first, headless parity, brain VPS, no-memory-loss, Tailscale, WOL/doctor, pixel agents, LangGraph spike | `docs/plans/2026-03-07-rex-v7-openclaw-addendum.md`, `docs/plans/action.md`, `docs/plans/2026-03-07-rex-v7-master-plan.md` |
 
+### ✅ Terminé (session 2026-03-08)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| Fix Providers page crash: field name mismatch (`configured`/`tier` → `status`/`costTier`) | `providers_page.dart` |
+| Safer JSON cast in service (`.whereType<>()` instead of `.cast<>()`) | `rex_service.dart` |
+| Reflector module wired into CLI (`rex reflect`) and daemon (6h cycle) | `index.ts`, `daemon.ts` |
+| Dead code cleanup in sync.ts (unused `stats` var, unused `_hubUrl` param) | `sync.ts` |
+| README updated: Claude Code memory claims nuanced (auto-memory acknowledged) | `README.md` |
+| Plans updated: system tray + memory verification + `/loop` monitoring items added | `CLAUDE.md` |
+| REX monitor skill: `/loop` patterns for health, memory, sync, build, gateway | `dotfiles/skills/rex-monitor/SKILL.md` |
+| Memory health check module (`rex memory-check`, `--json`, wired into doctor + daemon) | `memory-check.ts`, `index.ts`, `daemon.ts` |
+| Budget data parsing fixed in providers page (actual CLI format vs expected) | `providers_page.dart` |
+| Runbook field name fixed (`successCount` vs `usedCount`) | `providers_page.dart` |
+
+### ✅ Terminé (session 2026-03-08 — backend + UI rework)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **Backend: Event journal** (append-only SQLite, 6 event types, ack/replay) | `event-journal.ts`, `index.ts`, `daemon.ts` |
+| **Backend: Semantic cache** (SHA256 prompt hashing, TTL, hit tracking) | `semantic-cache.ts`, `index.ts`, `daemon.ts` |
+| **Backend: Backup/restore** (tar.gz SQLite+config, daily in daemon, rotate 7) | `backup.ts`, `index.ts`, `daemon.ts` |
+| **Backend: Git workflow** (startFeature, startBugfix, workflowPR) | `workflow.ts`, `index.ts` |
+| **Backend: Guard manager CLI** (list/enable/disable/logs) | `guard-manager.ts`, `index.ts` |
+| **Backend: Review pipeline** (tsc, lint, secret scan, tests, graceful skip) | `review.ts`, `index.ts` |
+| **Backend: Observer tables** (observations, habits, facts + CRUD + forgetting curve) | `observer.ts`, `reflector.ts`, `index.ts` |
+| **Shared widget library** (RexCard, RexStatusChip, RexSection, RexEmptyState, RexErrorState, RexStatRow, RexProgressBar, RexToggleRow) | `widgets/rex_shared.dart` |
+| **UI rework 9 pages** with shared widgets + consistent patterns | `health_page.dart`, `network_page.dart`, `providers_page.dart`, `memory_page.dart`, `gateway_page.dart`, `agents_page.dart`, `mcp_page.dart`, `logs_page.dart`, `optimize_page.dart` |
+| **Fix Logs ANSI escape codes** (strip + deduplicate lines) | `logs_page.dart` |
+| **Fix Providers empty state** (log line polluting JSON output) | `providers.ts`, `index.ts`, `rex_service.dart` |
+| **Flutter _extractJson** helper (defensive JSON extraction from mixed CLI output) | `rex_service.dart` |
+| **Fix _stripAnsi regex** (was missing non-m ANSI codes) | `rex_service.dart` |
+
 ### 🔄 En cours / A faire
+
+**AUDIT v7 (2026-03-08)** : 75% DONE (CLI 28+ cmds, Flutter 12 pages, Memory no-loss, Gateway v3, Backend core done), 25% TODO (hub, LiteLLM, cross-platform).
+
+---
+
+## Vision REX — Architecture unifiee
+
+REX = **hub centralisateur** de toutes les ressources disponibles pour un dev solo :
+- **Hardware** : machines locales (Mac, VPS, GPU), Wake-on-LAN, Tailscale mesh
+- **Free tiers** : Groq, Together AI, Cerebras, HuggingFace, Mistral free, Cloudflare AI Workers, Cohere free
+- **Subscriptions** : Claude Max (Code+Sonnet+Opus), ChatGPT Plus, Codex, MiniMax, etc.
+- **Local models** : Ollama (Qwen, DeepSeek, Llama, etc.), llamafile, llama.cpp
+- **Tools/MCP** : marketplace dynamique, awesome-mcp-server, install one-click, activation/desactivation
+- **Memory** : semantique partagee (SQLite + embeddings), accessible par TOUS les orchestrators
+
+**Orchestrators principaux** : Claude Code + Codex (les 2 seuls pour l'instant). Tous les autres (ChatGPT, Gemini, etc.) sont des providers/workers, pas des orchestrators.
+
+**Principe directeur** : tout est automatique, zero setup complique pour l'user. REX detecte, configure et propose. L'user valide ou override.
+
+**Routing** : cache → script/CLI local → Ollama local → free tier API → subscription → pay-per-use. Toujours le moins cher qui peut faire le job.
+
+---
+
+### Phase 1 — Core (✅ DONE)
+
+CLI, Gateway Telegram, Memory, Flutter app, Doctor, Daemon, Agents, MCP registry, Provider detection, Budget tracking, Event journal, Semantic cache, Backup/restore, Git workflow, Guard manager, Review pipeline, Observer/Reflector, Sync degraded mode, Install profiles, Orchestrator base, Resource inventory, Backend runner.
+
+### Phase 2 — Integration & Marketplace (EN COURS)
 
 | Tache | Priorite | Detail |
 |-------|----------|--------|
-| Hub securise type OpenClaw, vue minimale | HAUTE | Centraliser nodes, taches, sante, files pending, memory queue via API/routes securisees, sans recopier une UI web surchargee |
-| Resource inventory + recommandations dynamiques | HAUTE | Detecter scripts, CLIs, services, machines et quotas possedes; proposer la meilleure ressource disponible avant tout appel payant |
-| Registry tools gouverne | HAUTE | Connaitre beaucoup d'outils facon OpenClaw, mais les garder desactives par defaut; proposer CLI d'abord, MCP ensuite, API ensuite |
-| Clarifier surface d'operation unique | HAUTE | Flutter reste l'UI operateur principale; parity obligatoire via CLI + gateway + API headless, pas de rewrite Next.js par defaut |
-| Brain VPS + sync durable | HAUTE | VPS = hub prefere si dispo; event journal append-only + queue + ack pour ne rien perdre meme offline |
-| Tailscale + auto-heal | HAUTE | Join nodes via Tailscale, `rex doctor` automatique, Wake-on-LAN si un node requis est hors ligne |
-| Tunnels persistants et fallback remote control | HAUTE | Verifier direct/peer-relay Tailscale; fallback Tailscale SSH/SSH key, RustDesk ou Input Leap selon besoin |
-| Success memory / runbooks | HAUTE | Memoriser les workflows qui reussissent et les reinjecter au moment opportun |
-| Cross-platform desktop + API hub | HAUTE | Cible Flutter desktop macOS/Windows/Linux + API mono-repo pour dashboard distant via Tailscale ou VPS reverse proxy |
-| Training pipeline research approfondie | BASSE | Benchmarks reels mlx-lm vs unsloth + eval dataset interne |
-| Flutter Settings: Model Router section | BASSE | Afficher task→model mapping depuis getRouterSnapshot() |
-| MCP compatibility check dans `rex doctor` | MOYENNE | Diagnostic clair si MCP mal configure |
-| Pipeline no memory loss | MOYENNE | Memoire cloud Claude + semantic search locale + resume |
-| Meeting bots type Otter AI | MOYENNE | Rechercher integration OSS prioritaire, setup automatise par scripts/agents, transcription + memoire |
-| Alternative lightweight a Ollama | MOYENNE | Evaluer `llamafile`, `llama.cpp` ou LocalAI derriere `llm.backend`, sans rajouter une UI dediee |
-| Pixel agents fallback | MOYENNE | Integrer un fallback de nommage/execution type `$machine@launch_pixel_agents` uniquement sur machines compatibles, jamais comme dependance VPS |
-| LangGraph spike borne | BASSE | Evaluer seulement apres stabilisation orchestrator + queue + state machine de base |
-| One-command install + optimization side plan | MOYENNE | `docs/plans/2026-03-07-rex-install-optimization-plan.md` pour macOS/Windows/Linux/VPS |
-| Setup one-command doc | BASSE | `rex install` en 5 min (local + Telegram + agents + MCP) |
+| **MCP Marketplace hub** | 🔴 CRITIQUE | Connexion aux hubs MCP (awesome-mcp-server GitHub, registres tiers). Browse, search, one-click install dans REX. L'user clique "Download" → installe + active le MCP automatiquement |
+| **LiteLLM integration** | 🔴 CRITIQUE | Proxy unifie pour free tiers (Groq free, Together free, Cerebras, HF Inference). Auto-detection des cles API + rate limits. REX gere la rotation entre providers free quand un atteint sa limite |
+| **Providers API key config** | 🔴 CRITIQUE | UI Flutter dans Providers page : champs pour ANTHROPIC_API_KEY, OPENAI_API_KEY, GROQ_API_KEY, TOGETHER_API_KEY, etc. Sauvegarde dans settings.json env. Validation live (test API call) |
+| **Free model catalog** | HAUTE | Base de donnees des modeles gratuits : Groq (Llama 3.1 70B free), Together (Llama free tier), Cerebras (Llama fast), HF (Inference API free), Mistral (free tier). Avec limites connues (RPM, TPM, quotas) |
+| **Auto-provider rotation** | HAUTE | Quand un free tier atteint sa rate limit, REX bascule auto sur le suivant. Ordre : Groq → Cerebras → Together → HF → Ollama local → subscription |
+| **Proactive session management** | HAUTE | REX doit detecter et gerer proactivement : rate limits (prevoir compaction avant epuisement), context window usage (auto-compact a 70%), session continuity (sauvegarder etat avant coupure) |
+
+### Phase 3 — Hub & Multi-node (FUTUR)
+
+| Tache | Priorite | Detail |
+|-------|----------|--------|
+| **Expose Hub API** | HAUTE | GET/POST routes: /health, /nodes, /tasks, /events, /memory/pending + JWT auth. VPS = hub prefere si dispo |
+| **Brain VPS + sync durable** | HAUTE | Event journal append-only, zero-loss guarantee, queue + ack |
+| **Tailscale mesh auto** | HAUTE | Auto-join nodes, status check, fallback routes, WOL si node offline |
+| **Tunnels + fallback** | HAUTE | Tailscale direct/relay, SSH fallback, RustDesk option |
+| **Cross-platform desktop** | MOYENNE | Flutter for Windows + Linux (after macOS stable) |
+| **System tray cross-platform** | MOYENNE | Native tray for Windows/Linux (macOS ✅) |
+
+### Phase 4 — Advanced (LATER)
+
+| Tache | Priorite | Detail |
+|-------|----------|--------|
+| **LangGraph spike** | BASSE | Only after orchestrator stabilizes |
+| **Training pipeline** | BASSE | Benchmarks mlx-lm vs unsloth + eval dataset |
+| **Meeting bots** | BASSE | OSS integration (Otter AI alternative) |
+| **Alternative to Ollama** | MOYENNE | llamafile/llama.cpp/LocalAI switchability |
+| **Pixel agents fallback** | MOYENNE | `$machine@launch_pixel_agents` pattern |
 
 ---
 

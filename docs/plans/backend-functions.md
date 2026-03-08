@@ -7,6 +7,15 @@ Plan simple pour tout le backend fonctionnel de REX.
 ## 1. Mission
 
 Construire le backend REX comme un systeme fiable, simple et local-first.
+REX = hub centralise de TOUTES les ressources. Orchestrateurs : **Claude Code + Codex ONLY**.
+Tout automatique, zero setup.
+
+Phases backend :
+
+- **Phase 1** : DONE (CLI, daemon, memory, gateway, router, agents, MCP registry)
+- **Phase 2** : CURRENT (LiteLLM proxy, free model catalog, MCP marketplace fetcher, API keys config)
+- **Phase 3** : FUTURE (hub API, VPS brain, sync inter-nodes)
+- **Phase 4** : LATER (fleet, training pipeline)
 
 Le backend couvre :
 
@@ -20,6 +29,9 @@ Le backend couvre :
 - inventory des ressources
 - runbooks / success memory
 - install / bootstrap logic
+- LiteLLM proxy (Phase 2)
+- free model catalog (Phase 2)
+- MCP marketplace fetcher (Phase 2)
 
 ---
 
@@ -152,7 +164,7 @@ Fichiers cibles :
 
 - `packages/cli/src/daemon.ts`
 
-### F. Hub + Sync
+### F. Hub + Sync (Phase 3)
 
 Responsabilites :
 
@@ -168,6 +180,72 @@ Fichiers cibles :
 - `packages/cli/src/node.ts`
 - `packages/cli/src/sync.ts`
 - `packages/cli/src/sync-queue.ts`
+
+### G. LiteLLM Proxy (Phase 2)
+
+Responsabilites :
+
+- proxy unifie vers tous les providers LLM (gratuits et payants)
+- auto-rotation sur rate limit : si Groq 429 → fallback Together → Cerebras → HF → Mistral
+- gestion des API keys (stockage securise, validation, test connection)
+- tracking usage par provider (requetes, tokens, erreurs)
+- exposition d'un endpoint local unique pour tous les consumers REX
+
+Fichiers cibles :
+
+- `packages/cli/src/litellm.ts`
+- `packages/cli/src/providers.ts`
+
+Logique auto-rotation :
+
+1. trier les providers par priorite : local (Ollama) → free tier → paid
+2. envoyer la requete au provider top
+3. si 429 / 503 / timeout → marquer en cooldown (duree = retry-after ou 60s)
+4. passer au provider suivant
+5. si tous en cooldown → queue la requete, retry au prochain slot libre
+6. logger chaque rotation pour debug
+
+### H. Free Model Catalog (Phase 2)
+
+Responsabilites :
+
+- catalogue des modeles gratuits avec limites connues (RPM, TPM, quotas, context window)
+- refresh periodique (1x/semaine, source = docs providers + WebSearch)
+- expose au router pour selection automatique du meilleur modele gratuit disponible
+- UI-ready : fournir les donnees pour la page Providers
+
+Fichiers cibles :
+
+- `packages/cli/src/free-models.ts`
+
+Donnees par modele :
+
+- provider, model_id, context_window, RPM, TPM, daily_quota, status (active/deprecated)
+
+### I. MCP Marketplace Fetcher (Phase 2)
+
+Responsabilites :
+
+- fetcher le catalogue awesome-mcp-servers via GitHub API (`GET /repos/petercat-ai/awesome-mcp-servers/readme`)
+- parser le README pour extraire nom, description, URL, categorie
+- enrichir avec mcp.run et Smithery si disponibles
+- cache local (`~/.claude/rex/mcp-marketplace.json`, refresh 1x/jour max)
+- search/filter par nom, categorie, tag
+- one-click install : generer la config MCP et l'ajouter a `~/.claude/settings.json`
+
+Fichiers cibles :
+
+- `packages/cli/src/mcp_registry.ts` (existant, a etendre)
+- `packages/cli/src/mcp_marketplace.ts`
+
+Logique fetch :
+
+1. check cache age (< 24h → utiliser cache)
+2. fetch GitHub API (raw README content)
+3. parser les tables/listes Markdown → array d'objets `{ name, description, url, category, install_cmd }`
+4. merge avec sources secondaires (mcp.run, Smithery)
+5. sauver dans le cache local
+6. exposer via `rex mcp search <query>` et `rex mcp browse`
 
 ---
 
@@ -228,7 +306,11 @@ Mission : queue + ack + replay + degrade modes
 
 ### Agent-MCP
 
-Mission : registry gouverne + recommandations + activation explicite
+Mission : registry gouverne + recommandations + activation explicite + marketplace fetcher
+
+### Agent-LiteLLM
+
+Mission : proxy setup + auto-rotation + API keys + free model catalog + usage tracking
 
 ---
 

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../services/rex_service.dart';
 import '../theme.dart';
 import '../widgets/rex_page_layout.dart';
+import '../widgets/rex_shared.dart';
 
 class AgentsPage extends StatefulWidget {
   const AgentsPage({super.key});
@@ -150,7 +151,6 @@ class _AgentsPageState extends State<AgentsPage> {
       final dir = File(_chatFilePath).parent;
       if (!dir.existsSync()) dir.createSync(recursive: true);
       final data = _chatHistory.map((m) => {'role': m.role, 'text': m.text}).toList();
-      // Keep last 50 messages
       final trimmed = data.length > 50 ? data.sublist(data.length - 50) : data;
       File(_chatFilePath).writeAsStringSync(jsonEncode(trimmed));
     } catch (_) {}
@@ -199,7 +199,7 @@ class _AgentsPageState extends State<AgentsPage> {
 
             return Column(
               children: [
-                // Top: agents list (compact)
+                // Top: agents list
                 Expanded(
                   flex: 3,
                   child: ListView(
@@ -207,13 +207,16 @@ class _AgentsPageState extends State<AgentsPage> {
                     padding: const EdgeInsets.all(16),
                     children: [
                       // Create form (collapsible)
-                      if (_showCreateForm) ...[
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: _cardDecoration(context),
+                      if (_showCreateForm)
+                        RexCard(
+                          title: 'Create Agent',
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              RexSection(
+                                title: 'Profile',
+                                padding: const EdgeInsets.only(bottom: 8),
+                              ),
                               Wrap(
                                 spacing: 6,
                                 runSpacing: 6,
@@ -259,76 +262,53 @@ class _AgentsPageState extends State<AgentsPage> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 12),
-                      ],
 
                       // Agents list header
-                      Row(
-                        children: [
-                          Text(
-                            'Agents (${rex.agents.length})',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: c.text,
+                      RexSection(
+                        title: 'Agents (${rex.agents.length})',
+                        action: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            RexButton(
+                              label: 'Start all',
+                              small: true,
+                              variant: RexButtonVariant.ghost,
+                              onPressed: rex.isLoading
+                                  ? null
+                                  : () async {
+                                      for (final agent
+                                          in rex.agents.where((a) => a.enabled)) {
+                                        await rex.startAgent(agent.id);
+                                      }
+                                    },
                             ),
-                          ),
-                          const Spacer(),
-                          RexButton(
-                            label: 'Start all',
-                            small: true,
-                            variant: RexButtonVariant.ghost,
-                            onPressed: rex.isLoading
-                                ? null
-                                : () async {
-                                    for (final agent
-                                        in rex.agents.where((a) => a.enabled)) {
-                                      await rex.startAgent(agent.id);
-                                    }
-                                  },
-                          ),
-                          const SizedBox(width: 4),
-                          RexButton(
-                            label: 'Stop all',
-                            small: true,
-                            variant: RexButtonVariant.ghost,
-                            onPressed: rex.isLoading
-                                ? null
-                                : () async {
-                                    for (final agent
-                                        in rex.agents.where((a) => a.running)) {
-                                      await rex.stopAgent(agent.id);
-                                    }
-                                  },
-                          ),
-                        ],
+                            const SizedBox(width: 4),
+                            RexButton(
+                              label: 'Stop all',
+                              small: true,
+                              variant: RexButtonVariant.ghost,
+                              onPressed: rex.isLoading
+                                  ? null
+                                  : () async {
+                                      for (final agent
+                                          in rex.agents.where((a) => a.running)) {
+                                        await rex.stopAgent(agent.id);
+                                      }
+                                    },
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 8),
 
                       if (rex.agents.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          child: Column(
-                            children: [
-                              Icon(CupertinoIcons.sparkles,
-                                  size: 32, color: c.textTertiary),
-                              const SizedBox(height: 8),
-                              Text(
-                                'No agents yet',
-                                style: TextStyle(color: c.textSecondary),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Create one with the + button above',
-                                style: TextStyle(
-                                    fontSize: 12, color: c.textTertiary),
-                              ),
-                            ],
-                          ),
+                        RexEmptyState(
+                          icon: CupertinoIcons.sparkles,
+                          title: 'No agents yet',
+                          subtitle: 'Create one with the + button above',
                         )
                       else
                         ...rex.agents.map(
-                          (agent) => _CompactAgentRow(
+                          (agent) => _AgentCard(
                             agent: agent,
                             busy: rex.isLoading,
                             onStart: () => _startAgent(agent.id),
@@ -343,10 +323,7 @@ class _AgentsPageState extends State<AgentsPage> {
                 ),
 
                 // Separator
-                Container(
-                  height: 1,
-                  color: c.separator,
-                ),
+                Container(height: 1, color: c.separator),
 
                 // Bottom: Chat with orchestrator
                 Expanded(
@@ -489,7 +466,7 @@ class _ChatMessage {
 
 // --- Widgets ---
 
-class _CompactAgentRow extends StatefulWidget {
+class _AgentCard extends StatelessWidget {
   final AgentInfo agent;
   final bool busy;
   final VoidCallback onStart;
@@ -498,7 +475,7 @@ class _CompactAgentRow extends StatefulWidget {
   final VoidCallback onToggleEnabled;
   final VoidCallback onDelete;
 
-  const _CompactAgentRow({
+  const _AgentCard({
     required this.agent,
     required this.busy,
     required this.onStart,
@@ -509,131 +486,86 @@ class _CompactAgentRow extends StatefulWidget {
   });
 
   @override
-  State<_CompactAgentRow> createState() => _CompactAgentRowState();
-}
-
-class _CompactAgentRowState extends State<_CompactAgentRow> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
     final c = context.rex;
-    final agent = widget.agent;
-    final statusColor = agent.running
-        ? CupertinoColors.systemGreen
+    final chipStatus = agent.running
+        ? RexChipStatus.ok
         : agent.enabled
-            ? CupertinoColors.systemOrange
-            : CupertinoColors.systemGrey;
+            ? RexChipStatus.warning
+            : RexChipStatus.inactive;
+    final chipLabel = agent.running
+        ? 'Running'
+        : agent.enabled
+            ? 'Enabled'
+            : 'Disabled';
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        margin: const EdgeInsets.only(bottom: 2),
-        decoration: BoxDecoration(
-          color: _hovered ? c.text.withValues(alpha: 0.03) : null,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: statusColor,
-                shape: BoxShape.circle,
-              ),
+    return RexCard(
+      title: agent.name.isNotEmpty ? agent.name : agent.id,
+      trailing: RexStatusChip(
+        label: chipLabel,
+        status: chipStatus,
+        small: true,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RexStatRow(
+            label: 'Profile',
+            value: agent.profile,
+            icon: CupertinoIcons.person_2,
+          ),
+          RexStatRow(
+            label: 'Model',
+            value: agent.model.isNotEmpty ? agent.model : 'default',
+            icon: CupertinoIcons.cube,
+          ),
+          if (agent.intervalSec > 0)
+            RexStatRow(
+              label: 'Interval',
+              value: '${agent.intervalSec}s',
+              icon: CupertinoIcons.timer,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '${agent.name} (${agent.profile})',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: c.text,
+          if (agent.lastRunAt.isNotEmpty)
+            RexStatRow(
+              label: 'Last run',
+              value: agent.lastRunAt,
+              icon: CupertinoIcons.clock,
+            ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (agent.running)
+                RexButton(
+                  label: 'Stop',
+                  small: true,
+                  variant: RexButtonVariant.danger,
+                  onPressed: busy ? null : onStop,
+                )
+              else
+                RexButton(
+                  label: 'Start',
+                  small: true,
+                  variant: RexButtonVariant.success,
+                  onPressed: busy ? null : onStart,
                 ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Text(
-              agent.model,
-              style: TextStyle(
-                fontSize: 11,
-                color: c.textTertiary,
-              ),
-            ),
-            if (_hovered) ...[
-              const SizedBox(width: 8),
-              _MiniButton(
-                icon: agent.running
-                    ? CupertinoIcons.stop_fill
-                    : CupertinoIcons.play_fill,
-                color: agent.running ? c.error : c.success,
-                onTap: widget.busy
-                    ? null
-                    : (agent.running ? widget.onStop : widget.onStart),
-              ),
-              const SizedBox(width: 4),
-              _MiniButton(
+              RexButton(
+                label: 'Run once',
+                small: true,
+                variant: RexButtonVariant.secondary,
                 icon: CupertinoIcons.bolt,
-                color: c.textSecondary,
-                onTap: widget.busy ? null : widget.onRunOnce,
+                onPressed: busy ? null : onRunOnce,
               ),
-              const SizedBox(width: 4),
-              _MiniButton(
-                icon: CupertinoIcons.trash,
-                color: c.textTertiary,
-                onTap: widget.busy ? null : widget.onDelete,
+              RexButton(
+                label: 'Delete',
+                small: true,
+                variant: RexButtonVariant.ghost,
+                onPressed: busy ? null : onDelete,
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MiniButton extends StatefulWidget {
-  final IconData icon;
-  final Color color;
-  final VoidCallback? onTap;
-
-  const _MiniButton({
-    required this.icon,
-    required this.color,
-    this.onTap,
-  });
-
-  @override
-  State<_MiniButton> createState() => _MiniButtonState();
-}
-
-class _MiniButtonState extends State<_MiniButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: widget.onTap != null
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          width: 22,
-          height: 22,
-          decoration: BoxDecoration(
-            color: _hovered
-                ? widget.color.withValues(alpha: 0.12)
-                : null,
-            borderRadius: BorderRadius.circular(4),
           ),
-          child: Icon(widget.icon, size: 12, color: widget.color),
-        ),
+        ],
       ),
     );
   }
@@ -707,12 +639,4 @@ class _ChatBubble extends StatelessWidget {
       ),
     );
   }
-}
-
-BoxDecoration _cardDecoration(BuildContext context) {
-  return BoxDecoration(
-    color: context.rex.surfaceSecondary,
-    borderRadius: BorderRadius.circular(8),
-    border: Border.all(color: context.rex.separator),
-  );
 }

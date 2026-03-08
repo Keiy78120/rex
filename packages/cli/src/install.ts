@@ -1,30 +1,367 @@
-import { init } from './init.js'
+import { execSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { platform, totalmem } from 'node:os'
+import { join } from 'node:path'
+import { createInterface } from 'node:readline'
+import { init, installDaemonAgent, installGatewayAgent, installApp } from './init.js'
 import { setup } from './setup.js'
 import { audit } from './audit.js'
+import { createLogger } from './logger.js'
+import { ensureRexDirs } from './paths.js'
+import { loadConfig, saveConfig } from './config.js'
+
+const log = createLogger('install')
 
 const COLORS = {
   reset: '\x1b[0m',
   green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  red: '\x1b[31m',
   bold: '\x1b[1m',
   dim: '\x1b[2m',
+  cyan: '\x1b[36m',
 }
 
-export async function install() {
-  const line = '═'.repeat(45)
-  console.log(`\n${line}`)
-  console.log(`${COLORS.bold}        REX INSTALL — One Command${COLORS.reset}`)
-  console.log(`${line}\n`)
+function ok(msg: string) { console.log(`  ${COLORS.green}✓${COLORS.reset} ${msg}`) }
+function info(msg: string) { console.log(`  ${COLORS.cyan}i${COLORS.reset} ${msg}`) }
+function warn(msg: string) { console.log(`  ${COLORS.yellow}!${COLORS.reset} ${msg}`) }
 
-  await init()
+export type InstallProfile = 'local-dev' | 'desktop-full' | 'headless-node' | 'hub-vps'
 
-  await setup({
-    nonInteractive: true,
-    autoInstallDeps: true,
-    skipTelegram: process.env.REX_SKIP_TELEGRAM === '1',
+interface InstallOptions {
+  profile?: InstallProfile
+  yes?: boolean
+}
+
+interface ResourceReport {
+  os: string
+  ramGB: number
+  node: boolean
+  nodeVersion: string
+  git: boolean
+  ollama: boolean
+  flutter: boolean
+  brew: boolean
+  systemd: boolean
+}
+
+const PROFILES: Record<InstallProfile, { label: string; desc: string; steps: string[] }> = {
+  'local-dev': {
+    label: 'Local Dev',
+    desc: 'CLI + guards + memory (minimal setup for Claude Code companion)',
+    steps: ['init', 'setup-ollama'],
+  },
+  'desktop-full': {
+    label: 'Desktop Full',
+    desc: 'CLI + guards + memory + daemon + gateway + Flutter app (macOS)',
+    steps: ['init', 'setup-ollama', 'daemon', 'gateway', 'flutter-app'],
+  },
+  'headless-node': {
+    label: 'Headless Node',
+    desc: 'CLI + guards + memory + daemon (server, no GUI)',
+    steps: ['init', 'setup-ollama', 'daemon', 'systemd-hint'],
+  },
+  'hub-vps': {
+    label: 'Hub VPS',
+    desc: 'CLI + daemon + hub API (centralized server)',
+    steps: ['init', 'setup-ollama', 'daemon', 'systemd-hint', 'hub-hint'],
+  },
+}
+
+function commandExists(cmd: string): boolean {
+  try {
+    execSync(`which ${cmd}`, { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function detectResources(): ResourceReport {
+  const os = platform()
+  const ramGB = Math.round(totalmem() / (1024 ** 3))
+
+  let nodeVersion = ''
+  try { nodeVersion = execSync('node --version', { encoding: 'utf-8' }).trim() } catch {}
+
+  let systemd = false
+  if (os === 'linux') {
+    try {
+      execSync('systemctl --version', { stdio: 'ignore' })
+      systemd = true
+    } catch {}
+  }
+
+  return {
+    os,
+    ramGB,
+    node: commandExists('node'),
+    nodeVersion,
+    git: commandExists('git'),
+    ollama: commandExists('ollama'),
+    flutter: commandExists('flutter'),
+    brew: commandExists('brew'),
+    systemd,
+  }
+}
+
+function printResources(res: ResourceReport) {
+  console.log(`\n  ${COLORS.bold}Detected Resources${COLORS.reset}`)
+  const dot = (ok: boolean) => ok ? `${COLORS.green}●${COLORS.reset}` : `${COLORS.red}●${COLORS.reset}`
+  console.log(`  ${dot(true)} OS: ${res.os}, ${res.ramGB}GB RAM`)
+  console.log(`  ${dot(res.node)} Node.js: ${res.nodeVersion || 'not found'}`)
+  console.log(`  ${dot(res.git)} Git: ${res.git ? 'available' : 'not found'}`)
+  console.log(`  ${dot(res.ollama)} Ollama: ${res.ollama ? 'installed' : 'not found'}`)
+  console.log(`  ${dot(res.flutter)} Flutter: ${res.flutter ? 'available' : 'not found'}`)
+  if (res.os === 'darwin') console.log(`  ${dot(res.brew)} Homebrew: ${res.brew ? 'available' : 'not found'}`)
+  if (res.os === 'linux') console.log(`  ${dot(res.systemd)} systemd: ${res.systemd ? 'available' : 'not found'}`)
+}
+
+function printProfiles(res: ResourceReport) {
+  console.log(`\n  ${COLORS.bold}Available Profiles${COLORS.reset}\n`)
+  const profiles = Object.entries(PROFILES) as [InstallProfile, typeof PROFILES[InstallProfile]][]
+  for (let i = 0; i < profiles.length; i++) {
+    const [key, p] = profiles[i]
+    let note = ''
+    if (key === 'desktop-full' && res.os !== 'darwin') note = ` ${COLORS.dim}(macOS only)${COLORS.reset}`
+    if (key === 'hub-vps' && res.os === 'darwin') note = ` ${COLORS.dim}(typically Linux VPS)${COLORS.reset}`
+    console.log(`  ${COLORS.cyan}${i + 1}${COLORS.reset}) ${COLORS.bold}${p.label}${COLORS.reset}${note}`)
+    console.log(`     ${COLORS.dim}${p.desc}${COLORS.reset}`)
+  }
+}
+
+function suggestProfile(res: ResourceReport): InstallProfile {
+  if (res.os === 'darwin' && res.flutter) return 'desktop-full'
+  if (res.os === 'darwin') return 'local-dev'
+  if (res.systemd) return 'headless-node'
+  return 'local-dev'
+}
+
+function prompt(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  return new Promise(resolve => {
+    rl.question(`  ${COLORS.cyan}?${COLORS.reset} ${question} `, answer => {
+      rl.close()
+      resolve(answer.trim())
+    })
   })
+}
 
-  console.log(`\n${COLORS.dim}Running post-install audit...${COLORS.reset}`)
-  await audit()
+async function selectProfile(res: ResourceReport, nonInteractive: boolean): Promise<InstallProfile> {
+  const suggested = suggestProfile(res)
 
-  console.log(`\n${COLORS.green}${COLORS.bold}REX install complete.${COLORS.reset}`)
+  if (nonInteractive) {
+    info(`Auto-selected profile: ${COLORS.bold}${suggested}${COLORS.reset}`)
+    return suggested
+  }
+
+  printProfiles(res)
+  const profileKeys = Object.keys(PROFILES) as InstallProfile[]
+  const suggestedIdx = profileKeys.indexOf(suggested) + 1
+
+  const answer = await prompt(`Select profile [1-4] (default: ${suggestedIdx} = ${suggested}):`)
+  if (!answer) return suggested
+
+  const num = parseInt(answer, 10)
+  if (num >= 1 && num <= 4) return profileKeys[num - 1]
+
+  // Try matching by name
+  const match = profileKeys.find(k => k === answer || k.startsWith(answer))
+  if (match) return match
+
+  warn(`Unknown selection "${answer}", using ${suggested}`)
+  return suggested
+}
+
+async function runStep(step: string, res: ResourceReport) {
+  switch (step) {
+    case 'init':
+      console.log(`\n  ${COLORS.bold}Step: Guards + Hooks + Memory${COLORS.reset}`)
+      await init()
+      break
+
+    case 'setup-ollama':
+      console.log(`\n  ${COLORS.bold}Step: Ollama + Models${COLORS.reset}`)
+      await setup({
+        nonInteractive: true,
+        autoInstallDeps: true,
+        skipTelegram: process.env.REX_SKIP_TELEGRAM === '1',
+      })
+      break
+
+    case 'daemon':
+      console.log(`\n  ${COLORS.bold}Step: Background Daemon${COLORS.reset}`)
+      if (res.os === 'darwin') {
+        installDaemonAgent()
+      } else {
+        info('Daemon will run via systemd on Linux (see systemd-hint step)')
+      }
+      break
+
+    case 'gateway':
+      console.log(`\n  ${COLORS.bold}Step: Telegram Gateway${COLORS.reset}`)
+      if (res.os === 'darwin') {
+        installGatewayAgent()
+      } else {
+        info('Gateway can be started manually: rex gateway')
+      }
+      break
+
+    case 'flutter-app':
+      console.log(`\n  ${COLORS.bold}Step: Flutter Desktop App${COLORS.reset}`)
+      if (res.os !== 'darwin') {
+        info('Flutter app currently targets macOS only')
+        return
+      }
+      if (!res.flutter) {
+        info('Flutter not found — skip app build (install Flutter SDK to enable)')
+        return
+      }
+
+      // Check if app is already built
+      const thisDir = new URL('.', import.meta.url).pathname
+      const flutterDir = join(thisDir, '..', '..', 'flutter_app')
+      if (!existsSync(flutterDir)) {
+        info('Flutter app source not found in monorepo — skipping')
+        return
+      }
+
+      info('Building Flutter app (this may take a few minutes)...')
+      try {
+        execSync('flutter build macos --debug', { cwd: flutterDir, stdio: 'inherit' })
+        ok('Flutter app built')
+        installApp()
+      } catch {
+        warn('Flutter build failed — you can retry manually: cd packages/flutter_app && flutter build macos --debug')
+      }
+      break
+
+    case 'systemd-hint':
+      if (res.os !== 'linux') return
+      console.log(`\n  ${COLORS.bold}Step: systemd Service${COLORS.reset}`)
+
+      let rexBin = ''
+      try { rexBin = execSync('which rex', { encoding: 'utf-8' }).trim() } catch {}
+      if (!rexBin) rexBin = '/usr/local/bin/rex'
+
+      const unit = `[Unit]
+Description=REX Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=${process.env.USER || 'node'}
+ExecStart=${rexBin} daemon
+Restart=always
+Environment=OLLAMA_URL=${process.env.OLLAMA_URL || 'http://localhost:11434'}
+
+[Install]
+WantedBy=multi-user.target`
+
+      info('Suggested systemd unit for rex daemon:')
+      console.log(`\n${COLORS.dim}${unit}${COLORS.reset}\n`)
+      info(`Save to /etc/systemd/system/rex-daemon.service then:`)
+      info(`  sudo systemctl daemon-reload && sudo systemctl enable --now rex-daemon`)
+      break
+
+    case 'hub-hint':
+      console.log(`\n  ${COLORS.bold}Step: Hub API${COLORS.reset}`)
+      info('Hub API is not yet implemented — tracked in CLAUDE.md roadmap')
+      info('The daemon provides health checks, ingest, and maintenance in the meantime')
+      break
+  }
+}
+
+function printSummary(profile: InstallProfile, res: ResourceReport) {
+  const p = PROFILES[profile]
+  const line = COLORS.dim + '-'.repeat(45) + COLORS.reset
+
+  console.log(`\n${line}`)
+  console.log(`\n  ${COLORS.green}${COLORS.bold}REX install complete!${COLORS.reset}`)
+  console.log(`  Profile: ${COLORS.bold}${p.label}${COLORS.reset} (${profile})`)
+  console.log(`  OS: ${res.os}, ${res.ramGB}GB RAM\n`)
+
+  const installed: string[] = []
+  for (const step of p.steps) {
+    switch (step) {
+      case 'init': installed.push('Guards, hooks, memory MCP, skills'); break
+      case 'setup-ollama': installed.push('Ollama + embedding/reasoning models'); break
+      case 'daemon': installed.push('Background daemon (auto-start)'); break
+      case 'gateway': installed.push('Telegram gateway (auto-start)'); break
+      case 'flutter-app': if (res.flutter) installed.push('Flutter desktop app'); break
+    }
+  }
+
+  for (const item of installed) {
+    console.log(`  ${COLORS.green}●${COLORS.reset} ${item}`)
+  }
+
+  console.log(`\n  Next: run ${COLORS.cyan}rex doctor${COLORS.reset} to verify everything`)
+  console.log()
+}
+
+export async function install(options: InstallOptions = {}) {
+  const profileFlag = options.profile
+    || process.argv.find(a => a.startsWith('--profile='))?.split('=')[1] as InstallProfile | undefined
+  const nonInteractive = options.yes
+    || process.argv.includes('--yes')
+    || process.argv.includes('-y')
+
+  const line = '='.repeat(45)
+  console.log(`\n${line}`)
+  console.log(`${COLORS.bold}        REX INSTALL — One Command Setup${COLORS.reset}`)
+  console.log(`${line}`)
+
+  ensureRexDirs()
+
+  // 1. Detect resources
+  const res = detectResources()
+  printResources(res)
+
+  if (!res.node) {
+    console.log(`\n  ${COLORS.red}Node.js is required. Install it first.${COLORS.reset}\n`)
+    process.exitCode = 1
+    return
+  }
+
+  // 2. Select profile
+  let profile: InstallProfile
+  if (profileFlag && profileFlag in PROFILES) {
+    profile = profileFlag as InstallProfile
+    info(`Using profile: ${COLORS.bold}${profile}${COLORS.reset}`)
+  } else if (profileFlag) {
+    warn(`Unknown profile "${profileFlag}"`)
+    profile = await selectProfile(res, nonInteractive)
+  } else {
+    profile = await selectProfile(res, nonInteractive)
+  }
+
+  // Warn if desktop-full on non-macOS
+  if (profile === 'desktop-full' && res.os !== 'darwin') {
+    warn('desktop-full profile targets macOS — Flutter app step will be skipped')
+  }
+
+  const p = PROFILES[profile]
+  log.info(`Starting install with profile: ${profile}`)
+
+  // 3. Execute steps
+  for (const step of p.steps) {
+    await runStep(step, res)
+  }
+
+  // 4. Post-install doctor
+  console.log(`\n  ${COLORS.bold}Post-install verification${COLORS.reset}`)
+  try {
+    await audit({ strict: false })
+  } catch {
+    warn('Post-install audit had warnings — run rex doctor for details')
+  }
+
+  // 5. Save profile in config
+  const config = loadConfig()
+  ;(config as any).installProfile = profile
+  saveConfig(config)
+
+  // 6. Summary
+  printSummary(profile, res)
 }

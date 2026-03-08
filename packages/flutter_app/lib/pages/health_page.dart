@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../services/rex_service.dart';
 import '../theme.dart';
 import '../widgets/rex_page_layout.dart';
+import '../widgets/rex_shared.dart';
 
 class HealthPage extends StatefulWidget {
   const HealthPage({super.key});
@@ -43,6 +44,22 @@ class _HealthPageState extends State<HealthPage> {
               return const Center(child: CupertinoActivityIndicator());
             }
 
+            if (!rex.isLoading && rex.healthGroups.isEmpty) {
+              return RexEmptyState(
+                icon: CupertinoIcons.heart_slash,
+                title: 'No health data',
+                subtitle: 'Run a health check to see system status.',
+                actionLabel: 'Run Doctor',
+                onAction: () => rex.runDoctor(),
+              );
+            }
+
+            final allResults = rex.healthGroups.expand((g) => g.results).toList();
+            final passed = allResults.where((r) => r.status == 'pass').length;
+            final warned = allResults.where((r) => r.status == 'warn').length;
+            final failed = allResults.where((r) => r.status == 'fail').length;
+            final total = allResults.length;
+
             return ListView(
               controller: scrollController,
               padding: const EdgeInsets.all(20),
@@ -50,21 +67,138 @@ class _HealthPageState extends State<HealthPage> {
                 // Status banner
                 _StatusBanner(
                   status: rex.healthStatus,
-                  groups: rex.healthGroups,
+                  passed: passed,
+                  total: total,
+                ),
+                const SizedBox(height: 16),
+                // Quick stats row
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatMini(
+                        icon: CupertinoIcons.checkmark_circle_fill,
+                        label: 'Passed',
+                        value: '$passed',
+                        color: context.rex.success,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _StatMini(
+                        icon: CupertinoIcons.exclamationmark_triangle_fill,
+                        label: 'Warnings',
+                        value: '$warned',
+                        color: context.rex.warning,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _StatMini(
+                        icon: CupertinoIcons.xmark_circle_fill,
+                        label: 'Failed',
+                        value: '$failed',
+                        color: context.rex.error,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _StatMini(
+                        icon: CupertinoIcons.gear_alt,
+                        label: 'Processes',
+                        value: '${rex.backgroundProcesses.where((p) => p.running).length}/${rex.backgroundProcesses.length}',
+                        color: context.rex.accent,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 20),
                 // Background processes
                 if (rex.backgroundProcesses.isNotEmpty) ...[
-                  _ProcessesSection(processes: rex.backgroundProcesses),
-                  const SizedBox(height: 20),
+                  RexSection(title: 'Background Processes', icon: CupertinoIcons.gear_alt),
+                  RexCard(
+                    child: Column(
+                      children: rex.backgroundProcesses.map((proc) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              RexStatusChip(
+                                label: proc.running ? 'Running' : 'Stopped',
+                                status: proc.running ? RexChipStatus.ok : RexChipStatus.error,
+                                small: true,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      proc.label,
+                                      style: TextStyle(fontSize: 13, color: context.rex.text),
+                                    ),
+                                    if (proc.pid != null)
+                                      Text(
+                                        'PID ${proc.pid}',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontFamily: 'Menlo',
+                                          color: context.rex.textTertiary,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              if (!proc.running)
+                                RexButton(
+                                  label: 'Start',
+                                  icon: CupertinoIcons.play_fill,
+                                  variant: RexButtonVariant.success,
+                                  small: true,
+                                  onPressed: () => context.read<RexService>().restartProcess(proc.name),
+                                ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                 ],
                 // Check groups
+                RexSection(title: 'Health Checks', icon: CupertinoIcons.checkmark_shield),
                 ...rex.healthGroups.map(
                   (group) => _CheckGroupCard(group: group),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
                 // Quick actions
-                _QuickActions(),
+                RexSection(title: 'Quick Actions', icon: CupertinoIcons.bolt),
+                Row(
+                  children: [
+                    RexButton(
+                      label: 'Re-init',
+                      icon: CupertinoIcons.arrow_2_circlepath,
+                      variant: RexButtonVariant.secondary,
+                      small: true,
+                      onPressed: () => rex.runInit(),
+                    ),
+                    const SizedBox(width: 8),
+                    RexButton(
+                      label: 'Ingest',
+                      icon: CupertinoIcons.tray_arrow_down,
+                      variant: RexButtonVariant.secondary,
+                      small: true,
+                      onPressed: () => rex.runIngest(),
+                    ),
+                    const SizedBox(width: 8),
+                    RexButton(
+                      label: 'Prune',
+                      icon: CupertinoIcons.trash,
+                      variant: RexButtonVariant.secondary,
+                      small: true,
+                      onPressed: () => rex.runPrune(),
+                    ),
+                  ],
+                ),
               ],
             );
           },
@@ -76,16 +210,13 @@ class _HealthPageState extends State<HealthPage> {
 
 class _StatusBanner extends StatelessWidget {
   final String status;
-  final List<CheckGroup> groups;
+  final int passed;
+  final int total;
 
-  const _StatusBanner({required this.status, required this.groups});
+  const _StatusBanner({required this.status, required this.passed, required this.total});
 
   @override
   Widget build(BuildContext context) {
-    final allResults = groups.expand((g) => g.results).toList();
-    final passed = allResults.where((r) => r.status == 'pass').length;
-    final total = allResults.length;
-
     Color statusColor;
     IconData icon;
     switch (status) {
@@ -136,7 +267,6 @@ class _StatusBanner extends StatelessWidget {
             ],
           ),
           const Spacer(),
-          // Progress ring
           SizedBox(
             width: 60,
             height: 60,
@@ -166,26 +296,80 @@ class _StatusBanner extends StatelessWidget {
   }
 }
 
-class _CheckGroupCard extends StatelessWidget {
+class _StatMini extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _StatMini({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+      decoration: BoxDecoration(
+        color: context.rex.card,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.rex.separator),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: context.rex.text,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: context.rex.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CheckGroupCard extends StatefulWidget {
   final CheckGroup group;
 
   const _CheckGroupCard({required this.group});
 
   @override
+  State<_CheckGroupCard> createState() => _CheckGroupCardState();
+}
+
+class _CheckGroupCardState extends State<_CheckGroupCard> {
+  bool _expanded = true;
+
+  @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        decoration: BoxDecoration(
-          color: context.rex.surfaceSecondary,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: context.rex.separator),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+    final group = widget.group;
+    final allPassed = group.passed == group.total;
+    return RexCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () => setState(() => _expanded = !_expanded),
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
               child: Row(
                 children: [
                   Text(group.icon, style: TextStyle(fontSize: 16, color: context.rex.text)),
@@ -199,23 +383,27 @@ class _CheckGroupCard extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  Text(
-                    '${group.passed}/${group.total}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: group.passed == group.total
-                          ? CupertinoColors.systemGreen
-                          : CupertinoColors.systemOrange,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  RexStatusChip(
+                    label: '${group.passed}/${group.total}',
+                    status: allPassed ? RexChipStatus.ok : RexChipStatus.warning,
+                    small: true,
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    _expanded ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
+                    size: 12,
+                    color: context.rex.textTertiary,
                   ),
                 ],
               ),
             ),
+          ),
+          if (_expanded) ...[
             Container(height: 0.5, color: context.rex.separator),
             ...group.results.map((result) => _CheckResultRow(result: result)),
+            const SizedBox(height: 4),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -263,207 +451,6 @@ class _CheckResultRow extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ProcessesSection extends StatelessWidget {
-  final List<BackgroundProcess> processes;
-  const _ProcessesSection({required this.processes});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.rex;
-    return Container(
-      decoration: BoxDecoration(
-        color: c.surfaceSecondary,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: c.separator),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(
-              children: [
-                Icon(CupertinoIcons.gear_alt, size: 14, color: c.text),
-                const SizedBox(width: 8),
-                Text(
-                  'Background Processes',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: c.text,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  '${processes.where((p) => p.running).length}/${processes.length} active',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: processes.every((p) => p.running)
-                        ? CupertinoColors.systemGreen
-                        : CupertinoColors.systemOrange,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(height: 0.5, color: c.separator),
-          ...processes.map((proc) => _ProcessRow(proc: proc)),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProcessRow extends StatelessWidget {
-  final BackgroundProcess proc;
-  const _ProcessRow({required this.proc});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.rex;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: proc.running
-                  ? CupertinoColors.systemGreen
-                  : CupertinoColors.systemRed,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: (proc.running
-                          ? CupertinoColors.systemGreen
-                          : CupertinoColors.systemRed)
-                      .withAlpha(60),
-                  blurRadius: 4,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  proc.label,
-                  style: TextStyle(fontSize: 13, color: c.text),
-                ),
-                if (proc.pid != null)
-                  Text(
-                    'PID ${proc.pid}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontFamily: 'Menlo',
-                      color: c.textTertiary,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (!proc.running)
-            GestureDetector(
-              onTap: () => context.read<RexService>().restartProcess(proc.name),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: c.accent.withAlpha(15),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: c.accent.withAlpha(40)),
-                ),
-                child: Text(
-                  'Start',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: c.accent,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickActions extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final rex = context.read<RexService>();
-    return Row(
-      children: [
-        Expanded(
-          child: _ActionCard(
-            icon: CupertinoIcons.arrow_2_circlepath,
-            label: 'Re-init',
-            onTap: () => rex.runInit(),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _ActionCard(
-            icon: CupertinoIcons.tray_arrow_down,
-            label: 'Ingest',
-            onTap: () => rex.runIngest(),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _ActionCard(
-            icon: CupertinoIcons.trash,
-            label: 'Prune',
-            onTap: () => rex.runPrune(),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ActionCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _ActionCard({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: context.rex.surfaceSecondary,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: context.rex.separator),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, size: 24, color: context.rex.accent),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: context.rex.text),
-            ),
-          ],
-        ),
       ),
     );
   }

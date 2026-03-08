@@ -2,6 +2,8 @@ import { homedir } from 'node:os'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { join, basename, extname } from 'node:path'
 import { execSync, execFileSync } from 'node:child_process'
+import { appendEvent, getQueueStats } from './sync-queue.js'
+import { discoverHub } from './node.js'
 
 // --- PID lockfile (single instance guard) ---
 
@@ -144,6 +146,51 @@ function saveState(state: GatewayState) {
 let state = loadState()
 let config = loadConfig()
 let activeStreamController: AbortController | null = null
+
+// --- Degrade mode ---
+
+let degradeMode = false
+let lastHubCheck = 0
+const HUB_CHECK_INTERVAL = 60_000  // check hub every 60s
+const gatewayStartTime = Date.now()
+
+async function checkHubReachable(): Promise<boolean> {
+  const now = Date.now()
+  if (now - lastHubCheck < HUB_CHECK_INTERVAL) return !degradeMode
+  lastHubCheck = now
+
+  const hubUrl = await discoverHub()
+  const wasDegrade = degradeMode
+  degradeMode = hubUrl === null
+
+  if (wasDegrade && !degradeMode) {
+    console.log(`${COLORS.green}Hub recovered — exiting degrade mode${COLORS.reset}`)
+    try { appendEvent('hub.event', { event: 'degrade_exit', reason: 'hub_recovered' }) } catch {}
+  } else if (!wasDegrade && degradeMode) {
+    console.log(`${COLORS.yellow}Hub unreachable — entering degrade mode${COLORS.reset}`)
+    try { appendEvent('hub.event', { event: 'degrade_enter', reason: 'hub_unreachable' }) } catch {}
+  }
+
+  return !degradeMode
+}
+
+async function isOllamaRunning(): Promise<boolean> {
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(3000) })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+function formatUptime(ms: number): string {
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  return `${h}h ${m}m`
+}
 
 // --- Notifications ---
 
@@ -367,7 +414,9 @@ async function send(token: string, chatId: string, text: string, keyboard?: any[
   if (keyboard) {
     body.reply_markup = { inline_keyboard: keyboard }
   }
-  return tg(token, 'sendMessage', body)
+  const result = await tg(token, 'sendMessage', body)
+  try { appendEvent('gateway.message', { direction: 'outbound', chatId, text: text?.slice(0, 500) }) } catch {}
+  return result
 }
 
 async function editMessage(token: string, chatId: string, messageId: number, text: string, keyboard?: any[][]) {
@@ -1742,6 +1791,10 @@ const BLOCKED_COMMANDS = [
 async function handleText(token: string, chatId: string, text: string, from: string): Promise<void> {
   const cmd = text.trim().toLowerCase()
 
+  if (cmd.startsWith('/')) {
+    try { appendEvent('gateway.command', { command: cmd.split(/\s/)[0], chatId, from }) } catch {}
+  }
+
   // Slash commands
   if (cmd === '/start' || cmd === '/menu' || cmd === '/help' || cmd === '/h') {
     await send(token, chatId, '🦖 *REX Gateway v3*\nChoisis une action :', mainMenu())
@@ -1750,9 +1803,25 @@ async function handleText(token: string, chatId: string, text: string, from: str
   }
 
   if (cmd === '/status' || cmd === '/s') {
-    const out = strip(run('rex status'))
-    await send(token, chatId, `📊 ${out}`, backButton())
-    logCommand(from, '/status', out)
+    const uptime = formatUptime(Date.now() - gatewayStartTime)
+    const hubReachable = await checkHubReachable()
+    const ollamaUp = await isOllamaRunning()
+    const queueStats = getQueueStats()
+
+    const lines = [
+      `📊 *REX Gateway Status*`,
+      ``,
+      `*Uptime:* ${uptime}`,
+      `*Mode:* ${state.mode}`,
+      `*Degrade:* ${degradeMode ? '⚠️ yes' : '✅ no'}`,
+      `*Hub:* ${hubReachable ? '🟢 connected' : '🔴 disconnected'}`,
+      `*Ollama:* ${ollamaUp ? '🟢 running' : '🔴 stopped'}`,
+      `*Queue:* ${queueStats.unacked} pending / ${queueStats.total} total`,
+      `*Sessions:* ${state.sessionsCount}`,
+    ]
+    const statusText = lines.join('\n')
+    await send(token, chatId, statusText, backButton())
+    logCommand(from, '/status', `degrade=${degradeMode}`)
     return
   }
 
@@ -2105,7 +2174,7 @@ async function handleText(token: string, chatId: string, text: string, from: str
     return
   }
 
-  // Free text -> send to current LLM
+  // Free text -> send to current LLM (with fallback cascade)
   if (text.length > 2) {
     // Re-read state from disk to pick up mode changes from other sources (buttons, /mode command)
     state = loadState()
@@ -2116,6 +2185,25 @@ async function handleText(token: string, chatId: string, text: string, from: str
     if (state.mode === 'qwen') {
       // Streaming mode for Qwen — sends progressive edits
       response = await askQwenStream(token, chatId, text)
+
+      // Fallback cascade: if Ollama failed, try Claude CLI
+      if (response.startsWith('⚠️')) {
+        console.log(`${COLORS.yellow}Qwen failed, falling back to Claude CLI${COLORS.reset}`)
+        try {
+          const claudeResponse = await askClaude(text)
+          if (!claudeResponse.startsWith('⚠️')) {
+            response = `_[fallback: Claude]_\n\n${claudeResponse}`
+          }
+        } catch {
+          // Both failed
+        }
+      }
+
+      // If both failed in degrade mode, spool and inform user
+      if (response.startsWith('⚠️') && degradeMode) {
+        try { appendEvent('gateway.message', { direction: 'spooled', text: text.slice(0, 1000), reason: 'degrade_mode' }) } catch {}
+        response = '⚠️ Degrade mode — hub and LLM unavailable. Message spooled for later processing.'
+      }
     } else {
       const thinkMsg = await send(token, chatId, '🤖 Claude _thinking..._') as any
       const thinkId = thinkMsg?.result?.message_id
@@ -2215,8 +2303,14 @@ export async function gateway() {
     process.exit(1)
   })
 
+  // Initial hub check
+  await checkHubReachable()
+
   while (true) {
     try {
+      // Periodic hub reachability check (non-blocking, respects interval)
+      checkHubReachable().catch(() => {})
+
       // Client-side timeout = poll timeout + 15s safety margin (prevents hang if Telegram never responds)
       const pollController = new AbortController()
       const pollTimer = setTimeout(() => pollController.abort(), (config.pollTimeout + 15) * 1000)
@@ -2274,6 +2368,7 @@ export async function gateway() {
           }
 
           const from = cb.from?.username ?? '?'
+          try { appendEvent('gateway.command', { command: cb.data, chatId: cbChatId, from }) } catch {}
           console.log(`${COLORS.cyan}@${from}${COLORS.reset} [btn] ${cb.data}`)
 
           if (!cb.message?.message_id || !cb.data) {
@@ -2295,6 +2390,7 @@ export async function gateway() {
         }
 
         const from = msg.from?.username ?? '?'
+        try { appendEvent('gateway.message', { direction: 'inbound', chatId: String(msg.chat.id), text: (msg.text || msg.caption || '')?.slice(0, 500), from }) } catch {}
         const attachment = pickAttachment(msg)
         if (attachment) {
           console.log(`${COLORS.cyan}@${from}${COLORS.reset}: [upload] ${attachment.kind} ${attachment.fileName}`)

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/rex_service.dart';
 import '../theme.dart';
 import '../widgets/rex_page_layout.dart';
+import '../widgets/rex_shared.dart';
 
 class OptimizePage extends StatefulWidget {
   const OptimizePage({super.key});
@@ -37,34 +38,53 @@ class _OptimizePageState extends State<OptimizePage> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.rex;
     return RexPageLayout(
       title: 'Optimize',
+      actions: [
+        _analyzing
+            ? RexButton(
+                label: 'Analyzing...',
+                loading: true,
+                small: true,
+                onPressed: null,
+              )
+            : RexButton(
+                label: 'Analyze',
+                icon: CupertinoIcons.search,
+                small: true,
+                onPressed: _analyze,
+              ),
+        const SizedBox(width: 6),
+        _applying
+            ? RexButton(
+                label: 'Applying...',
+                loading: true,
+                small: true,
+                variant: RexButtonVariant.success,
+                onPressed: null,
+              )
+            : RexButton(
+                label: 'Apply',
+                icon: CupertinoIcons.checkmark_alt,
+                small: true,
+                variant: RexButtonVariant.success,
+                onPressed: _analysisOutput.isNotEmpty ? _apply : null,
+              ),
+      ],
       builder: (context, scrollController) {
         return ListView(
           controller: scrollController,
           padding: const EdgeInsets.all(20),
           children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    context.rex.accent.withAlpha(20),
-                    context.rex.accent.withAlpha(10),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: context.rex.accent.withAlpha(40),
-                ),
-              ),
+            // Header card
+            RexCard(
               child: Row(
                 children: [
                   Icon(
                     CupertinoIcons.bolt_fill,
-                    size: 32,
-                    color: context.rex.accent,
+                    size: 28,
+                    color: c.accent,
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -75,126 +95,76 @@ class _OptimizePageState extends State<OptimizePage> {
                           'Token Optimizer',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                            color: context.rex.text,
+                            fontSize: 16,
+                            color: c.text,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Analyze your CLAUDE.md + rules for redundancy, verbosity, and optimization opportunities. Uses local LLM (Qwen).',
-                          style: TextStyle(fontSize: 12, color: context.rex.textSecondary),
+                          'Analyze your CLAUDE.md + rules for redundancy, verbosity, and optimization opportunities.',
+                          style: TextStyle(fontSize: 12, color: c.textSecondary),
                         ),
                       ],
                     ),
                   ),
+                  RexStatusChip(
+                    label: _analysisOutput.isNotEmpty ? 'Analyzed' : 'Ready',
+                    status: _analysisOutput.isNotEmpty
+                        ? RexChipStatus.ok
+                        : RexChipStatus.inactive,
+                    small: true,
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
 
-            // Actions
-            Row(
-              children: [
-                _analyzing
-                    ? RexButton(
-                        label: 'Analyzing...',
-                        loading: true,
-                        onPressed: null,
-                      )
-                    : RexButton(
-                        label: 'Analyze',
-                        onPressed: _analyze,
-                      ),
-                const SizedBox(width: 12),
-                _applying
-                    ? RexButton(
-                        label: 'Applying...',
-                        loading: true,
-                        variant: RexButtonVariant.success,
-                        onPressed: null,
-                      )
-                    : RexButton(
-                        label: 'Apply Optimizations',
-                        variant: RexButtonVariant.success,
-                        onPressed: _analysisOutput.isNotEmpty ? _apply : null,
-                      ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Output
+            // Results or empty state
             if (_analysisOutput.isNotEmpty) ...[
-              Text(
-                'Analysis Results',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: context.rex.text),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: context.rex.codeBg,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: context.rex.separator),
-                ),
-                child: SelectableText(
-                  _analysisOutput,
-                  style: TextStyle(
-                    fontFamily: 'Menlo',
-                    fontSize: 12,
-                    height: 1.5,
-                    color: context.rex.text,
+              RexSection(title: 'Analysis Results'),
+              RexCard(
+                padding: EdgeInsets.zero,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: c.codeBg,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: SelectableText(
+                    _analysisOutput,
+                    style: TextStyle(
+                      fontFamily: 'Menlo',
+                      fontSize: 12,
+                      height: 1.5,
+                      color: c.text,
+                    ),
                   ),
                 ),
               ),
             ] else ...[
-              // Empty state
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 60),
-                  child: Column(
-                    children: [
-                      Icon(
-                        CupertinoIcons.sparkles,
-                        size: 48,
-                        color: context.rex.textTertiary,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Click Analyze to scan your CLAUDE.md',
-                        style: TextStyle(
-                          color: context.rex.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Requires Ollama running with Qwen model',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: context.rex.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              RexEmptyState(
+                icon: CupertinoIcons.sparkles,
+                title: 'No analysis yet',
+                subtitle: 'Click Analyze to scan your CLAUDE.md.\nRequires Ollama running with a Qwen model.',
+                actionLabel: 'Analyze Now',
+                onAction: _analyze,
               ),
             ],
 
-            const SizedBox(height: 20),
-
-            // What it does
-            Text(
-              'What this does',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.rex.text),
-            ),
             const SizedBox(height: 8),
-            _BulletPoint('Reads CLAUDE.md + all @import rules (~9 files)'),
-            _BulletPoint('Estimates total token cost'),
-            _BulletPoint(
-              'Identifies redundancy, verbosity, contradictions',
-            ),
-            _BulletPoint(
-              'Apply: rewrites with backup (.bak), shows diff & savings',
+
+            // How it works
+            RexSection(title: 'How It Works'),
+            RexCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _InfoRow(icon: CupertinoIcons.doc_text, text: 'Reads CLAUDE.md + all @import rules (~9 files)'),
+                  _InfoRow(icon: CupertinoIcons.number, text: 'Estimates total token cost'),
+                  _InfoRow(icon: CupertinoIcons.search, text: 'Identifies redundancy, verbosity, contradictions'),
+                  _InfoRow(icon: CupertinoIcons.arrow_2_squarepath, text: 'Apply: rewrites with backup (.bak), shows diff & savings'),
+                ],
+              ),
             ),
           ],
         );
@@ -203,19 +173,27 @@ class _OptimizePageState extends State<OptimizePage> {
   }
 }
 
-class _BulletPoint extends StatelessWidget {
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
   final String text;
-  const _BulletPoint(this.text);
+  const _InfoRow({required this.icon, required this.text});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.rex;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('  •  ', style: TextStyle(color: context.rex.accent)),
-          Expanded(child: Text(text, style: TextStyle(fontSize: 13, color: context.rex.text))),
+          Icon(icon, size: 14, color: c.accent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 13, color: c.text),
+            ),
+          ),
         ],
       ),
     );

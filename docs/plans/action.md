@@ -29,30 +29,41 @@ Regle de priorite documentaire :
 
 - **Repo officiel** : `/Users/keiy/Documents/Developer/keiy/rex`
 - **Branche** : `main`
-- **Produit** : REX = couche operateur locale-first pour Claude Code
+- **Produit** : REX = hub centralise de TOUTES les ressources d'un dev solo
 - **Stack principale** : TypeScript/Node, Flutter, SQLite
-- **Etat produit** : CLI + memory + guards + gateway Telegram + app Flutter macOS existent deja
+- **Orchestrateurs principaux** : Claude Code + Codex UNIQUEMENT — tous les autres sont providers/workers
+- **Etat produit** : CLI + memory + guards + gateway Telegram + app Flutter macOS + daemon + agents + MCP registry + providers + budget + event journal + semantic cache existent deja (Phase 1 terminee)
 
 ---
 
 ## 2. Vision REX a respecter
 
-REX doit :
+REX = hub centralise de TOUTES les ressources pour un dev solo :
 
-- centraliser scripts, CLIs, services locaux, machines, quotas et providers
-- utiliser d'abord ce que l'user possede deja
-- rester utile en mode solo, small cluster, ou fleet
-- garder la gateway, la sync, la memory et le background en mode preservation puis replay
-- eviter les doublons OSS inutiles
-- garder une UI simple, lisible, non verbeuse
+- **Hardware** : machines locales, VPS, GPU, Wake-on-LAN, mesh Tailscale
+- **Free tiers** : Groq, Together AI, Cerebras, HuggingFace, Mistral free, Cloudflare AI Workers, Cohere free
+- **Abonnements** : Claude Max, ChatGPT Plus, Codex, MiniMax, etc.
+- **Modeles locaux** : Ollama (Qwen, DeepSeek, Llama, etc.)
+- **Outils/MCP** : marketplace dynamique, awesome-mcp-server, install one-click
+- **Memoire semantique partagee** : SQLite + embeddings, accessible par TOUS les orchestrateurs
 
-Formule courte :
+Principes :
 
-1. owned-first
-2. free-first
-3. payant en dernier
-4. zero-loss avant sophistication
-5. Flutter pour piloter, headless pour operer
+1. **owned-first** : utiliser d'abord ce que l'user possede
+2. **free-first** : free tiers avant abonnements
+3. **payant en dernier** : pay-per-use uniquement si tout le reste est epuise
+4. **zero-loss** : append-only, spool, queue, ack, replay — avant sophistication
+5. **zero-config** : tout automatique, aucun setup complique pour l'user
+6. **Flutter pour piloter, headless pour operer**
+
+Routing obligatoire (dans cet ordre) :
+
+1. cache (semantic cache local)
+2. script/CLI local
+3. Ollama local
+4. free tier (rotation auto sur rate limit)
+5. abonnement (quota gere)
+6. pay-per-use (budget controle)
 
 ---
 
@@ -93,18 +104,20 @@ Discipline tokens :
 
 ## 4. Invariants non negociables
 
-1. **Ordre de ressource** : cache -> script/CLI -> service local -> hardware possede -> free tier -> quota abonnement -> payant explicite
+1. **Ordre de ressource** : cache -> script/CLI -> Ollama local -> free tier -> abonnement -> pay-per-use
 2. **Ordre d'integration** : CLI -> MCP -> API -> autre
-3. **Flutter** = UI operateur principale, jamais dependance unique
-4. **VPS** = hub prefere si disponible, jamais point unique de perte
-5. **Gateway = continuity layer** : si un node survit, il spool, preserve et rejoue
-6. **No-loss** : append-only, spool local, queue persistante, ack, replay
-7. **OSS avant reimplementation** : si une brique existe deja, REX l'integre
-8. **Topologie adaptable** : solo, small cluster, fleet
-9. **Une seule API REX** pour app, gateway, CLI et dashboard distant
-10. **Scripts/runbooks avant repetition manuelle**
-11. **Chaque sous-agent commence par un resume interne** : mission, fichiers, contraintes, verification, hypothese retenue
-12. **L'agent externe ne joue jamais le role d'un agent interne de REX** : il construit le produit, il ne simule pas son runtime
+3. **Orchestrateurs** : Claude Code + Codex UNIQUEMENT — tout le reste = provider/worker
+4. **Flutter** = UI operateur principale, jamais dependance unique
+5. **VPS** = hub prefere si disponible, jamais point unique de perte
+6. **Gateway = continuity layer** : si un node survit, il spool, preserve et rejoue
+7. **No-loss** : append-only, spool local, queue persistante, ack, replay
+8. **OSS avant reimplementation** : si une brique existe deja, REX l'integre
+9. **Topologie adaptable** : solo, small cluster, fleet
+10. **Une seule API REX** pour app, gateway, CLI et dashboard distant
+11. **Scripts/runbooks avant repetition manuelle**
+12. **Chaque sous-agent commence par un resume interne** : mission, fichiers, contraintes, verification, hypothese retenue
+13. **L'agent externe ne joue jamais le role d'un agent interne de REX** : il construit le produit, il ne simule pas son runtime
+14. **Zero-config** : tout doit marcher out-of-the-box, auto-detection, auto-rotation, auto-fallback
 
 ---
 
@@ -152,7 +165,10 @@ A utiliser pour :
 - hub API
 - routing
 - inventory
-- MCP
+- MCP marketplace
+- providers / free tiers
+- LiteLLM integration
+- budget / cost tracking
 
 Sous-agents possibles :
 
@@ -164,6 +180,8 @@ Sous-agents possibles :
 - Agent-Network
 - Agent-Sync
 - Agent-MCP
+- Agent-Providers
+- Agent-Budget
 
 ### Build-Team-Frontend
 
@@ -171,9 +189,10 @@ A utiliser pour :
 
 - Flutter app
 - UX operateur
-- pages Network / Gateway / Memory / MCP / Review / Sandbox
+- pages Network / Gateway / Memory / MCP / Providers / Review / Sandbox
 - hierarchy visuelle
 - composants UI
+- provider config UI
 
 Sous-agents possibles :
 
@@ -219,6 +238,9 @@ Fichiers cibles principaux :
 - `packages/cli/src/node.ts`
 - `packages/cli/src/sync.ts`
 - `packages/cli/src/sync-queue.ts`
+- `packages/cli/src/mcp.ts`
+- `packages/cli/src/mcp_registry.ts`
+- `packages/cli/src/skills.ts`
 - `packages/memory/src/ingest.ts`
 - `packages/cli/src/preload.ts`
 - `packages/cli/src/self-improve.ts`
@@ -261,15 +283,16 @@ Fichiers cibles principaux :
 
 ### A. Routing
 
-Toujours preferer :
+Toujours preferer (dans cet ordre strict) :
 
-1. cache
+1. semantic cache local
 2. script / CLI local
-3. service local
-4. node possede
-5. free provider
-6. abonnement
-7. payant
+3. Ollama local (Qwen, DeepSeek, Llama, etc.)
+4. free tier (Groq, Together AI, Cerebras, HuggingFace, Mistral, Cloudflare AI, Cohere)
+5. abonnement (Claude Max, ChatGPT Plus, Codex, MiniMax)
+6. pay-per-use (avec budget controle)
+
+Auto-rotation sur rate limit : si un provider free renvoie 429, passer au suivant automatiquement.
 
 ### B. Gateway
 
@@ -284,6 +307,7 @@ Elle doit :
 
 ### C. Memory
 
+Memoire semantique partagee (SQLite + embeddings) accessible par TOUS les orchestrateurs.
 La memory doit distinguer :
 
 - observations
@@ -308,6 +332,15 @@ Usages :
 - preparer replays
 - transformer des succes en runbooks
 - nettoyer sans rien perdre
+
+### E. Providers & Free Tiers
+
+REX doit connaitre tous les providers disponibles et leurs limites :
+
+- API keys configurables via Settings UI ou `~/.claude/settings.json`
+- Catalogue de modeles free avec limites connues (RPM, TPM, quotas daily)
+- Auto-detection des providers disponibles (key presente = actif)
+- Rotation automatique sur rate limit (429 → next provider)
 
 ---
 
@@ -340,7 +373,45 @@ UI future :
 
 ---
 
-## 10. Topologies a couvrir
+## 10. Phases du projet
+
+### Phase 1 — DONE
+
+CLI, Gateway Telegram, Memory semantique, Flutter app macOS, Doctor, Daemon unifie, Agents autonomes, MCP registry, Providers, Budget, Event journal, Semantic cache, Skills system, Task-aware router, Self-improve, Preload, Logging centralise, Two-phase ingest, Consolidation hybride.
+
+### Phase 2 — CURRENT
+
+| Tache | Detail |
+|-------|--------|
+| MCP Marketplace hub | awesome-mcp-server + registries externes, search/install one-click, cache local |
+| LiteLLM integration | Proxy modeles free, auto-rotation providers, unified API |
+| Provider API key config UI | Settings Flutter pour configurer les cles API de chaque provider |
+| Free model catalog | Catalogue de modeles free avec limites connues (RPM, TPM, quotas) |
+| Auto-provider rotation | Sur rate limit 429, rotation automatique vers le provider suivant |
+| Shared memory access | Memoire semantique accessible par Claude Code + Codex + gateway |
+
+### Phase 3 — FUTURE
+
+| Tache | Detail |
+|-------|--------|
+| Hub API | API REST centralise pour app, gateway, CLI, dashboard distant |
+| VPS brain | VPS = hub prefere, event journal append-only + queue + ack |
+| Tailscale mesh | Join nodes, auto-heal, WOL, `rex doctor` automatique |
+| Cross-platform desktop | Flutter desktop macOS/Windows/Linux |
+| Dashboard distant | Surface secondaire Next.js/React sur API REX via Tailscale |
+
+### Phase 4 — LATER
+
+| Tache | Detail |
+|-------|--------|
+| LangGraph spike | Evaluer apres stabilisation orchestrator + queue + state machine |
+| Training pipeline | Benchmarks mlx-lm vs unsloth + eval dataset interne |
+| Meeting bots | Integration OSS type Otter AI, transcription + memoire |
+| Alternative Ollama | Evaluer llamafile, llama.cpp, LocalAI derriere `llm.backend` |
+
+---
+
+## 11. Topologies a couvrir
 
 ### Solo
 
@@ -368,7 +439,7 @@ Une feature qui ne marche qu'en mode "Mac + VPS + GPU" est incomplete.
 
 ---
 
-## 11. Fallbacks structurants
+## 12. Fallbacks structurants
 
 - **pas de VPS** : hub local sur machine principale
 - **pas de GPU** : petits modeles locaux + free tiers + payant si necessaire
@@ -377,15 +448,18 @@ Une feature qui ne marche qu'en mode "Mac + VPS + GPU" est incomplete.
 - **fleet large** : inventaire compact, pas de sync bavarde partout
 - **Telegram/backend indisponible** : fallback backend suivant ou queue locale
 - **sandbox runtime indisponible** : fallback runtime valide, jamais reimplementation bas niveau en urgence
+- **provider rate limited** : rotation automatique vers le provider suivant
+- **tous free tiers epuises** : fallback vers abonnement, puis pay-per-use avec alerte budget
 
 ---
 
-## 12. OSS a reutiliser
+## 13. OSS a reutiliser
 
+- **awesome-mcp-server** : catalogue MCP servers pour marketplace REX
+- **LiteLLM** : proxy multi-provider, cost tracking, auto-rotation
 - **OpenClaw** : patterns agents, gateway, failover, hub ideas
 - **NanoClaw** : channels-as-skills, queues, gateway leger
 - **YOLO Sandbox / Anthropic sandbox-runtime** : isolation d'execution
-- **LiteLLM** : inspiration proxy/cost tracking
 - **Tailscale** : connectivite privee
 - **RustDesk / Input Leap** : fallback remote control
 
@@ -397,7 +471,7 @@ A ne pas copier :
 
 ---
 
-## 13. Verification minimale
+## 14. Verification minimale
 
 Avant de conclure un travail runtime :
 
@@ -418,7 +492,7 @@ Si la tache est doc-only, il faut le dire explicitement.
 
 ---
 
-## 14. Sortie attendue
+## 15. Sortie attendue
 
 Le resultat doit laisser :
 
@@ -430,7 +504,7 @@ Le resultat doit laisser :
 
 ---
 
-## 15. Docs optionnelles si profondeur necessaire
+## 16. Docs optionnelles si profondeur necessaire
 
 A ouvrir seulement si besoin de detail supplementaire :
 
@@ -446,7 +520,38 @@ Ne pas ouvrir ces docs si ce fichier suffit a executer proprement la tache.
 
 ---
 
-## 16. Prompt minimal recommande
+## 17. REX Agent Factory — Ligne produit B2B (CONNAITRE)
+
+**Fichier de reference** : `docs/plans/rex-agent-factory.md`
+
+REX n'est pas seulement un companion dev pour Kevin. Il est aussi la **fabrique d'agents metier B2B** :
+
+- Kevin cree, deploie et monitore des agents pour des clients artisans/PME via REX
+- Chaque client = 1 agent isole, entraine sur son metier (plombier, electricien, peintre…)
+- REX reste le createur, l'installateur, l'orchestrateur et le moniteur — les agents clients sont des produits REX
+
+**Stack utilisee** (distincte de REX core) :
+
+| Composant | Role |
+|-----------|------|
+| Dify (Apache 2.0) | Agent conversationnel + RAG metier |
+| n8n (Fair-code) | Workflows, relances, rappels, alertes |
+| Pipecat + Twilio | Voice : appels manques, astreintes |
+| Docling (IBM/MIT) | Traitement PDF, devis, factures |
+| Twenty CRM (AGPL) | CRM leger, contacts, suivi chantier |
+| LiteLLM Proxy | Routing multi-client, budget enforce par client_id |
+| Langfuse self-hosted | Monitoring tokens/cout/latence par client |
+| MLX-LM + Qwen 3 8B | Fine-tuning metier local (Mac M-series, gratuit) |
+
+**Commande cle** : `rex create-client --name "Jean Martin" --trade "plombier" --plan pro`
+
+**Pricing** : 49/79/149 EUR/mois, setup fee 199-499 EUR, marge brute cible 50-60%.
+
+**A NE PAS CONFONDRE** avec REX core : les agents artisans sont des produits deployes par REX, pas des instances REX.
+
+---
+
+## 18. Prompt minimal recommande
 
 ```text
 Tu es l'agent externe charge de construire REX. Tu ne fais pas partie du runtime du produit. Lis docs/plans/action.md et execute en respectant exactement ses roles, ses invariants, ses fallbacks et ses verifications.
@@ -454,7 +559,7 @@ Tu es l'agent externe charge de construire REX. Tu ne fais pas partie du runtime
 
 ---
 
-## 17. Prompt Lead Build Agent
+## 18. Prompt Lead Build Agent
 
 Prompt recommande pour lancer le lead :
 
@@ -468,8 +573,9 @@ Respecte exactement :
 - les invariants non negociables
 - les topologies solo / small cluster / fleet
 - la logique de continuity / no-loss
-- l'ordre owned-first, free-first, payant en dernier
+- l'ordre cache -> Ollama local -> free tier -> abonnement -> pay-per-use
 - CLI avant MCP avant API
+- orchestrateurs = Claude Code + Codex uniquement
 - Opus = orchestration et verification, pas scan massif
 - Sonnet = implementation
 - Haiku = scouting rapide
@@ -490,7 +596,7 @@ Pas de plan abstrait inutile. Pas de points a clarifier si une hypothese raisonn
 
 ---
 
-## 18. Prompt Sub Build Agent
+## 19. Prompt Sub Build Agent
 
 Prompt recommande pour lancer un sous-agent :
 
@@ -511,8 +617,9 @@ Ensuite execute directement.
 Regles :
 - ne sors pas de ton scope
 - respecte les invariants de action.md
-- owned-first, free-first, payant en dernier
+- cache -> Ollama local -> free tier -> abonnement -> pay-per-use
 - CLI avant MCP avant API
+- orchestrateurs = Claude Code + Codex uniquement, tout le reste = provider/worker
 - ne rien perdre : preserve, spool, replay
 - si un OSS gere deja la couche bas niveau, integre-le au lieu de le reimplementer
 - ne relis pas tout le repo

@@ -18,12 +18,12 @@ Make Claude Code safer, less forgetful, cheaper to run, and easier to control ac
 
 ## Why REX
 
-Claude Code is strong at producing code.
-It is weaker at persistence, guardrails, memory, cost control, and remote operation.
+Claude Code is strong at producing code and has recently added basic memory features (CLAUDE.md, auto-memory).
+It is still weaker at deep cross-session recall, guardrails, cost control, multi-machine operation, and remote access.
 
 REX adds that missing layer:
 
-- **Memory**: searchable local memory instead of starting from zero every session
+- **Memory**: deep semantic search and cross-session recall beyond Claude's built-in auto-memory
 - **Guards**: block dangerous or low-quality actions before they land
 - **Control**: operate through CLI, Telegram, and a Flutter desktop app
 - **Cost routing**: use what you already own before paying for more inference
@@ -57,7 +57,7 @@ REX adds that missing layer:
 
 | Without REX | With REX |
 |-------------|----------|
-| Claude forgets previous work | Local searchable memory and session context injection |
+| Claude Code has basic memory (CLAUDE.md, auto-memory) but no semantic search or cross-session recall | Deep local memory with embeddings, semantic search, context reinjection, and session-aware preloading |
 | Expensive defaults become normal | Owned hardware, scripts, CLIs, and free tiers are considered first |
 | Remote control is awkward | Telegram + CLI + app surfaces |
 | "Done" can still be fake | Guards catch TODOs, weak test fixes, dangerous commands, and repeated failures |
@@ -262,6 +262,13 @@ On Linux, see `docs/linux-setup.md` if present in the repo branch you use.
 | `rex categorize` | Auto-tag memories |
 | `rex search <query>` | Semantic memory search |
 | `rex logs -f` | Tail background logs |
+| `rex reflect` | Extract lessons and runbooks from sessions |
+| `rex providers` | Show provider registry and availability |
+| `rex budget` | Show cost tracking summary |
+| `rex inventory` | Scan detected hardware, CLIs, services, models |
+| `rex hub` | Start the REX hub API server |
+| `rex node status` | Show node identity and hub connection |
+| `rex memory-check` | Verify memory integrity and health |
 
 <details>
 <summary><strong>More Commands</strong></summary>
@@ -291,9 +298,12 @@ flutter build macos --debug
 Current pages:
 
 - Health
+- Network (topology, hub, sync, queue)
+- Providers (routing order, inventory, budget, runbooks)
+- Voice
+- Audio
 - Memory
 - Gateway
-- Voice
 - Agents
 - MCP
 - Optimize
@@ -383,7 +393,10 @@ rex-claude
 ├── Guards (Claude hooks)
 ├── Telegram gateway
 ├── Flutter desktop app
-└── Future secure hub for multi-node control
+├── Hub API (built-in Node.js http server)
+├── Provider registry (owned-first routing)
+├── Sync queue (SQLite, append-only)
+└── Reflector (session analysis, lessons, runbooks)
 ```
 
 ### Planned hub shape

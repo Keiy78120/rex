@@ -1,31 +1,54 @@
 # REX v7 — MASTER PLAN
 
-*Plan definitif v5 — 2026-03-07*
+*Plan definitif v6 — 2026-03-08*
 *Fusionne : design v7 + YOLO Sandbox + PRs Milo (#4, #5) + MCP Hub + CLI Menu + Securite OWASP*
+*v6 : Vision REX = centralized hub of ALL resources. Claude Code + Codex = orchestrators principaux. LiteLLM proxy + MCP Marketplace hub + API key config UI + free model catalog + auto-rotation. Phase 1 DONE, Phase 2 CURRENT.*
 *v5 : Open source a aspirer (OpenClaw/NanoClaw/Goose/Mem0/OpenCode/LiteLLM), optimisation langages hybride (Rust/Go/Bun), agent team execution parallele*
 *v4 : Gateway refonte Agent SDK (fix diagnostic), sync temps reel VPS/Mac/PC (WebSocket + queue), Obsidian backup, audit complet*
 *v3 : Flutter UI complete, skills annotations, resilience audit (R1-R7), multi-plateforme, gateway multi-platform, device bridge, Agent SDK first (OAuth + API key)*
-*19 blocs, 6 phases, 23 subagents, 5 sections transversales, 6 projets open source aspires, strategie hybride Rust/TS*
+*19 blocs, 4 phases, 23 subagents, 5 sections transversales, 6 projets open source aspires, strategie hybride Rust/TS*
 *Auteur : REX (session Opus 4.6)*
 
 ---
 
-## VISION — JARVIS FOR DEVELOPERS
+## VISION — CENTRALIZED HUB OF ALL RESOURCES FOR SOLO DEVS
 
-REX est un **systeme nerveux pour developpeurs**. Un reseau distribue, autonome et vivant
-qui centralise toute la puissance de calcul disponible (Mac, VPS, GPU, NAS) et orchestre
-intelligemment les modeles locaux, les providers gratuits et les abonnements payants pour
-creer un compagnon qui :
+REX est le **hub centralise de TOUTES les ressources** d'un developpeur solo.
+Hardware, free tiers, abonnements, modeles locaux, outils, MCP — tout est inventorie,
+route et orchestre automatiquement. Zero setup complexe. REX detecte, configure et propose.
 
-- **Centralise ce que tu possedes deja** — scripts, CLIs, services locaux, hardware, abonnements, quotas
-- **Connait ta vie de dev** — projets, habitudes, preferences, decisions passees
-- **Apprend et s'optimise** — chaque session le rend meilleur
-- **Retient les succes reproductibles** — deploys, runbooks, recettes machine-specific et sequences qui marchent
-- **Reagit et propose** — detecte les problemes avant toi, suggere des ameliorations
-- **Orchestre tout** — Claude Code, Codex, modeles locaux, free APIs, scripts open source
-- **Centralise** — une memoire, un routeur, un MCP hub, accessible 24/7 depuis n'importe ou
-- **Connecte tout** — Drive, Gmail, GitHub, Slack, Monday, DBs, cloud via MCP hub centralise
-- **Economise** — 80%+ de reduction de tokens payants grace au routing intelligent
+### Principes fondateurs
+
+1. **ORCHESTRATORS PRINCIPAUX : Claude Code + Codex UNIQUEMENT** (pour l'instant).
+   Tous les autres outils (Ollama, Aider, OpenCode, free APIs) = providers/workers, pas des orchestrators.
+   REX route les taches vers ces providers mais le pilotage reste Claude Code et Codex.
+
+2. **Tout automatique, zero setup complexe.** REX detecte le hardware, les outils installes,
+   les abonnements actifs, les free tiers disponibles. L'utilisateur n'a rien a configurer manuellement.
+   REX propose, l'utilisateur confirme.
+
+3. **Routing intelligent par cout croissant** :
+   `cache → script/CLI local → Ollama local → free tier → subscription → pay-per-use`
+   REX ne saute jamais une option gratuite sans justifier pourquoi.
+
+4. **Catalogue complet de ressources** :
+   - **Hardware** : machines locales, VPS, GPU nodes, NAS
+   - **Free tiers** : Groq, Together, Cerebras, HuggingFace, Mistral free, Cloudflare AI, Google AI Studio, SambaNova, DeepSeek, OpenRouter
+   - **Abonnements** : Claude Max, ChatGPT Plus, Codex, MiniMax
+   - **Modeles locaux** : Ollama (qwen, llama, deepseek, nomic-embed-text)
+   - **Outils/MCP** : marketplace + awesome-mcp-servers + registries
+
+5. **Memoire semantique partagee** accessible par TOUS les orchestrators.
+   Claude Code, Codex, Gateway Telegram — tous voient la meme memoire.
+
+6. **MCP Marketplace** : REX se connecte aux hubs qui referencent des MCP et des repos GitHub.
+   L'utilisateur clique Download → auto-install dans REX. Aucune config manuelle.
+
+7. **LiteLLM** : proxy pour les modeles gratuits avec auto-rotation quand un provider rate-limit.
+   REX integre LiteLLM comme couche de routing entre les free tiers.
+
+8. **API keys des providers** : configurables dans l'UI Flutter, auto-sauvees, auto-validees.
+   Un champ par provider dans Settings > Providers. Validation au save. Stockage securise (permissions 600).
 
 **Analogie** : OpenClaw = un agent qui brule des tokens a chaque respiration.
 REX = un cerveau qui DECIDE puis DELEGUE au meilleur outil/modele/machine disponible.
@@ -186,7 +209,7 @@ interface RexConfig {
     };
   };
   routing: {
-    chain: ('cache' | 'ollama-local' | 'ollama-remote' | 'free' | 'paid-cheap' | 'paid-premium' | 'paid-max')[];
+    chain: ('cache' | 'script-cli' | 'ollama-local' | 'ollama-remote' | 'free-tier' | 'subscription' | 'pay-per-use')[];
     taskOverrides: { [taskType: string]: string };  // task → provider force
   };
   cache: {
@@ -615,10 +638,22 @@ Sortie attendue :
 | **SambaNova** | OpenAI-compat | 200K tok/jour, 30 RPM | Llama 405B gratuit | Quota limite |
 | **DeepSeek** | OpenAI-compat | 5M tok (30j) | Pas de rate limit, cache -90% | Trial 30j |
 | **Cloudflare** | API propre | 10K neurons/jour | Edge, zero latence | Petits modeles |
+| **Together** | OpenAI-compat | Free tier genereux | Llama, Mixtral, fast | Limites variables |
+| **HuggingFace** | OpenAI-compat | Inference API gratuite | Enorme catalogue modeles | Queued, lent |
+| **MiniMax** | OpenAI-compat | Abonnement Kevin actif | MiniMax-01 1M context | Subscription |
 
 **Implementation** : adapter `router.ts` avec interface `Provider` unifiee.
 Tous les providers OpenAI-compat utilisent le meme client (Vercel AI SDK ou openai-node).
 Google AI Studio → wrapper adapte.
+
+**LiteLLM integration** : REX utilise LiteLLM comme proxy unifie pour les free tiers.
+Avantages :
+- **Auto-rotation** : quand un provider rate-limit → bascule automatique vers le suivant
+- **100+ providers** supportes via une seule interface OpenAI-compat
+- **Cost tracking** integre (alimente `rex budget`)
+- **Fallback chain** configurable par provider
+- Config : `litellm_settings` dans `config.json` ou via `Settings Hub > Providers`
+- Mode : process local (`litellm --port 4000`) ou integre directement dans le router REX
 
 ### 1.3 Modeles locaux (auto-detection RAM/GPU)
 
@@ -712,15 +747,42 @@ Table `token_usage(provider, model, tokens_in, tokens_out, cost_usd, latency_ms,
 
 - **Provider list** : toggle enable/disable, drag-to-reorder priority
 - **Quota bars** : consommation temps reel (Cerebras 800K/1M, Groq 12K/14.4K)
-- **Routing chain** : visualisation du flow (cache → local → free → paid), drag-to-reorder
+- **Routing chain** : visualisation du flow (cache → script/CLI → Ollama → free tier → subscription → pay-per-use), drag-to-reorder
 - **Cache stats** : hit rate %, tokens saved today/week/month
 - **Budget** : graphe consommation jour/semaine/mois, limite mensuelle editable, alerte threshold
 - **Task routing** : tableau task → provider assigne, editable (override possible)
+- **API key config (NOUVEAU — Phase 2)** :
+  - Un champ securise (password field) par provider qui requiert une API key
+  - Bouton "Validate" : teste la cle en envoyant un ping au provider
+  - Status : valid (vert) / invalid (rouge) / untested (gris)
+  - Auto-save dans `config.json` (permissions 600, jamais versionne)
+  - Providers supportes : Anthropic, OpenAI, Groq, Cerebras, Together, Mistral, HuggingFace, Google AI, DeepSeek, OpenRouter, Cloudflare
+  - Les providers avec free tier fonctionnent SANS API key (rate limit reduit)
+- **Free model catalog (NOUVEAU — Phase 2)** :
+  - Liste de tous les modeles gratuits disponibles, groupes par provider
+  - Status temps reel : disponible / rate-limited / down
+  - Bouton "Auto-select best free model" pour chaque type de tache
+  - Refresh automatique via LiteLLM health checks
+- **LiteLLM status** : proxy actif/inactif, modeles routes, rotation en cours
 - **Config** : `Settings Hub > Providers` + `Settings Hub > Routing` + `Settings Hub > Budget`
 
 ---
 
 ## BLOC 2 — ORCHESTRATEUR INTELLIGENT
+
+### 2.0 Hierarchie des roles (CRITIQUE)
+
+**Orchestrators principaux (pilotage)** : Claude Code + Codex UNIQUEMENT.
+Ce sont les seuls outils qui pilotent les sessions de dev, prennent les decisions architecturales,
+et interagissent directement avec l'utilisateur.
+
+**Providers/workers (execution)** : Ollama, Aider, OpenCode, free APIs, LiteLLM proxy.
+Ces outils executent des taches delegues par les orchestrators ou par le routing REX.
+Ils ne pilotent jamais une session de dev.
+
+**Regle** : si un nouvel outil de codage emerge (Gemini CLI, Cursor Agent, etc.),
+il est integre comme provider/worker par defaut. Promotion en orchestrator uniquement
+sur decision explicite de l'utilisateur.
 
 ### 2.1 Main Backends — SDK First
 
@@ -1325,6 +1387,29 @@ pre-push     → rex review --quick          # bloquer si fail
 - **Circuit breaker** : status par handler (OK/tripped/paused), reset button
 - **Health components** : Ollama, Claude Code, Codex, Tailscale, Docker — status par composant
 - **Config** : `Settings Hub > Daemon` (cron intervals, circuit breaker params, debounce)
+
+### 7.5 Hierarchie de scheduling — 3 niveaux
+
+REX dispose de 3 couches de scheduling, chacune avec son perimetre naturel. Ne pas tout mettre dans LaunchAgents :
+
+| Niveau | Outil | Quand l'utiliser | Exemples REX |
+|--------|-------|-----------------|-------------|
+| **1 — Systeme** | LaunchAgent (macOS) / systemd (Linux) | Toujours actif, meme si Claude Code est ferme | Gateway KeepAlive, rex-sync Rust, daemon principal |
+| **2 — Claude Code natif** | `CronCreate / CronList / CronDelete` (outils Claude Code) | Taches periodiques pendant les sessions de dev, setup sans plist | `rex ingest` toutes les heures, `rex memory-check` toutes les 6h, `rex self-improve` en fin de session |
+| **3 — Session interactive** | `/loop` skill | Monitoring en direct pendant une tache, polling temporaire | `rex doctor` toutes les 5min pendant un deploy, `rex gateway status` pendant un debug |
+
+**Regle** : avant de creer un LaunchAgent, se demander si `CronCreate` suffit. Si la tache n'a de sens que pendant une session de dev active, ne pas polluer le systeme avec un LaunchAgent.
+
+**CronCreate** est particulierement utile pour :
+- `rex ingest && rex categorize` (remplace `com.dstudio.rex-ingest.plist` pendant les sessions)
+- `rex memory-check` (verification integrite memoire en arriere-plan)
+- `rex self-improve` (extraction de lecons en fin de session)
+- `rex doctor` (health check periodique pendant la session)
+
+**LaunchAgents restent obligatoires pour** :
+- `rex gateway` (KeepAlive 24/7, independant de Claude Code)
+- `rex-sync` (serveur Rust WebSocket, toujours actif sur VPS)
+- `rex daemon` (si le daemon doit tourner sans Claude Code)
 
 ---
 
@@ -2038,7 +2123,7 @@ rex mcp enable <name>                # activation explicite
 rex mcp disable <name>               # retour a l'etat safe
 ```
 
-### 15.6 Flutter UI — MCP Management
+### 15.6 Flutter UI — MCP Marketplace Hub
 
 Depuis la page MCP de l'app Flutter :
 - **Liste servers actifs** avec status (vert/rouge/jaune)
@@ -2047,6 +2132,27 @@ Depuis la page MCP de l'app Flutter :
 - **Auto-detect** bouton → scanne le projet et propose les MCP pertinents
 - **Security scan** bouton → lance mcp-scan
 - **Config** par server (env vars, auth tokens)
+
+**MCP Marketplace Hub (NOUVEAU — Phase 2)** :
+REX se connecte a plusieurs hubs/registries de MCP en parallele :
+- **Registry officiel MCP** : registry.modelcontextprotocol.io (8,590+ servers)
+- **awesome-mcp-servers** : GitHub repo 79.6k stars, scrape periodique
+- **GitHub search** : recherche directe de repos MCP par topic/keyword
+
+Workflow utilisateur :
+1. L'utilisateur ouvre la page MCP dans Flutter
+2. Onglet "Marketplace" : barre de recherche unifiee
+3. Resultats agreges depuis tous les hubs, dedupliques
+4. Clic sur "Download" → REX auto-installe le MCP server :
+   - Clone le repo si necessaire
+   - `npm install` / `pip install` selon le runtime
+   - Genere l'entree dans `~/.claude/settings.json` mcpServers
+   - Valide la connexion (health check)
+   - Propose les API keys requises si detectees
+5. Le MCP apparait dans la liste "Installed", pret a activer
+
+**Cache marketplace** : `~/.claude/rex/mcp-marketplace.json`, refresh toutes les 24h.
+**Config** : `Settings Hub > MCP` (registries URLs, auto-refresh, scan-on-add)
 
 ---
 
@@ -3664,17 +3770,94 @@ Features degradees en mode Zero Paid :
 - Pas de MCP via Claude → MCP direct via mcporter
 - Architecture/decisions complexes → free providers (Gemini 2.5 Pro, Cerebras Qwen3 235B)
 
-**Echelle de puissance REX** :
-1. **Zero Paid** : Ollama + free providers → fonctionnel, utile, gratuit
-2. **Subscription** : + Agent SDK OAuth (Pro $20/mois) → multi-turn, streaming, Claude quality
-3. **API key** : + prompt caching + batch → performance maximale, cout optimise (~$2/mois)
-4. **Full stack** : Claude + OpenAI + GPU node → Jarvis mode complet
+**Echelle de puissance REX (routing par cout croissant)** :
+1. **Cache** : reponse instantanee, 0 token → semantic cache (cosine > 0.95)
+2. **Script/CLI** : outil deja installe, resultat deterministe → 0 cout
+3. **Ollama local** : modeles locaux, 0 cout marginal → qwen, llama, deepseek
+4. **Free tier** : Groq, Cerebras, Together, Mistral, HuggingFace, Cloudflare AI, Google AI Studio → 0 cout, LiteLLM auto-rotation
+5. **Subscription** : Claude Max, ChatGPT Plus, Codex, MiniMax → quota inclus dans l'abonnement
+6. **Pay-per-use** : API keys Anthropic, OpenAI, etc. → dernier recours, cout explicite
+
+**Orchestrators** : Claude Code + Codex pilotent. Tout le reste = providers/workers.
 
 ---
 
-## ORDRE D'IMPLEMENTATION + SUBAGENT ASSIGNMENTS
+## PROGRESSION PAR PHASES
 
-### Phase 1 — Le Cerveau (semaine 1-2)
+### Phase 1 — DONE : Fondations (CLI + Flutter + Backend modules)
+
+**Status : COMPLETE** — tout ce qui suit est implemente et fonctionne.
+
+| Composant | Status | Detail |
+|-----------|--------|--------|
+| CLI 28+ commandes | DONE | doctor, status, gateway, ingest, categorize, search, context, optimize, agents, mcp, skills, models, logs, daemon, migrate, recategorize, preload, self-improve, projects, budget, delegate, voice, backup, review, snapshot, workflow, devices |
+| Flutter 12 pages | DONE | Health, Voice, Audio, Memory, Gateway, Agents, MCP, Optimize, Logs, Settings (5 onglets), Context |
+| Memory semantique | DONE | SQLite + nomic-embed-text, two-phase ingest, categorize, consolidate, search |
+| Gateway Telegram | DONE | Long polling, Qwen streaming, Claude pipe mode, menu interactif |
+| Daemon unifie | DONE | Remplace 3 LaunchAgents, crons, circuit breaker |
+| Task-aware router | DONE | 7 taches, prefix match, cache 60s |
+| Agents autonomes | DONE | create/list/update/run/logs/start/stop/status, profils preconfig |
+| MCP manager | DONE | list/add/remove/enable/disable/test, registry sync |
+| Skills system | DONE | list/add/show, Markdown templates, SKILL_MAP |
+| Smart preload | DONE | SessionStart context injection, 200 token budget |
+| Self-improve | DONE | Lesson extraction, error patterns, rule promotion |
+| Centralized logging | DONE | createLogger(source), dual console+file, rotation |
+
+### Phase 2 — CURRENT : MCP Marketplace + LiteLLM + Free Model Catalog + API Key Config
+
+**Status : EN COURS** — priorite immediate.
+
+| Task | Bloc | Subagent | Status | Detail |
+|------|------|----------|--------|--------|
+| **MCP Marketplace Hub** | 15.6 | Agent-MCP | A FAIRE | Connecter registries (officiel + awesome-mcp-servers + GitHub), UI Flutter "Download → auto-install", cache 24h |
+| **LiteLLM integration** | 1.1 | Agent-Router | A FAIRE | Proxy local pour free tiers, auto-rotation sur rate limit, OpenAI-compat interface |
+| **API key config Flutter** | 1.7 | Agent-Flutter | A FAIRE | Champ securise par provider dans Settings > Providers, validate au save, permissions 600 |
+| **Free model catalog** | 1.2 | Agent-Router | A FAIRE | Liste tous les modeles gratuits par provider, status temps reel, auto-select best free |
+| **Auto-rotation** | 1.1 | Agent-Router | A FAIRE | Quand un provider rate-limit → bascule auto vers le suivant dans la chain |
+| **Provider health checks** | 1.1 | Agent-Daemon | A FAIRE | Ping providers toutes les 5min, auto-disable apres 3 fails, re-enable apres 30min |
+| **Budget tracker** | 1.6 | Agent-Router | A FAIRE | Table token_usage, `rex budget` CLI, graphe Flutter |
+| **Semantic Cache** | 1.5 | Agent-Cache | A FAIRE | Table llm_cache, cosine > 0.95, TTL 7j, invalidation sur git push |
+
+**Parallelisable** : Agent-MCP + Agent-Router + Agent-Flutter + Agent-Cache (4 en parallele)
+**Skills** : `writing-plans`, `db-design` (cache + budget schemas), `api-design` (provider interface), `ui-craft` (Flutter), `build-validate`
+
+### Phase 3 — FUTURE : Hub API + VPS Brain + Tailscale Mesh + Cross-platform
+
+| Task | Bloc | Detail |
+|------|------|--------|
+| Hub API REST (Express/Fastify) | 9 | API centralisee sur VPS, endpoints memory/agents/mcp/providers |
+| WebSocket sync server (port 3118) | SYNC | Sync temps reel VPS/Mac/PC, SQLite outbox queue |
+| Hardware auto-detection | 10 | GPU/RAM/backends, modeles adaptes |
+| Tailscale integration | 9 | VPN mesh, WoL, node registration |
+| Docker deployment | 9 | docker-compose Hub + Ollama + Sandbox |
+| Gateway refonte Agent SDK | 17 | Fix path Claude casse, multi-turn, streaming, adapter abstraction |
+| Cross-platform Flutter desktop | 13 | macOS + Windows + Linux |
+| Code review pipeline | 5 | Biome + Semgrep + Gitleaks + OSV-Scanner + PR-Agent |
+| Guards v2 | 6 | 7 nouveaux guards (secret, any-type, console-log, a11y, perf, import, honesty) |
+| Observational Memory | 3.1 | Observer SessionEnd, Reflector daemon cycle, forgetting curve |
+| Compaction resilience | 19 | Pre-shot snapshots, preload restore |
+| Device bridge | 18 | Pairing, join, multi-device onboarding |
+
+### Phase 4 — LATER : LangGraph + Training + Meeting bots
+
+| Task | Bloc | Detail |
+|------|------|--------|
+| LangGraph spike | — | Evaluer apres stabilisation orchestrator + queue + state machine |
+| Training pipeline | — | Benchmarks mlx-lm vs unsloth + eval dataset interne |
+| Meeting bots type Otter AI | 12.5 | Integration OSS, transcription + memoire |
+| Graph Memory (Neo4j/Kuzu) | 3 | Knowledge graph au-dessus du vector store |
+| Bun compile distribution | OL5 | Single binary cross-platform |
+| Rust embed-rs | OL4a | napi-rs + fastembed, supprime dependance Ollama embed |
+| Rust sync-server | OL4b | tokio + tungstenite, ~2MB RSS |
+
+---
+
+## ANCIEN PLAN D'IMPLEMENTATION DETAILLE (reference)
+
+> Les phases ci-dessous sont conservees comme reference detaillee pour les taches futures.
+> La progression reelle suit les 4 phases ci-dessus.
+
+### Phase 1 (ancien) — Le Cerveau (semaine 1-2) — DONE
 
 | Task | Bloc | Subagent | Isolation | Dependances |
 |------|------|----------|-----------|-------------|
@@ -3687,10 +3870,7 @@ Features degradees en mode Zero Paid :
 | Budget tracker table + `rex budget` | 1.6 | **Agent-Router** | worktree | 1.1 |
 | Pre-shot compaction snapshots + preload restore | 19 | **Agent-Memory** | worktree | 3.1 Observer |
 
-**Parallelisable** : Agent-Router + Agent-Cache + Agent-Memory + Agent-Daemon (4 en parallele)
-**Skills** : `writing-plans` (avant chaque agent), `test-strategy` (definir tests), `db-design` (schema cache + memory), `api-design` (provider interface), `build-validate` (apres chaque merge)
-
-### Phase 2 — La Defense (semaine 2-3)
+### Phase 2 (ancien) — La Defense (semaine 2-3)
 
 | Task | Bloc | Subagent | Isolation | Dependances |
 |------|------|----------|-----------|-------------|
@@ -3702,10 +3882,7 @@ Features degradees en mode Zero Paid :
 | 7 nouveaux guards (secret, any-type, etc.) | 6 | **Agent-Guards** | worktree | — |
 | Git hooks integration (post-commit, pre-push) | 7.3 | **Agent-Guards** | worktree | Guards |
 
-**Parallelisable** : Agent-Review + Agent-Security + Agent-Guards (3 en parallele)
-**Skills** : `writing-plans`, `test-strategy` (review pipeline tests), `error-handling` (guard error flows), `semgrep` (regles custom), `build-validate`
-
-### Phase 3 — Le Reseau + Sync (semaine 3-4)
+### Phase 3 (ancien) — Le Reseau + Sync (semaine 3-4)
 
 | Task | Bloc | Subagent | Isolation | Dependances |
 |------|------|----------|-----------|-------------|
@@ -3721,10 +3898,7 @@ Features degradees en mode Zero Paid :
 | Tailscale integration | 9 | **Agent-Network** | worktree | Hub API |
 | WoL automation | 9 | **Agent-Network** | worktree | — |
 
-**Parallelisable** : Agent-Hardware + Agent-Network + Agent-Sync + Agent-Docker (4 en parallele)
-**Skills** : `writing-plans`, `api-design` (Hub REST API), `auth-patterns` (JWT, Tailscale auth), `error-handling` (network failures, reconnection), `db-design` (sync queue schema), `test-strategy`, `build-validate`
-
-### Phase 4 — L'Orchestrateur + MCP Hub (semaine 4-5)
+### Phase 4 (ancien) — L'Orchestrateur + MCP Hub (semaine 4-5)
 
 | Task | Bloc | Subagent | Isolation | Dependances |
 |------|------|----------|-----------|-------------|
@@ -3745,12 +3919,7 @@ Features degradees en mode Zero Paid :
 | Knowledge Sources ingest (Obsidian + pluggable) | KS | **Agent-Memory** | worktree | Memory (Phase 1) |
 | Device bridge (pairing, join, devices) | 18 | **Agent-Network** | worktree | Network (Phase 3) |
 
-**Parallelisable** : 7 agents identifies mais **max 3-4 simultanes** (quota Claude Max + RAM).
-Batch A (semaine 4) : Agent-Orchestrator + Agent-MCP + Agent-CLI
-Batch B (semaine 5) : Agent-Accounts + Agent-Sandbox + Agent-Workflow + Agent-Bootstrap
-**Skills** : `writing-plans`, `test-strategy`, `ux-flow` (CLI menu UX), `auth-patterns` (accounts security), `error-handling`, `build-validate`, `verification-before-completion`
-
-### Phase 5 — L'Interface (semaine 5-6)
+### Phase 5 (ancien) — L'Interface (semaine 5-6)
 
 | Task | Bloc | Subagent | Isolation | Dependances |
 |------|------|----------|-----------|-------------|
@@ -3765,10 +3934,7 @@ Batch B (semaine 5) : Agent-Accounts + Agent-Sandbox + Agent-Workflow + Agent-Bo
 | Voice optimization (Groq Whisper) | 12 | **Agent-Voice** | worktree | Provider Mesh (Phase 1) |
 | MCP security scan integration (mcp-scan) | 15 | **Agent-Security** | worktree | MCP Hub (Phase 4) |
 
-**Parallelisable** : Agent-Flutter + Agent-Guards + Agent-Coaching + Agent-Voice + Agent-Security (max 3-4 simultanes)
-**Skills** : `writing-plans`, `ui-craft` (toutes les pages Flutter), `ux-flow` (flows utilisateur), `figma-workflow` (si maquettes), `test-strategy` (widget tests + golden tests), `build-validate`, `verification-before-completion`
-
-### Phase 6 — Deploy VPS + Polish (semaine 6-7)
+### Phase 6 (ancien) — Deploy VPS + Polish (semaine 6-7)
 
 | Task | Bloc | Subagent | Isolation | Dependances |
 |------|------|----------|-----------|-------------|
@@ -3889,24 +4055,21 @@ Le core CLI reste toujours gratuit et open source.
 | 7 | **Knowledge ingest doublon** | KS3 | Si un fichier Obsidian est aussi ingere via session Claude → doublon en memoire. | Source tagging. Dedup par contenu hash. `rex memory dedup` commande. |
 | 8 | **Config schema v4 enormement plus gros** | P2 | config.json grossit (sync, knowledge, gateway backends) → risque de regression a chaque ajout. | Schema validation avec zod. `rex doctor` verifie le schema. Migration auto des anciennes configs. |
 
-### A4. Dependencies critiques entre blocs
+### A4. Dependencies critiques entre phases
 
 ```
-Phase 1 (Memory + Router + Daemon + Cache)
+Phase 1 (DONE — CLI + Flutter + Backend modules)
   ↓
-Phase 2 (Review + Security + Guards) ← pas de dependance Phase 1, parallelisable
+Phase 2 (CURRENT — MCP Marketplace + LiteLLM + API keys + Free catalog + Auto-rotation)
   ↓
-Phase 3 (Reseau + Sync) ← depend de Phase 1 (Memory pour sync)
+Phase 3 (FUTURE — Hub API + VPS Brain + Tailscale + Cross-platform + Review + Guards)
   ↓
-Phase 4 (Orchestrator + Gateway Agent SDK + MCP) ← depend de Phase 3 (Hub API + Sync)
-  ↓
-Phase 5 (Flutter UI + Voice + Coaching) ← depend de Phase 3-4 (pages sync, gateway, etc.)
-  ↓
-Phase 6 (Deploy VPS + Polish) ← depend de tout
+Phase 4 (LATER — LangGraph + Training + Meeting bots + Rust components)
 ```
 
-**Chemin critique** : Phase 1 → Phase 3 (Sync) → Phase 4 (Gateway Agent SDK) → Phase 6 (Deploy)
-Si le sync bloque → le gateway ne peut pas etre teste en reseau → le deploy est retarde.
+**Chemin critique Phase 2** : LiteLLM integration → Free model catalog → Auto-rotation → Provider health checks
+MCP Marketplace est independant et peut avancer en parallele.
+API key config Flutter depend de la liste des providers (LiteLLM).
 
 ### A5. Recommendations
 
@@ -3939,6 +4102,7 @@ Le plus proche de REX en philosophie. Agent personnel multi-plateforme avec Agen
 | **Agent Loop Lifecycle** — intake → context assembly → inference → tool execution → streaming → persistence | `docs/concepts/agent-loop.md` | Orchestrateur (BLOC 2) — cycle de vie standard pour nos sessions Agent SDK | MOYENNE |
 | **Cron vs Heartbeat** — guide decision pour scheduling (token-aware) | `docs/concepts/cron-vs-heartbeat.md` | Daemon (BLOC 7) — meme decision framework pour nos taches periodiques | BASSE |
 | **ACP Spawn Parent Stream** — Agent Communication Protocol pour agents parents/enfants | `src/agents/acp-spawn-parent-stream.ts` | Agents autonomes — communication inter-agents structuree | BASSE |
+| **HEARTBEAT_OK — Silent Token** — pattern heartbeat : envoie un token silencieux `HEARTBEAT_OK` si rien a signaler, action seulement si anomalie detectee. Evite le bruit et preserve les tokens | `docs/automation/cron-vs-heartbeat.md` | Daemon (BLOC 7) — le cycle heartbeat REX ne log/notifie que si quelque chose a traiter, sinon HEARTBEAT_OK silencieux | MOYENNE |
 
 **Code a forker/adapter** :
 ```typescript
@@ -3968,7 +4132,7 @@ Reference Agent SDK + multi-platform gateway leger. Architecture mono-process av
 | **Group Queue** — queue avec max concurrent containers, retry avec backoff exponentiel | `src/group-queue.ts` | Task queue sync (section S7) — meme pattern pour limiter la concurrence des taches | HAUTE |
 | **Groups = Isolated Contexts** — chaque group a son propre CLAUDE.md, filesystem, memoire | `groups/` | Multi-projet REX — isolation contexte par projet | MOYENNE |
 | **Container IPC** — communication agent ↔ container via fichiers temporaires | `src/container-runner.ts` | Reference seulement si une couche d'adaptation REX devient necessaire au-dessus d'un runtime existant | BASSE |
-| **Scheduler** — cron parser + task lifecycle (due → running → completed) | `src/scheduler.ts` | Daemon (BLOC 7) — scheduler unifie pour toutes les taches periodiques | BASSE |
+| **Scheduler anti-drift** — cron parser + task lifecycle, ancre sur le timestamp prevu (pas `Date.now()`) pour eviter le drift cumulatif entre cycles | `src/task-scheduler.ts` | Daemon (BLOC 7) — scheduler unifie avec horloge ancree sur l'heure attendue, evite la derive temporelle au fil des cycles | BASSE |
 
 ### OS3. Goose (github.com/block/goose) — 32K+ stars
 
@@ -3981,6 +4145,7 @@ Agent extensible en **Rust** (crates workspace). Reference pour l'architecture R
 | **Extension System** — plugins via MCP + extension manager + malware check | `crates/goose/src/agents/extension*.rs` | MCP Hub (BLOC 15) — verification securite des extensions MCP | MOYENNE |
 | **Agent Containers** — isolation execution dans containers | `crates/goose/src/agents/container.rs` | Sandbox (BLOC 4) — reference Rust pour containerisation | MOYENNE |
 | **Built-in Skills** — skills markdown integres dans le binaire | `crates/goose/src/agents/builtin_skills/` | Skills (existant) — meme approche, deja implementee | BASSE |
+| **Declarative Providers** — nouveaux providers ajoutes via fichier JSON (`groq.json`, `deepseek.json`) sans modifier le code. Auto-detection du provider depuis le nom du modele | `crates/goose/src/providers/declarative/` | Provider Mesh (BLOC 1) — ajouter un provider = un fichier JSON de config dans `providers/declarative/`, zero code | MOYENNE |
 
 ### OS4. Mem0 (github.com/mem0ai/mem0) — 41K+ stars
 
@@ -3994,6 +4159,9 @@ Memory layer universelle. Reference pour l'architecture memoire pluggable.
 | **Graph Memory** — knowledge graph au-dessus du vector store | `mem0-ts/src/oss/src/memory/graph_memory.ts` | Future — REX v8 knowledge graph (pas v7) | BASSE |
 | **BM25 Hybrid Search** — combine BM25 keyword + cosine similarity | `mem0-ts/src/oss/src/utils/bm25.ts` | Memory search — ameliorer `rex search` avec hybrid retrieval | MOYENNE |
 | **Config Schema Zod** — validation stricte config avec Zod | `mem0-ts/src/oss/src/types/` | Config (P2) — valider `config.json` avec Zod au lieu de just TypeScript | MOYENNE |
+| **Fact Extraction Prompt** — prompt structure pour extraire des faits en 7 categories (preferences, details perso, plans, activites, sante, pro, misc) → output JSON `{"facts": [...]}`. Insiste sur "ne pas inclure les messages assistant/system" pour eviter les hallucinations memoire | `mem0/configs/prompts.py` | `rex categorize` (BLOC 3) — prompt directement adaptable pour extraire les faits utiles d'une session Claude Code | HAUTE |
+| **Memory Scoping** — isolation des memories par `user_id`, `agent_id`, `run_id`. Filtres combines pour queries multi-device et multi-agent | `mem0/memory/main.py` | Memory multi-device (BLOC 3 + sync) — scoper les memories par machine/session/agent pour la sync VPS/Mac/PC | HAUTE |
+| **Update Memory Pattern** — compare les nouveaux faits extraits vs memories existantes et decide ADD / UPDATE / DELETE / NOOP. Deduplication automatique avant insertion | `mem0/configs/prompts.py` | `rex categorize` — evite les doublons memoire, merge intelligemment avant d'inserer | MOYENNE |
 
 **Code a aspirer** :
 ```typescript
@@ -4038,10 +4206,15 @@ Proxy LLM universel (100+ providers). Reference pour le routing et le cost track
 |---------------|--------|--------|
 | Channel/Adapter Registry (self-registration) | OpenClaw, NanoClaw | Pattern propre, extensible, zero hardcode |
 | Factory Pattern pour embeddings/LLM/vectorstore | Mem0 | Extensibilite providers future |
+| Fact Extraction Prompt (7 categories, JSON out) | Mem0 | Ameliore `rex categorize` directement adaptable |
+| Memory Scoping (user_id/agent_id/run_id) | Mem0 | Multi-device sync sans collision |
+| Update Memory Pattern (ADD/UPDATE/DELETE/NOOP) | Mem0 | Deduplication intelligente |
+| HEARTBEAT_OK silent token | OpenClaw | Daemon silencieux par defaut, bruit zero |
 | Model Failover (auth rotation + model fallback) | OpenClaw | Exactement notre besoin R1 |
 | Event Stream types pour streaming unifie | OpenCode | Structure propre pour multi-backend |
 | Router Strategies (complexity, budget) | LiteLLM | Routing intelligent deja concu |
 | Group Queue (max concurrent, retry backoff) | NanoClaw | Pattern necessaire pour sync + sandbox |
+| Declarative Providers (JSON config) | Goose | Ajouter un provider sans toucher au code |
 | sqlc type-safe queries | OpenCode | Securite SQL, generation auto |
 | Cost Calculator | LiteLLM | Budget tracking precis |
 
@@ -4080,8 +4253,8 @@ Proxy LLM universel (100+ providers). Reference pour le routing et le cost track
 | **Flutter bridge** | TypeScript | — | Process.run() depuis Dart, TS OK | **GARDER TS** |
 | **MCP Hub** | TypeScript | — | Protocole MCP = TypeScript SDK officiel | **GARDER TS** |
 | **Embeddings** | Ollama API (HTTP) | **Rust (fastembed-rs)** | Supprime dependance Ollama pour embeddings. 3-5x plus rapide. Native ONNX runtime. | **RUST via napi-rs** |
-| **Sync server** | (nouveau) | **Rust (tokio + tungstenite)** | WebSocket haute perf: 10K+ connections, ~2MB RSS vs Node ws ~50-100MB. Process separe, toujours actif sur VPS. | **RUST standalone** |
-| **Daemon file watcher** | chokidar (Node) | **Rust (notify-rs)** via napi-rs | chokidar: problemes memoire >1000 fichiers. notify-rs: natif OS events, ~1MB RSS. | **RUST via napi-rs** (Phase 2) |
+| **Sync server** | (nouveau) | **Rust (tokio + tungstenite)** | WebSocket haute perf: 10K+ connections, ~2MB RSS vs Node ws ~50-100MB. Process separe, toujours actif sur VPS. Note : pour REX solo (2-5 connexions max), Node/ws est suffisant en perf — Rust choisi pour le RSS VPS 24/7 (~2MB vs ~30MB idle). | **RUST standalone** |
+| **Daemon file watcher** | chokidar (Node) | **Rust (notify-rs)** via napi-rs | chokidar: problemes memoire documentes >1000 fichiers (issue #1162). Alternative intermediaire : `node:fs.watch` natif (FSEvents macOS, zero dep). notify-rs: natif OS events, ~1MB RSS. | **RUST via napi-rs** (Phase 2) — `node:fs.watch` si Phase 2 reportee |
 | **SQLite hot paths** | better-sqlite3 | **turso/libsql** ou Rust napi-rs | better-sqlite3 deja tres rapide (sync C binding). Turso ajoute replication. Gain marginal. | **GARDER better-sqlite3** (eval turso plus tard) |
 | **Distribution binaire** | npm install | **Bun compile** | Single binary ~60MB, zero deps. Alternative : `pkg` (Node SEA). | **BUN COMPILE** (Phase 6) |
 
@@ -4483,6 +4656,10 @@ Avant de lancer le premier batch :
 - [Outline](https://www.getoutline.com/) — Wiki self-hostable, API REST
 - [BookStack](https://www.bookstackapp.com/) — Wiki self-hostable, API REST
 - [Silverbullet](https://silverbullet.md/) — Markdown wiki dans le browser
+
+### LLM Proxy & Routing
+- [LiteLLM](https://github.com/BerriAI/litellm) — 20K+ stars, proxy 100+ providers, auto-rotation, cost tracking
+- [LiteLLM Docs](https://docs.litellm.ai/) — configuration, free tier routing, fallback chains
 
 ### Concurrence (aucun concurrent direct)
 - [OpenCode](https://opencode.ai/) — 100k stars, CLI coding agent (pas de memoire/routing/distribue)

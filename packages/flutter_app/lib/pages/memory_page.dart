@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../services/rex_service.dart';
 import '../theme.dart';
 import '../widgets/rex_page_layout.dart';
+import '../widgets/rex_shared.dart';
 
 const _kCategoryColors = <String, Color>{
   'debug':        Color(0xFF5E81F4),
@@ -128,6 +129,11 @@ class _MemoryPageState extends State<MemoryPage> {
     }
   }
 
+  // Estimate embedding coverage from stats
+  int get _embeddedCount {
+    return _categories.values.fold(0, (sum, v) => sum + v);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.rex;
@@ -170,6 +176,137 @@ class _MemoryPageState extends State<MemoryPage> {
           controller: scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           children: [
+            // Stats overview
+            RexCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RexSection(
+                    title: 'Overview',
+                    icon: CupertinoIcons.cube,
+                    action: _totalEntries > 0
+                        ? RexStatusChip(
+                            label: 'pending ${_totalEntries - _embeddedCount}',
+                            status: (_totalEntries - _embeddedCount) > 0
+                                ? RexChipStatus.pending
+                                : RexChipStatus.ok,
+                            small: true,
+                          )
+                        : null,
+                  ),
+                  if (_statsOutput.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(child: CupertinoActivityIndicator()),
+                    )
+                  else ...[
+                    RexStatRow(
+                      label: 'Total memories',
+                      value: '$_totalEntries',
+                      icon: CupertinoIcons.cube,
+                    ),
+                    RexStatRow(
+                      label: 'Categorized',
+                      value: '$_embeddedCount',
+                      icon: CupertinoIcons.tag,
+                    ),
+                    RexStatRow(
+                      label: 'Categories',
+                      value: '${_categories.length}',
+                      icon: CupertinoIcons.collections,
+                    ),
+                    if (_totalEntries > 0) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Text(
+                            'Embedding coverage',
+                            style: TextStyle(fontSize: 11, color: c.textTertiary),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${(_totalEntries > 0 ? (_embeddedCount / _totalEntries * 100) : 0).toStringAsFixed(0)}%',
+                            style: TextStyle(fontSize: 11, color: c.textSecondary),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      RexProgressBar(
+                        value: _embeddedCount.toDouble(),
+                        max: _totalEntries > 0 ? _totalEntries.toDouble() : 1,
+                        color: c.success,
+                      ),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+
+            // Categories
+            if (_categories.isNotEmpty)
+              RexCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const RexSection(
+                      title: 'Categories',
+                      icon: CupertinoIcons.tag,
+                    ),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: _kCategoryColors.entries
+                            .where((e) => _categories.containsKey(e.key))
+                            .map((e) {
+                          final count = _categories[e.key] ?? 0;
+                          final isSelected = _selectedCategory == e.key;
+                          return GestureDetector(
+                            onTap: () => _loadMemoriesByCategory(e.key),
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? e.value.withAlpha(60)
+                                    : e.value.withAlpha(20),
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? e.value
+                                      : e.value.withAlpha(60),
+                                  width: isSelected ? 1.0 : 0.5,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${e.key} $count',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: e.value,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (isSelected) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(CupertinoIcons.chevron_down,
+                                        size: 9, color: e.value),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // Search
             Row(
               children: [
@@ -196,255 +333,213 @@ class _MemoryPageState extends State<MemoryPage> {
 
             // Search results
             if (_searchResults.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              _SectionLabel('SEARCH RESULTS'),
-              const SizedBox(height: 6),
-              _CodeBlock(text: _searchResults),
-            ],
-
-            // Stats
-            const SizedBox(height: 20),
-            _SectionLabel('DATABASE'),
-            const SizedBox(height: 8),
-            if (_statsOutput.isEmpty)
-              const Padding(padding: EdgeInsets.all(20), child: Center(child: CupertinoActivityIndicator()))
-            else ...[
-              if (_totalEntries > 0 || _categories.isNotEmpty) ...[
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: c.accent.withAlpha(20),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: c.accent.withAlpha(60), width: 0.5),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(CupertinoIcons.cube, size: 13, color: c.accent),
-                          const SizedBox(width: 6),
-                          Text('$_totalEntries memories',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.accent)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: _kCategoryColors.entries
-                              .where((e) => _categories.containsKey(e.key))
-                              .map((e) {
-                            final count = _categories[e.key] ?? 0;
-                            final isSelected = _selectedCategory == e.key;
-                            return GestureDetector(
-                              onTap: () => _loadMemoriesByCategory(e.key),
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 6),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: isSelected ? e.value.withAlpha(60) : e.value.withAlpha(20),
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
-                                    color: isSelected ? e.value : e.value.withAlpha(60),
-                                    width: isSelected ? 1.0 : 0.5,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '${e.key} $count',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: e.value,
-                                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                      ),
-                                    ),
-                                    if (isSelected) ...[
-                                      const SizedBox(width: 4),
-                                      Icon(CupertinoIcons.chevron_down, size: 9, color: e.value),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-              ],
-              _CodeBlock(text: _statsOutput),
+              const SizedBox(height: 16),
+              RexCard(
+                title: 'Search Results',
+                child: _CodeBlock(text: _searchResults),
+              ),
             ],
 
             // Memory list for selected category
             if (_selectedCategory != null) ...[
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Container(
-                    width: 3,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: _kCategoryColors[_selectedCategory] ?? c.accent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _SectionLabel(_selectedCategory!.toUpperCase()),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => setState(() { _selectedCategory = null; _memoryList = []; }),
-                    child: Icon(CupertinoIcons.xmark_circle, size: 14, color: c.textTertiary),
-                  ),
-                ],
-              ),
               const SizedBox(height: 8),
-              if (_loadingMemories)
-                const Padding(padding: EdgeInsets.all(20), child: Center(child: CupertinoActivityIndicator()))
-              else if (_memoryList.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: c.surface,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: c.separator, width: 0.5),
-                  ),
-                  child: Text('No memories found.', style: TextStyle(color: c.textSecondary, fontSize: 12)),
-                )
-              else
-                Container(
-                  decoration: BoxDecoration(
-                    color: c.surface,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: c.separator, width: 0.5),
-                  ),
-                  child: Column(
-                    children: _memoryList.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final mem = entry.value;
-                      final content = (mem['content'] as String?) ?? '';
-                      final project = mem['project'] as String?;
-                      final createdAt = mem['created_at'] as String? ?? '';
-                      final catColor = _kCategoryColors[_selectedCategory] ?? c.accent;
-                      return Column(
-                        children: [
-                          if (i > 0)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 44),
-                              child: Container(height: 0.5, color: c.separator),
-                            ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: 6, height: 6,
-                                  margin: const EdgeInsets.only(top: 5, right: 10),
-                                  decoration: BoxDecoration(
-                                    color: catColor,
-                                    shape: BoxShape.circle,
-                                  ),
+              RexCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RexSection(
+                      title: _selectedCategory!,
+                      icon: CupertinoIcons.list_bullet,
+                      action: GestureDetector(
+                        onTap: () => setState(() {
+                          _selectedCategory = null;
+                          _memoryList = [];
+                        }),
+                        child: Icon(CupertinoIcons.xmark_circle,
+                            size: 14, color: c.textTertiary),
+                      ),
+                    ),
+                    if (_loadingMemories)
+                      const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(child: CupertinoActivityIndicator()),
+                      )
+                    else if (_memoryList.isEmpty)
+                      const RexEmptyState(
+                        icon: CupertinoIcons.tray,
+                        title: 'No memories found',
+                      )
+                    else
+                      Column(
+                        children:
+                            _memoryList.asMap().entries.map((entry) {
+                          final i = entry.key;
+                          final mem = entry.value;
+                          final content =
+                              (mem['content'] as String?) ?? '';
+                          final project = mem['project'] as String?;
+                          final createdAt =
+                              mem['created_at'] as String? ?? '';
+                          final catColor =
+                              _kCategoryColors[_selectedCategory] ??
+                                  c.accent;
+                          return Column(
+                            children: [
+                              if (i > 0)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(left: 16),
+                                  child: Container(
+                                      height: 0.5,
+                                      color: c.separator),
                                 ),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        content.length > 200
-                                            ? '${content.substring(0, 200)}...'
-                                            : content,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: c.text,
-                                          height: 1.45,
-                                          fontFamily: 'Menlo',
-                                        ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 10),
+                                child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      margin: const EdgeInsets.only(
+                                          top: 5, right: 10),
+                                      decoration: BoxDecoration(
+                                        color: catColor,
+                                        shape: BoxShape.circle,
                                       ),
-                                      const SizedBox(height: 4),
-                                      Row(
+                                    ),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          if (project != null) ...[
-                                            Icon(CupertinoIcons.folder, size: 10, color: c.textTertiary),
-                                            const SizedBox(width: 3),
-                                            Text(
-                                              project.split('-').take(2).join('/'),
-                                              style: TextStyle(fontSize: 10, color: c.textTertiary),
-                                            ),
-                                            const SizedBox(width: 8),
-                                          ],
-                                          Icon(CupertinoIcons.clock, size: 10, color: c.textTertiary),
-                                          const SizedBox(width: 3),
                                           Text(
-                                            createdAt.length > 16
-                                                ? createdAt.substring(0, 16)
-                                                : createdAt,
-                                            style: TextStyle(fontSize: 10, color: c.textTertiary),
+                                            content.length > 200
+                                                ? '${content.substring(0, 200)}...'
+                                                : content,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: c.text,
+                                              height: 1.45,
+                                              fontFamily: 'Menlo',
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              if (project !=
+                                                  null) ...[
+                                                Icon(
+                                                    CupertinoIcons
+                                                        .folder,
+                                                    size: 10,
+                                                    color:
+                                                        c.textTertiary),
+                                                const SizedBox(
+                                                    width: 3),
+                                                Text(
+                                                  project
+                                                      .split('-')
+                                                      .take(2)
+                                                      .join('/'),
+                                                  style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: c
+                                                          .textTertiary),
+                                                ),
+                                                const SizedBox(
+                                                    width: 8),
+                                              ],
+                                              Icon(
+                                                  CupertinoIcons.clock,
+                                                  size: 10,
+                                                  color:
+                                                      c.textTertiary),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                createdAt.length > 16
+                                                    ? createdAt
+                                                        .substring(
+                                                            0, 16)
+                                                    : createdAt,
+                                                style: TextStyle(
+                                                    fontSize: 10,
+                                                    color:
+                                                        c.textTertiary),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
-                  ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                  ],
                 ),
+              ),
             ],
 
-            // Info
-            const SizedBox(height: 24),
-            _SectionLabel('HOW IT WORKS'),
-            const SizedBox(height: 6),
-            Container(
-              decoration: BoxDecoration(
-                color: c.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: c.separator, width: 0.5),
+            // Database raw output
+            if (_statsOutput.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              RexCard(
+                title: 'Database',
+                child: _CodeBlock(text: _statsOutput),
               ),
+            ],
+
+            // How it works
+            const SizedBox(height: 8),
+            RexCard(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const RexSection(
+                    title: 'How It Works',
+                    icon: CupertinoIcons.info,
+                  ),
                   _InfoRow(
                     icon: CupertinoIcons.clock,
                     title: 'Auto-Ingest',
-                    subtitle: 'LaunchAgent syncs sessions every hour',
+                    subtitle:
+                        'LaunchAgent syncs sessions every hour',
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(left: 44),
+                    padding: const EdgeInsets.only(left: 30),
                     child: Container(height: 0.5, color: c.separator),
                   ),
                   _InfoRow(
                     icon: CupertinoIcons.sparkles,
                     title: 'Smart Categories',
-                    subtitle: 'Qwen/Claude classifies: debug, fix, idea, architecture, pattern',
+                    subtitle:
+                        'Qwen/Claude classifies: debug, fix, idea, architecture, pattern',
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(left: 44),
+                    padding: const EdgeInsets.only(left: 30),
                     child: Container(height: 0.5, color: c.separator),
                   ),
                   _InfoRow(
                     icon: CupertinoIcons.cube,
                     title: 'Vector Search',
-                    subtitle: 'Semantic similarity via nomic-embed-text embeddings',
+                    subtitle:
+                        'Semantic similarity via nomic-embed-text embeddings',
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(left: 44),
+                    padding: const EdgeInsets.only(left: 30),
                     child: Container(height: 0.5, color: c.separator),
                   ),
                   _InfoRow(
                     icon: CupertinoIcons.arrow_merge,
                     title: 'Consolidate',
-                    subtitle: 'Merge similar memories (cosine >= 0.82) via Qwen summarization',
+                    subtitle:
+                        'Merge similar memories (cosine >= 0.82) via Qwen summarization',
                   ),
                 ],
               ),
@@ -459,25 +554,6 @@ class _MemoryPageState extends State<MemoryPage> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.rex;
-    return Text(
-      text,
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        color: c.textSecondary,
-        letterSpacing: 0.5,
-      ),
-    );
   }
 }
 
@@ -514,13 +590,14 @@ class _InfoRow extends StatelessWidget {
   final String title;
   final String subtitle;
 
-  const _InfoRow({required this.icon, required this.title, required this.subtitle});
+  const _InfoRow(
+      {required this.icon, required this.title, required this.subtitle});
 
   @override
   Widget build(BuildContext context) {
     final c = context.rex;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
           Icon(icon, size: 18, color: c.accent),
@@ -529,8 +606,11 @@ class _InfoRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(fontSize: 13, color: c.text)),
-                Text(subtitle, style: TextStyle(fontSize: 11, color: c.textTertiary)),
+                Text(title,
+                    style: TextStyle(fontSize: 13, color: c.text)),
+                Text(subtitle,
+                    style:
+                        TextStyle(fontSize: 11, color: c.textTertiary)),
               ],
             ),
           ),

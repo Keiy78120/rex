@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/rex_service.dart';
 import '../theme.dart';
 import '../widgets/rex_page_layout.dart';
+import '../widgets/rex_shared.dart';
 
 class McpPage extends StatefulWidget {
   const McpPage({super.key});
@@ -111,6 +112,7 @@ class _McpPageState extends State<McpPage> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.rex;
     return RexPageLayout(
       title: 'MCP Servers',
       actions: [
@@ -125,6 +127,15 @@ class _McpPageState extends State<McpPage> {
           onPressed: _syncClaude,
           showLabel: true,
         ),
+        RexHeaderButton(
+          icon: CupertinoIcons.cloud_download,
+          label: 'Update Catalog',
+          onPressed: () async {
+            await context.read<RexService>().refreshMarketplace();
+            setState(() => _statusMessage = 'Marketplace catalog updated');
+          },
+          showLabel: true,
+        ),
       ],
       builder: (context, scrollController) {
         return Consumer<RexService>(
@@ -134,11 +145,8 @@ class _McpPageState extends State<McpPage> {
               padding: const EdgeInsets.all(20),
               children: [
                 // Marketplace search
-                _SectionTitle(title: 'Marketplace'),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: _cardDecoration(context),
+                RexCard(
+                  title: 'Marketplace',
                   child: Column(
                     children: [
                       Row(
@@ -171,34 +179,40 @@ class _McpPageState extends State<McpPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
-                // Add forms (collapsed by default)
+
+                // Add custom server (collapsible)
                 GestureDetector(
                   onTap: () => setState(() => _showAddForms = !_showAddForms),
-                  child: Row(
-                    children: [
-                      _SectionTitle(title: 'Add Custom Server'),
-                      const SizedBox(width: 6),
-                      Icon(
-                        _showAddForms
-                            ? CupertinoIcons.chevron_up
-                            : CupertinoIcons.chevron_down,
-                        size: 14,
-                        color: context.rex.textSecondary,
-                      ),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        RexSection(
+                          title: 'Add Custom Server',
+                          padding: EdgeInsets.zero,
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          _showAddForms
+                              ? CupertinoIcons.chevron_up
+                              : CupertinoIcons.chevron_down,
+                          size: 14,
+                          color: c.textSecondary,
+                        ),
+                        const Spacer(),
+                      ],
+                    ),
                   ),
                 ),
-                if (_showAddForms) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: _cardDecoration(context),
+                if (_showAddForms)
+                  RexCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('stdio', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.rex.textSecondary)),
-                        const SizedBox(height: 8),
+                        RexSection(
+                          title: 'stdio',
+                          padding: const EdgeInsets.only(bottom: 8),
+                        ),
                         Row(
                           children: [
                             Expanded(child: MacosTextField(controller: _stdioNameController, placeholder: 'Name')),
@@ -223,8 +237,10 @@ class _McpPageState extends State<McpPage> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        Text('URL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.rex.textSecondary)),
-                        const SizedBox(height: 8),
+                        RexSection(
+                          title: 'URL',
+                          padding: const EdgeInsets.only(bottom: 8),
+                        ),
                         Row(
                           children: [
                             Expanded(child: MacosTextField(controller: _urlNameController, placeholder: 'Name')),
@@ -247,51 +263,42 @@ class _McpPageState extends State<McpPage> {
                       ],
                     ),
                   ),
-                ],
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    _SectionTitle(
-                      title: 'Registry (${rex.mcpServers.length})',
-                    ),
-                    const Spacer(),
-                    RexButton(
-                      label: 'Export',
-                      small: true,
-                      onPressed: _export,
-                    ),
-                  ],
+
+                // Server registry
+                RexSection(
+                  title: 'Registry (${rex.mcpServers.length})',
+                  action: RexButton(
+                    label: 'Export',
+                    small: true,
+                    variant: RexButtonVariant.secondary,
+                    onPressed: _export,
+                  ),
                 ),
-                const SizedBox(height: 8),
+
                 if (rex.mcpServers.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: _cardDecoration(context),
-                    child: Text(
-                      'No MCP servers configured.',
-                      style: TextStyle(color: context.rex.textSecondary),
-                    ),
+                  RexEmptyState(
+                    icon: CupertinoIcons.square_stack_3d_up,
+                    title: 'No MCP servers configured',
+                    subtitle: 'Search the marketplace or add a custom server above',
                   )
                 else
                   ...rex.mcpServers.map(
-                    (server) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: _McpCard(
-                        server: server,
-                        busy: rex.isLoading,
-                        onCheck: () => _check(server.id),
-                        onToggle: () => _toggle(server),
-                        onRemove: () => _remove(server.id),
-                      ),
+                    (server) => _McpServerCard(
+                      server: server,
+                      busy: rex.isLoading,
+                      onCheck: () => _check(server.id),
+                      onToggle: () => _toggle(server),
+                      onRemove: () => _remove(server.id),
                     ),
                   ),
+
                 if (_statusMessage.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: context.rex.codeBg,
+                      color: c.codeBg,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -299,13 +306,11 @@ class _McpPageState extends State<McpPage> {
                       style: TextStyle(
                         fontSize: 12,
                         fontFamily: 'Menlo',
-                        color: context.rex.textSecondary,
+                        color: c.textSecondary,
                       ),
                     ),
                   ),
                 ],
-                const SizedBox(height: 12),
-                _ViewLogsLink(label: 'View MCP logs'),
               ],
             );
           },
@@ -342,6 +347,7 @@ class _MarketplaceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.rex;
     final name = entry['name'] as String? ?? '';
     final desc = entry['description'] as String? ?? '';
     final tags = (entry['tags'] as List?)?.cast<String>() ?? [];
@@ -351,9 +357,9 @@ class _MarketplaceRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: context.rex.surfaceSecondary,
+          color: c.surfaceSecondary,
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: context.rex.separator),
+          border: Border.all(color: c.separator),
         ),
         child: Row(
           children: [
@@ -363,12 +369,12 @@ class _MarketplaceRow extends StatelessWidget {
                 children: [
                   Text(
                     name,
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: context.rex.text),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: c.text),
                   ),
                   if (desc.isNotEmpty)
                     Text(
                       desc,
-                      style: TextStyle(fontSize: 11, color: context.rex.textSecondary),
+                      style: TextStyle(fontSize: 11, color: c.textSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -380,10 +386,10 @@ class _MarketplaceRow extends StatelessWidget {
                         children: tags.take(3).map((t) => Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                           decoration: BoxDecoration(
-                            color: context.rex.accent.withAlpha(15),
+                            color: c.accent.withAlpha(15),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(t, style: TextStyle(fontSize: 10, color: context.rex.accent)),
+                          child: Text(t, style: TextStyle(fontSize: 10, color: c.accent)),
                         )).toList(),
                       ),
                     ),
@@ -403,14 +409,14 @@ class _MarketplaceRow extends StatelessWidget {
   }
 }
 
-class _McpCard extends StatelessWidget {
+class _McpServerCard extends StatelessWidget {
   final McpServerInfo server;
   final bool busy;
   final VoidCallback onCheck;
   final VoidCallback onToggle;
   final VoidCallback onRemove;
 
-  const _McpCard({
+  const _McpServerCard({
     required this.server,
     required this.busy,
     required this.onCheck,
@@ -424,52 +430,30 @@ class _McpCard extends StatelessWidget {
         ? '${server.command} ${server.args.join(' ')}'.trim()
         : server.url;
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: _cardDecoration(context),
+    return RexCard(
+      title: server.name,
+      trailing: RexStatusChip(
+        label: server.enabled ? 'Enabled' : 'Disabled',
+        status: server.enabled ? RexChipStatus.ok : RexChipStatus.inactive,
+        small: true,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 9,
-                height: 9,
-                decoration: BoxDecoration(
-                  color: server.enabled
-                      ? CupertinoColors.systemGreen
-                      : CupertinoColors.systemGrey,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '${server.name} (${server.type})',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: context.rex.text,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Text(
-                server.id,
-                style: TextStyle(
-                  fontFamily: 'Menlo',
-                  fontSize: 11,
-                  color: context.rex.textSecondary,
-                ),
-              ),
-            ],
+          RexStatRow(
+            label: 'Type',
+            value: server.type,
+            icon: CupertinoIcons.cube,
           ),
-          const SizedBox(height: 6),
-          Text(
-            target.isEmpty ? 'No target' : target,
-            style: TextStyle(
-              fontSize: 12,
-              color: context.rex.textSecondary,
-            ),
+          RexStatRow(
+            label: 'Target',
+            value: target.isEmpty ? 'No target' : target,
+            icon: CupertinoIcons.link,
+          ),
+          RexStatRow(
+            label: 'ID',
+            value: server.id,
+            icon: CupertinoIcons.tag,
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -477,18 +461,21 @@ class _McpCard extends StatelessWidget {
             runSpacing: 8,
             children: [
               RexButton(
-                label: 'Check',
+                label: 'Test',
                 small: true,
+                variant: RexButtonVariant.secondary,
                 onPressed: busy ? null : onCheck,
               ),
               RexButton(
                 label: server.enabled ? 'Disable' : 'Enable',
                 small: true,
+                variant: RexButtonVariant.secondary,
                 onPressed: busy ? null : onToggle,
               ),
               RexButton(
                 label: 'Remove',
                 small: true,
+                variant: RexButtonVariant.ghost,
                 onPressed: busy ? null : onRemove,
               ),
             ],
@@ -497,73 +484,4 @@ class _McpCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  const _SectionTitle({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-        color: context.rex.text,
-      ),
-    );
-  }
-}
-
-class _ViewLogsLink extends StatefulWidget {
-  final String label;
-  const _ViewLogsLink({required this.label});
-
-  @override
-  State<_ViewLogsLink> createState() => _ViewLogsLinkState();
-}
-
-class _ViewLogsLinkState extends State<_ViewLogsLink> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.rex;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () {},
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              CupertinoIcons.doc_text,
-              size: 13,
-              color: _hovered ? c.accent : c.textSecondary,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              widget.label,
-              style: TextStyle(
-                fontSize: 12,
-                color: _hovered ? c.accent : c.textSecondary,
-                decoration: _hovered ? TextDecoration.underline : null,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-BoxDecoration _cardDecoration(BuildContext context) {
-  return BoxDecoration(
-    color: context.rex.surfaceSecondary,
-    borderRadius: BorderRadius.circular(8),
-    border: Border.all(color: context.rex.separator),
-  );
 }

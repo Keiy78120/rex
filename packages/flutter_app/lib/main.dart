@@ -4,6 +4,8 @@ import 'package:macos_ui/macos_ui.dart';
 import 'package:provider/provider.dart';
 import 'services/rex_service.dart';
 import 'pages/health_page.dart';
+import 'pages/network_page.dart';
+import 'pages/providers_page.dart';
 import 'pages/voice_page.dart';
 import 'pages/audio_page.dart';
 import 'pages/memory_page.dart';
@@ -78,6 +80,8 @@ class _RexMainWindowState extends State<RexMainWindow> {
                 index: _pageIndex,
                 children: const [
                   HealthPage(),
+                  NetworkPage(),
+                  ProvidersPage(),
                   VoicePage(),
                   AudioPage(),
                   MemoryPage(),

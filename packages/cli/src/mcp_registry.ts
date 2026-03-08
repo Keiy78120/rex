@@ -24,8 +24,10 @@ interface McpRegistry {
 }
 
 const HOME = homedir()
-const ROOT_DIR = join(HOME, '.rex-memory')
+const ROOT_DIR = join(HOME, '.claude', 'rex')
 const REGISTRY_FILE = join(ROOT_DIR, 'mcp-registry.json')
+const LEGACY_ROOT = join(HOME, '.rex-memory')
+const LEGACY_REGISTRY = join(LEGACY_ROOT, 'mcp-registry.json')
 
 function ensureDir() {
   if (!existsSync(ROOT_DIR)) mkdirSync(ROOT_DIR, { recursive: true })
@@ -37,6 +39,18 @@ function readRegistry(): McpRegistry {
     if (existsSync(REGISTRY_FILE)) {
       const parsed = JSON.parse(readFileSync(REGISTRY_FILE, 'utf-8')) as McpRegistry
       if (Array.isArray(parsed.servers)) return parsed
+    }
+  } catch {
+    // noop
+  }
+  // Migrate from legacy path if exists
+  try {
+    if (existsSync(LEGACY_REGISTRY)) {
+      const parsed = JSON.parse(readFileSync(LEGACY_REGISTRY, 'utf-8')) as McpRegistry
+      if (Array.isArray(parsed.servers) && parsed.servers.length > 0) {
+        writeRegistry(parsed)
+        return parsed
+      }
     }
   } catch {
     // noop
@@ -263,6 +277,41 @@ function syncClaudeSettings() {
   console.log(JSON.stringify({ ok: true, synced: enabledStdio.length, settingsPath }, null, 2))
 }
 
+function importFromClaude() {
+  const settingsPath = join(HOME, '.claude', 'settings.json')
+  let settings: any = {}
+  try { settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) } catch {}
+  const mcpServers = settings.mcpServers || {}
+
+  const registry = readRegistry()
+  let imported = 0
+  const now = new Date().toISOString()
+
+  for (const [name, config] of Object.entries(mcpServers)) {
+    const cfg = config as any
+    // Skip if already in registry
+    if (registry.servers.some((s) => s.name === name)) continue
+
+    const entry: McpServerEntry = {
+      id: `${slug(name)}-${Date.now().toString().slice(-6)}`,
+      name,
+      type: 'stdio',
+      command: cfg.command || '',
+      args: Array.isArray(cfg.args) ? cfg.args : [],
+      cwd: cfg.cwd || undefined,
+      enabled: true,
+      tags: ['imported-from-claude'],
+      createdAt: now,
+      updatedAt: now,
+    }
+    registry.servers.push(entry)
+    imported++
+  }
+
+  if (imported > 0) writeRegistry(registry)
+  console.log(JSON.stringify({ ok: true, imported, total: registry.servers.length }, null, 2))
+}
+
 interface MarketplaceEntry {
   name: string
   description: string
@@ -438,6 +487,66 @@ async function discoverServer(args: string[], jsonMode: boolean) {
   }
 }
 
+async function refreshMarketplace(jsonMode: boolean) {
+  // Fetch from awesome-mcp-servers GitHub README
+  const sources = [
+    'https://raw.githubusercontent.com/punkpeye/awesome-mcp-servers/main/README.md',
+    'https://raw.githubusercontent.com/wong2/awesome-mcp-servers/main/README.md',
+  ]
+
+  const existingMarketplace = readMarketplace()
+  const existingNames = new Set(existingMarketplace.map(e => e.name))
+  let newEntries: MarketplaceEntry[] = [...existingMarketplace]
+  let fetched = 0
+
+  for (const url of sources) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
+      if (!res.ok) continue
+      const text = await res.text()
+
+      // Parse markdown for MCP server entries — look for lines with npm package links
+      const npmRegex = /\[([^\]]+)\]\(https?:\/\/(?:www\.)?(?:npmjs\.com\/package\/|github\.com\/)([^\)]+)\)\s*[-–—]\s*(.+)/g
+      let match
+      while ((match = npmRegex.exec(text)) !== null) {
+        const name = match[1].toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+        if (existingNames.has(name) || name.length < 2) continue
+
+        const source = match[2]
+        const desc = match[3].replace(/\*\*/g, '').trim().slice(0, 120)
+        const isNpm = match[0].includes('npmjs.com')
+
+        const entry: MarketplaceEntry = {
+          name,
+          description: desc,
+          command: isNpm ? 'npx' : undefined,
+          args: isNpm ? ['-y', source] : undefined,
+          installCmd: isNpm ? `npx -y ${source}` : undefined,
+          type: 'stdio',
+          tags: ['community'],
+          source: 'awesome-mcp-servers',
+        }
+
+        newEntries.push(entry)
+        existingNames.add(name)
+        fetched++
+      }
+    } catch {
+      // Skip failed sources
+    }
+  }
+
+  // Save updated marketplace
+  if (!existsSync(MARKETPLACE_DIR)) mkdirSync(MARKETPLACE_DIR, { recursive: true })
+  writeFileSync(MARKETPLACE_FILE, JSON.stringify(newEntries, null, 2))
+
+  if (jsonMode) {
+    console.log(JSON.stringify({ ok: true, fetched, total: newEntries.length }))
+  } else {
+    console.log(`Refreshed marketplace: ${fetched} new entries, ${newEntries.length} total`)
+  }
+}
+
 function searchMarketplace(args: string[], jsonMode: boolean) {
   const query = args.filter((a) => !a.startsWith('--')).join(' ').toLowerCase()
   if (!query) {
@@ -580,11 +689,17 @@ export async function mcpRegistry(args: string[]) {
     case 'sync-claude':
       syncClaudeSettings()
       return
+    case 'import-claude':
+      importFromClaude()
+      return
     case 'export':
       showExport()
       return
     case 'discover':
       await discoverServer(rest, jsonMode)
+      return
+    case 'refresh-marketplace':
+      await refreshMarketplace(jsonMode)
       return
     case 'search':
       searchMarketplace(rest, jsonMode)
@@ -593,6 +708,6 @@ export async function mcpRegistry(args: string[]) {
       await installFromMarketplace(rest)
       return
     default:
-      console.log('Usage: rex mcp <list|add|add-url|remove|enable|disable|check|sync-claude|export|discover|search|install> ...')
+      console.log('Usage: rex mcp <list|add|add-url|remove|enable|disable|check|sync-claude|import-claude|export|discover|search|install|refresh-marketplace> ...')
   }
 }

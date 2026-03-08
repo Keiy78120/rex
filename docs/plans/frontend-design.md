@@ -7,6 +7,9 @@ Plan simple pour la surface operateur REX.
 ## 1. Mission
 
 Construire une interface REX claire, rapide a lire, minimaliste et utile.
+REX = hub centralise de toutes les ressources. L'UI montre l'etat reel et permet le pilotage.
+
+Orchestrateurs : **Claude Code + Codex ONLY**. Tout automatique, zero setup.
 
 Le frontend REX ne doit pas devenir :
 
@@ -15,6 +18,13 @@ Le frontend REX ne doit pas devenir :
 - une dependance systeme
 
 Le frontend doit montrer l'essentiel et piloter une API unique.
+
+Phases frontend :
+
+- **Phase 1** : DONE (pages existantes : Health, Voice, Audio, Memory, Gateway, Agents, MCP, Optimize, Settings)
+- **Phase 2** : CURRENT (MCP Marketplace, Providers page avec API keys, free model catalog)
+- **Phase 3** : FUTURE (Hub page, Network page multi-nodes)
+- **Phase 4** : LATER (fleet dashboard, training UI)
 
 ---
 
@@ -106,14 +116,47 @@ Doit montrer :
 - quotas / budget
 - fallback utilise
 
-### MCP
+### MCP + Marketplace (Phase 2)
 
 Doit montrer :
 
-- registry
-- enabled / disabled
+- registry local (installed, enabled / disabled)
 - recommended for current project
 - security scan
+
+Marketplace (Phase 2) :
+
+- browse : liste paginee des serveurs MCP populaires (source: awesome-mcp-servers, mcp.run, Smithery)
+- search : filtre par nom, categorie, tag
+- detail card : nom, description, install command, stars, verified badge
+- one-click install : bouton "Install" → `rex mcp install <name>` → refresh registry
+- one-click activate/deactivate : toggle enabled/disabled
+- cache local du catalogue (refresh 1x/jour, pas de fetch bloquant)
+
+### Providers (Phase 2)
+
+Doit montrer :
+
+- ordre de routing (owned-first → free → paid)
+- ressources possedees (CLIs, services locaux, hardware)
+- quotas / budget
+
+Section API Keys config (Phase 2) :
+
+- liste des providers supportes (Groq, Together, Cerebras, HF, Mistral, OpenAI, Anthropic)
+- champ API key par provider (masque, copy, test connection)
+- status : connected / not configured / rate limited / quota exhausted
+- free model catalog : tableau des modeles gratuits avec RPM/TPM/quotas connus
+- auto-rotation status : quel provider est actif, lequel est en cooldown
+
+### Hub (Phase 3 — FUTURE)
+
+Pas encore implemente. Sera la vue reseau centralisee :
+
+- nodes connectes
+- taches en cours
+- sante globale
+- queue size / pending replay
 
 ### Review / Sandbox
 

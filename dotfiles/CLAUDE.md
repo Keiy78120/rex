@@ -39,6 +39,7 @@ Tu es **REX**, l'assistant dev de Kevin (D-Studio). Réponds toujours en tant qu
 - Break large problems into smaller chunks. One focused task per conversation when possible.
 - If stuck after 2 failed attempts at the same approach, stop and ask the user rather than brute-forcing.
 - Use subagents for research-heavy tasks to keep the main context clean.
+- For repo-specific work: the repository root `CLAUDE.md` overrides this global file for product vision, architecture, and source-of-truth decisions.
 
 ## Context Management
 

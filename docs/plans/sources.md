@@ -31,7 +31,21 @@ Docs longues de reference :
 
 ---
 
-## 2. Regle generale
+## 2. Vision
+
+REX = hub centralise de TOUTES les ressources : hardware, free tiers, abonnements, modeles locaux, outils MCP, memoire partagee.
+
+Orchestrateurs principaux : **Claude Code + Codex ONLY**.
+Tout automatique, zero setup pour l'utilisateur.
+
+Phases :
+
+- **Phase 1** : DONE (CLI, daemon, memory, gateway, app Flutter)
+- **Phase 2** : CURRENT (MCP marketplace, LiteLLM proxy, API keys config, free model catalog)
+- **Phase 3** : FUTURE (hub centralise, VPS brain, mesh multi-nodes)
+- **Phase 4** : LATER (fleet, training pipeline, meeting bots)
+
+## 3. Regle generale
 
 REX ne doit pas recoder ce que des briques open source solides gerent deja bien.
 
@@ -50,10 +64,11 @@ Ce qui est specifique a REX :
 - topologies solo / cluster / fleet
 - UX operateur sobre
 - orchestration d'ensemble
+- resource centralization (hardware + free tiers + subscriptions + local models)
 
 ---
 
-## 3. Sources OSS prioritaires
+## 4. Sources OSS prioritaires
 
 ### OpenClaw
 
@@ -98,9 +113,44 @@ REX garde seulement :
 
 A reutiliser pour :
 
-- cost tracking ideas
-- proxy/gateway patterns
-- provider abstraction inspiration
+- proxy unifie vers tous les providers LLM (gratuits et payants)
+- auto-rotation sur rate limit (fallback chain entre providers)
+- cost tracking et usage monitoring
+- provider abstraction : une seule interface, N backends
+
+Integration REX Phase 2 :
+
+- `litellm` en proxy local, configure par REX
+- rotation automatique Groq -> Together -> Cerebras -> HF -> Mistral
+- config API keys via UI Providers page
+- catalog de modeles gratuits avec limites connues (RPM, TPM, quotas)
+
+### Free Tier Providers
+
+Sources de modeles gratuits a integrer via LiteLLM :
+
+| Provider | Endpoint | Limites connues |
+|----------|----------|-----------------|
+| Groq API | `api.groq.com` | 30 RPM, 14.4k TPM (Llama 3), gratuit |
+| Together API | `api.together.xyz` | Free tier, rate limited |
+| Cerebras | `api.cerebras.ai` | Fast inference, free tier |
+| HF Inference | `api-inference.huggingface.co` | Gratuit, rate limited, queue |
+| Mistral (La Plateforme) | `api.mistral.ai` | Free tier pour petits modeles |
+
+Regle : toujours verifier les limites actuelles avant integration (elles changent souvent).
+
+### MCP Hub Sources
+
+Sources pour le marketplace MCP :
+
+| Source | URL / Methode | Usage |
+|--------|---------------|-------|
+| awesome-mcp-servers | GitHub API `petercat-ai/awesome-mcp-servers` | Catalogue principal, README parse |
+| mcp.run registry | `mcp.run` | Serveurs verifies, one-click install |
+| Smithery registry | `smithery.ai` | Discovery + install metadata |
+| npm/PyPI search | `registry.npmjs.org`, `pypi.org` | Packages tagges `mcp-server` |
+
+Regle : cache local du catalogue (refresh 1x/jour max), jamais de fetch bloquant au demarrage.
 
 ### Tailscale
 
@@ -120,7 +170,7 @@ A reutiliser pour :
 
 ---
 
-## 4. Sources produit / UX
+## 5. Sources produit / UX
 
 Le frontend doit suivre ces references de fond :
 
@@ -137,7 +187,7 @@ REX ne doit pas suivre :
 
 ---
 
-## 5. Sources techniques primaires a preferer
+## 6. Sources techniques primaires a preferer
 
 Toujours preferer :
 
@@ -154,7 +204,7 @@ Toujours eviter comme source principale :
 
 ---
 
-## 6. Comment utiliser ce plan
+## 7. Comment utiliser ce plan
 
 ### Si le sujet est backend
 
@@ -186,7 +236,7 @@ Lire :
 
 ---
 
-## 7. Definition of Done
+## 8. Definition of Done
 
 Une bonne utilisation des sources laisse :
 
