@@ -514,6 +514,7 @@ function advancedMenu() {
     ],
     [
       { text: '🔭 Curious', callback_data: 'curious_check' },
+      { text: '📊 Monitor', callback_data: 'dev_monitor' },
     ],
     [{ text: '◀️ Menu', callback_data: 'menu' }],
   ]
@@ -1800,6 +1801,19 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
       break
     }
 
+    case 'dev_monitor': {
+      await editMessage(token, chatId, messageId, '📊 Gathering dev status…', backMenu())
+      try {
+        const { getDevStatus, formatDevStatusTelegram } = await import('./dev-monitor.js')
+        const report = await getDevStatus()
+        const msg = formatDevStatusTelegram(report)
+        await editMessage(token, chatId, messageId, msg, advancedMenu())
+      } catch (e: any) {
+        await editMessage(token, chatId, messageId, `⚠️ Monitor failed: ${e.message?.slice(0, 100)}`, advancedMenu())
+      }
+      break
+    }
+
     case 'notifs': {
       const { text: t, buttons } = buildNotifsMessage(null, 0)
       await editMessage(token, chatId, messageId, t, buttons)
@@ -2317,6 +2331,20 @@ async function handleText(token: string, chatId: string, text: string, from: str
       await editMessage(token, chatId, loading.message_id, `⚠️ Curious check failed: ${e.message?.slice(0, 100)}`)
     }
     logCommand(from, '/curious', 'shown')
+    return
+  }
+
+  if (cmd === '/monitor') {
+    const loading = await send(token, chatId, '📊 Gathering dev status…')
+    try {
+      const { getDevStatus, formatDevStatusTelegram } = await import('./dev-monitor.js')
+      const report = await getDevStatus()
+      const msg = formatDevStatusTelegram(report)
+      await editMessage(token, chatId, loading.message_id, msg)
+    } catch (e: any) {
+      await editMessage(token, chatId, loading.message_id, `⚠️ Monitor failed: ${e.message?.slice(0, 100)}`)
+    }
+    logCommand(from, '/monitor', 'shown')
     return
   }
 

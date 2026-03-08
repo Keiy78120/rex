@@ -795,6 +795,19 @@ async function main() {
       break
     }
 
+    case 'monitor': {
+      // rex monitor [--json]
+      const jsonFlag = process.argv.includes('--json')
+      const { getDevStatus, printDevStatus } = await import('./dev-monitor.js')
+      const report = await getDevStatus()
+      if (jsonFlag) {
+        console.log(JSON.stringify(report, null, 2))
+      } else {
+        printDevStatus(report)
+      }
+      break
+    }
+
     case 'observe': {
       const type = process.argv[3]
       const content = process.argv.slice(4).join(' ')
@@ -1441,6 +1454,7 @@ ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex prune            Cleanup old/duplicate memories
   rex prune --stats    Show memory database stats
   rex curious          Discover new models, MCPs, and AI news (--json)
+  rex monitor          Dev status snapshot: git activity, sessions, memory (--json)
   rex self-review      Extract lessons, detect error patterns
   rex promote-rule N   Promote rule candidate to ~/.claude/rules/
   rex reflect <log>    Extract success patterns from session log
