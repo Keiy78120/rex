@@ -2,7 +2,7 @@ import { homedir, hostname as getHostname } from 'node:os'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { join, basename, extname } from 'node:path'
 import { execSync, execFileSync } from 'node:child_process'
-import { appendEvent, getQueueStats } from './sync-queue.js'
+import { appendEvent, getQueueStats, getUnacked, ackEvent } from './sync-queue.js'
 import { discoverHub } from './node.js'
 import { routeTask } from './node-mesh.js'
 
@@ -167,6 +167,22 @@ async function checkHubReachable(): Promise<boolean> {
   if (wasDegrade && !degradeMode) {
     console.log(`${COLORS.green}Hub recovered — exiting degrade mode${COLORS.reset}`)
     try { appendEvent('hub.event', { event: 'degrade_exit', reason: 'hub_recovered' }) } catch {}
+    // Notify user about spooled messages
+    try {
+      const creds = getCredentials()
+      if (creds) {
+        const spooled = getUnacked().filter(
+          e => e.type === 'gateway.message' && (e.payload as any)?.direction === 'spooled'
+        )
+        if (spooled.length > 0) {
+          await send(
+            creds.token,
+            creds.chatId,
+            `🟢 Hub recovered. ${spooled.length} message${spooled.length > 1 ? 's were' : ' was'} spooled while offline.\nSend /replay to reprocess them.`
+          )
+        }
+      }
+    } catch {}
   } else if (!wasDegrade && degradeMode) {
     console.log(`${COLORS.yellow}Hub unreachable — entering degrade mode${COLORS.reset}`)
     try { appendEvent('hub.event', { event: 'degrade_enter', reason: 'hub_unreachable' }) } catch {}
@@ -1942,6 +1958,35 @@ async function handleText(token: string, chatId: string, text: string, from: str
     return
   }
 
+  if (cmd === '/replay') {
+    const spooled = getUnacked().filter(
+      e => e.type === 'gateway.message' && (e.payload as any)?.direction === 'spooled'
+    )
+    if (spooled.length === 0) {
+      await send(token, chatId, '📭 No spooled messages to replay.')
+      return
+    }
+    await send(token, chatId, `🔄 Replaying ${spooled.length} spooled message${spooled.length > 1 ? 's' : ''}...`)
+    let replayed = 0
+    for (const ev of spooled) {
+      const payload = ev.payload as any
+      const text = payload?.text
+      if (!text) { ackEvent(ev.id); continue }
+      try {
+        const response = await askQwenStream(token, chatId, text)
+        if (!response.startsWith('⚠️')) {
+          ackEvent(ev.id)
+          replayed++
+        }
+      } catch {
+        // leave unacked for next retry
+      }
+    }
+    await send(token, chatId, `✅ Replayed ${replayed}/${spooled.length} messages.`, backButton())
+    logCommand(from, '/replay', `${replayed}/${spooled.length}`)
+    return
+  }
+
   if (cmd === '/wake' || cmd === '/w') {
     await send(token, chatId, '💤 _Sending wake signal..._')
     const result = await wakeMac()
@@ -2472,7 +2517,7 @@ async function handleText(token: string, chatId: string, text: string, from: str
 
       // If both failed in degrade mode, spool and inform user
       if (response.startsWith('⚠️') && degradeMode) {
-        try { appendEvent('gateway.message', { direction: 'spooled', text: text.slice(0, 1000), reason: 'degrade_mode' }) } catch {}
+        try { appendEvent('gateway.message', { direction: 'spooled', text: text.slice(0, 1000), chatId, reason: 'degrade_mode' }) } catch {}
         response = '⚠️ Degrade mode — hub and LLM unavailable. Message spooled for later processing.'
       }
     } else {
