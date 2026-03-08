@@ -2233,6 +2233,23 @@ $transcript
     } catch (_) {}
   }
 
+  Map<String, String> _modelRouter = {};
+  Map<String, String> get modelRouter => _modelRouter;
+
+  Future<void> loadModelRouter() async {
+    try {
+      final out = await _runRexArgs(['models', '--json'], timeout: 10);
+      final json = _extractJson(out);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map) {
+          _modelRouter = parsed.map((k, v) => MapEntry(k.toString(), v.toString()));
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<String> runQuickSetup() async {
     try {
       return await _runRexArgs(['setup', '--quick'], timeout: 30);

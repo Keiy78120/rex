@@ -364,8 +364,13 @@ async function main() {
     }
 
     case 'models': {
-      const { showModelRouter } = await import('./router.js')
-      await showModelRouter()
+      const { showModelRouter, getRouterSnapshot } = await import('./router.js')
+      if (process.argv.includes('--json')) {
+        const snap = await getRouterSnapshot()
+        console.log(JSON.stringify(snap, null, 2))
+      } else {
+        await showModelRouter()
+      }
       break
     }
 

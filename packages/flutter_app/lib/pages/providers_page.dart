@@ -19,6 +19,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
     rex.loadInventory();
     rex.loadBudget();
     rex.loadRunbooks();
+    rex.loadModelRouter();
   }
 
   @override
@@ -61,6 +62,8 @@ class _ProvidersPageState extends State<ProvidersPage> {
                 _ProvidersSection(providers: rex.providers),
                 const SizedBox(height: 8),
                 _FreeTiersSection(),
+                const SizedBox(height: 8),
+                _ModelRouterSection(),
                 const SizedBox(height: 8),
                 _ApiKeysSection(),
                 const SizedBox(height: 8),
@@ -310,6 +313,83 @@ class _ProviderRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// -- Model Router Section --
+
+class _ModelRouterSection extends StatelessWidget {
+  static const _taskIcons = {
+    'background': CupertinoIcons.bolt_fill,
+    'categorize': CupertinoIcons.tag_fill,
+    'consolidate': CupertinoIcons.layers_fill,
+    'gateway': CupertinoIcons.paperplane_fill,
+    'optimize': CupertinoIcons.sparkles,
+    'reason': CupertinoIcons.bubble_left_bubble_right_fill,
+    'code': CupertinoIcons.chevron_left_slash_chevron_right,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<RexService>(
+      builder: (context, rex, _) {
+        final router = rex.modelRouter;
+        return RexCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const RexSection(
+                title: 'Local Model Router',
+                icon: CupertinoIcons.arrow_branch,
+              ),
+              if (router.isEmpty)
+                const RexEmptyState(
+                  icon: CupertinoIcons.cube,
+                  title: 'Ollama not detected',
+                  subtitle: 'Start Ollama to see model routing.',
+                )
+              else
+                ...router.entries.map((e) {
+                  final icon = _taskIcons[e.key] ?? CupertinoIcons.circle;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Icon(icon, size: 13, color: context.rex.textTertiary),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 80,
+                          child: Text(
+                            e.key,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: context.rex.textSecondary,
+                            ),
+                          ),
+                        ),
+                        Icon(CupertinoIcons.chevron_right, size: 9, color: context.rex.textTertiary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            e.value,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontFamily: 'Menlo',
+                              color: context.rex.accent,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
+        );
+      },
     );
   }
 }
