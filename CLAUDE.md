@@ -63,7 +63,14 @@ packages/
 │       ├── self-improve.ts Lesson extraction + rule promotion
 │       ├── daemon.ts      Unified background daemon
 │       ├── router.ts      Task-aware model routing
-│       └── logger.ts      Centralized logging (console + file, levels, rotation)
+│       ├── logger.ts      Centralized logging (console + file, levels, rotation)
+│       ├── project-intent.ts  Signal-based intent detection (0 LLM)
+│       ├── quick-setup.ts     rex setup --quick (zero-question auto-config)
+│       ├── account-pool.ts    Multi-account Claude rotation + rate-limit tracking
+│       ├── free-tiers.ts      Free tier API catalog (Groq/Cerebras/Together/Mistral/etc)
+│       └── [backend/]    backup, budget, event-journal, guard-manager, hub, inventory,
+│                         memory-check, node, observer, orchestrator, reflector, review,
+│                         semantic-cache, sync-queue, sync, workflow, backend-runner
 ├── core/        Checks partagés (rex doctor)
 ├── memory/      Embed + search (nomic-embed-text + SQLite)
 ├── flutter_app/ App macOS native
@@ -327,9 +334,36 @@ rex doctor --fix     # Auto-fix then health check
 | **Flutter _extractJson** helper (defensive JSON extraction from mixed CLI output) | `rex_service.dart` |
 | **Fix _stripAnsi regex** (was missing non-m ANSI codes) | `rex_service.dart` |
 
+### ✅ Terminé (session 2026-03-09)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **Ingest ESM bug fix** (acquireLock() used require() in ESM — silent no-op for 2 days) | `packages/memory/src/ingest.ts` |
+| **Adaptive ingest modes** (bulk/fast/smart/offline — dynamic, replaces SMART_INGEST env) | `packages/memory/src/ingest.ts` |
+| **Vercel AI SDK v6 + free-tiers** (Groq/Cerebras/Together/Mistral/OpenRouter/DeepSeek) | `packages/cli/src/free-tiers.ts`, `llm.ts`, `providers.ts` |
+| **rex free-tiers** command (status + --test validation) | `packages/cli/src/index.ts` |
+| **Flutter UI rework** (shared widgets, network page, providers page, 8 pages updated) | `packages/flutter_app/lib/` |
+| **project-intent.ts** (signal-based intent detection — zero LLM) | `packages/cli/src/project-intent.ts` |
+| **preload.ts** wired to inject intent line in SessionStart context | `packages/cli/src/preload.ts` |
+| **rex intent** CLI command (--debug, --json) | `packages/cli/src/index.ts` |
+| **rex setup --quick** (zero-question: detect Ollama/API keys/Claude/Tailscale, write config) | `packages/cli/src/quick-setup.ts` |
+| **account-pool.ts** (multi-account Claude rotation, rate-limit tracking, acquire/release) | `packages/cli/src/account-pool.ts` |
+| **agents.ts: account pool integration** (selectAccount in runWithClaude, rate-limit detection) | `packages/cli/src/agents.ts` |
+| **agents.ts: runWithCodex()** (Codex exec --full-auto --json, dispatch as model='codex') | `packages/cli/src/agents.ts` |
+| **rex pool** command (list accounts, setup hint) | `packages/cli/src/index.ts` |
+| **PR #6** feat/litellm-phase2 → main | GitHub |
+| **Architecture decision** : Claude Code = seul orchestrateur user-facing, Codex = background worker | `CLAUDE.md` |
+| **Living REX manifesto** + Setup wizard 5 étapes | `docs/plans/living-rex-vision.md`, `docs/plans/2026-03-09-rex-setup-wizard.md` |
+
 ### 🔄 En cours / A faire
 
-**AUDIT v7 (2026-03-08)** : 75% DONE (CLI 28+ cmds, Flutter 12 pages, Memory no-loss, Gateway v3, Backend core done), 25% TODO (hub, LiteLLM, cross-platform).
+**AUDIT v7 (2026-03-09)** : 85% DONE. Remaining:
+- Hub API (Phase 3) — REST routes /health /nodes /tasks /events
+- LiteLLM proxy integration (auto-rotation when free tier hits rate limit)
+- Free model catalog (RPM/TPM limits DB)
+- Cross-platform Flutter (Windows/Linux)
+- MCP one-click marketplace install
+- Setup wizard Flutter pages (P3)
 
 ---
 
@@ -343,7 +377,9 @@ REX = **hub centralisateur** de toutes les ressources disponibles pour un dev so
 - **Tools/MCP** : marketplace dynamique, awesome-mcp-server, install one-click, activation/desactivation
 - **Memory** : semantique partagee (SQLite + embeddings), accessible par TOUS les orchestrators
 
-**Orchestrators principaux** : Claude Code + Codex (les 2 seuls pour l'instant). Tous les autres (ChatGPT, Gemini, etc.) sont des providers/workers, pas des orchestrators.
+**Orchestrators** : **Claude Code = seul orchestrateur user-facing.** Codex = worker background uniquement (dispatché par REX en mode non-interactif via `codex exec --full-auto`). Tous les autres (ChatGPT, Gemini, etc.) sont des providers/workers, jamais des co-orchestrateurs.
+
+**Principe 70/30** : 70% scripts/CLI/rules/open-source, 30% LLM. REX choisit dynamiquement : si des règles peuvent répondre, pas de LLM. Si l'intent est détecté par signal filesystem/git, pas de LLM. LLM uniquement quand les règles ne suffisent pas.
 
 **Principe directeur** : tout est automatique, zero setup complique pour l'user. REX detecte, configure et propose. L'user valide ou override.
 
