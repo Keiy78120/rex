@@ -384,6 +384,7 @@ export async function daemon(): Promise<void> {
   let lastNodeRegister = 0  // register immediately on start
   let lastSessionGuard = 0  // check immediately
   let lastCurious = Date.now() - 23 * 60 * 60 * 1000  // run ~1h after daemon start
+  let lastDailySummaryDate = ''  // tracks 'YYYY-MM-DD' to send once per day
 
   // Run maintenance immediately on start
   await maintenanceCycle()
@@ -471,6 +472,24 @@ export async function daemon(): Promise<void> {
         log.debug(`Node registration skipped: ${e.message?.slice(0, 80)}`)
       }
       lastNodeRegister = now
+    }
+
+    // Daily dev summary push to Telegram at configurable hour (default 22:00)
+    const todayStr = new Date().toISOString().split('T')[0]
+    const currentHour = new Date().getHours()
+    const summaryHour = (config as any).daemon?.summaryHour ?? 22
+    if (currentHour === summaryHour && lastDailySummaryDate !== todayStr) {
+      lastDailySummaryDate = todayStr
+      try {
+        const { getDevStatus, formatDevStatusTelegram } = await import('./dev-monitor.js')
+        const report = await getDevStatus()
+        if (report.totalCommits > 0 || report.sessionCount > 0) {
+          await sendTelegramNotify(formatDevStatusTelegram(report))
+          log.info(`Daily summary sent: ${report.totalCommits} commits, ${report.sessionCount} sessions`)
+        }
+      } catch (e: any) {
+        log.debug(`Daily summary skipped: ${e.message?.slice(0, 80)}`)
+      }
     }
 
     // Session guard — check context window + daily budget every 5 min

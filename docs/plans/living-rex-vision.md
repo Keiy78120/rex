@@ -431,7 +431,7 @@ Il est curieux : il cherche activement de nouvelles solutions.
 | Provider auto-routing | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Gateway mobile | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Ingest adaptatif | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Setup wizard zero-config | ❌ | ❌ | ❌ | ❌ | 🔄 |
+| Setup wizard zero-config | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Tunnels sécurisés auto | ❌ | ❌ | ❌ | ❌ | 🔄 |
 | Monitor vie dev | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Fine-tuning modèle | ❌ | ❌ | ❌ | ❌ | 🔄 |
