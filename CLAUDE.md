@@ -428,6 +428,22 @@ rex doctor --fix     # Auto-fix then health check
 | Flutter build ✅ (clean) | — |
 | CLI build ✅ (pnpm build — zero errors) | — |
 
+### ✅ Terminé (session 2026-03-11 — health dashboard + projects UX)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| Health page: Token Budget section (context %, daily %, burn rate, compact alert) | `health_page.dart` |
+| Health page: Quick Setup button in actions bar | `health_page.dart` |
+| Health page: loadBurnRate + checkSessionGuard on init + refresh | `health_page.dart` |
+| Fixed field names to match CLI JSON (compactNeeded, burnRatePerHour, dailyTotal) | `health_page.dart` |
+| Projects page: "Open in Claude" button per project card (rex launch --path) | `projects_page.dart` |
+| Projects page: fix unsafe `.cast<String>()` → `.whereType<String>()` | `projects_page.dart` |
+| `rex launch --path=<dir>` subcommand added to index.ts | `index.ts` |
+| `launchProject(path)` + `runQuickSetup()` added to RexService | `rex_service.dart` |
+| Network page: fix unsafe `.cast<>()` on hub nodes list | `network_page.dart` |
+| Adaptive daemon ingest (latency probe + urgency/backlog/slow/normal modes) | `daemon.ts` |
+| Gateway: /pool, /burn, /free, /intent commands + Advanced menu buttons + callbacks | `gateway.ts` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 IN PROGRESS**:
