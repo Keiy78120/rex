@@ -175,7 +175,7 @@ class _HubCard extends StatelessWidget {
     final running = hub?['running'] == true;
     final port = hub?['port'] as int?;
     final nodesCount = (hub?['nodesCount'] as int?) ?? 0;
-    final nodes = (hub?['nodes'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final nodes = (hub?['nodes'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? [];
     return RexCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
