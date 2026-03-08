@@ -13,6 +13,8 @@ class ProvidersPage extends StatefulWidget {
 }
 
 class _ProvidersPageState extends State<ProvidersPage> {
+  bool _generatingLiteLLM = false;
+
   void _loadAll() {
     final rex = context.read<RexService>();
     rex.loadProviders();
@@ -28,16 +30,44 @@ class _ProvidersPageState extends State<ProvidersPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadAll());
   }
 
+  Future<void> _generateLiteLLM() async {
+    setState(() => _generatingLiteLLM = true);
+    final out = await context.read<RexService>().generateLiteLLMConfig();
+    if (!mounted) return;
+    setState(() => _generatingLiteLLM = false);
+    if (out.isNotEmpty) {
+      showCupertinoDialog(
+        context: context,
+        builder: (_) => CupertinoAlertDialog(
+          title: const Text('LiteLLM Config'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(out, style: const TextStyle(fontSize: 11)),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              child: const Text('OK'),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return RexPageLayout(
       title: 'Providers',
       actions: [
-        RexHeaderButton(
-          icon: CupertinoIcons.doc_text,
-          label: 'LiteLLM',
-          onPressed: () => context.read<RexService>().generateLiteLLMConfig(),
-        ),
+        _generatingLiteLLM
+            ? const CupertinoActivityIndicator()
+            : RexHeaderButton(
+                icon: CupertinoIcons.doc_text,
+                label: 'LiteLLM',
+                onPressed: _generateLiteLLM,
+              ),
         RexHeaderButton(
           icon: CupertinoIcons.refresh,
           label: 'Refresh',

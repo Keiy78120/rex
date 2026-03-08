@@ -2227,10 +2227,13 @@ $transcript
     notifyListeners();
   }
 
-  Future<void> generateLiteLLMConfig() async {
+  Future<String> generateLiteLLMConfig() async {
     try {
-      await _runRexArgs(['litellm-config'], timeout: 15);
-    } catch (_) {}
+      final out = await _runRexArgs(['litellm-config'], timeout: 15);
+      return _stripAnsi(out);
+    } catch (e) {
+      return 'Error: $e';
+    }
   }
 
   Map<String, String> _modelRouter = {};
