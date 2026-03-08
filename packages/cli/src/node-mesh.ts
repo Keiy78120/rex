@@ -13,7 +13,7 @@
 import { execSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { hostname, platform, networkInterfaces } from 'node:os'
+import { hostname, platform, networkInterfaces, cpus, totalmem } from 'node:os'
 import { homedir } from 'node:os'
 import { createLogger } from './logger.js'
 import { REX_DIR, ensureRexDirs } from './paths.js'
@@ -34,13 +34,20 @@ export interface NodeCapabilities {
   ssh: boolean        // ssh server running
 }
 
+export interface NodeCapacity {
+  cpuCores: number       // logical CPU count
+  ramGb: number          // total RAM in GB (rounded)
+  ollamaModels: string[] // model names loaded in Ollama (non-embed)
+}
+
 export interface MeshNode {
   id: string
   hostname: string
   platform: string
   ip: string
   capabilities: string[]   // keys of NodeCapabilities that are true
-  score: number            // capability count — higher = preferred
+  score: number            // weighted score — higher = preferred
+  capacity?: NodeCapacity  // hardware capacity (set by buildLocalNodeInfo)
   lastSeen: string
   registeredAt: string
   status?: 'healthy' | 'stale' | 'offline'
@@ -165,6 +172,43 @@ function sshRunning(): boolean {
 }
 
 /**
+ * Detect hardware capacity of the local node.
+ * Zero LLM — OS APIs + Ollama tag list.
+ */
+export function detectLocalCapacity(): NodeCapacity {
+  const cpuCores = cpus().length
+  const ramGb = Math.round(totalmem() / (1024 ** 3))
+
+  // Get Ollama models (non-embed, non-vision) from /api/tags
+  let ollamaModels: string[] = []
+  try {
+    const out = execSync('curl -sf http://localhost:11434/api/tags', { timeout: 2000, stdio: 'pipe' }).toString()
+    const data = JSON.parse(out) as { models?: Array<{ name: string }> }
+    ollamaModels = (data.models ?? [])
+      .map(m => m.name)
+      .filter(n => !n.includes('embed') && !n.includes('vision'))
+  } catch {}
+
+  return { cpuCores, ramGb, ollamaModels }
+}
+
+/**
+ * Compute a weighted score for a node.
+ * Base: capability count (×10)
+ * Bonus: GPU (+20), RAM per 8GB (+5), CPU per 8 cores (+5), Ollama models (+3 each, max +15)
+ */
+function computeScore(caps: string[], capacity?: NodeCapacity): number {
+  let score = caps.length * 10
+  if (caps.includes('gpu'))     score += 20
+  if (capacity) {
+    score += Math.floor(capacity.ramGb / 8) * 5
+    score += Math.floor(capacity.cpuCores / 8) * 5
+    score += Math.min(capacity.ollamaModels.length * 3, 15)
+  }
+  return score
+}
+
+/**
  * Detect all local capabilities.
  * Uses parallel async detection where possible, short timeouts throughout.
  * Zero LLM — pure script/process checks.
@@ -196,6 +240,7 @@ export function buildLocalNodeInfo(): MeshNode {
   const active = Object.entries(caps)
     .filter(([, v]) => v)
     .map(([k]) => k)
+  const capacity = detectLocalCapacity()
 
   return {
     id:           getNodeId(),
@@ -203,7 +248,8 @@ export function buildLocalNodeInfo(): MeshNode {
     platform:     platform(),
     ip:           getLocalIp(),
     capabilities: active,
-    score:        active.length,
+    score:        computeScore(active, capacity),
+    capacity,
     lastSeen:     new Date().toISOString(),
     registeredAt: new Date().toISOString(),
   }
@@ -383,7 +429,8 @@ export function upsertNode(
     platform:     info.platform,
     ip:           info.ip,
     capabilities: caps,
-    score:        caps.length,
+    score:        computeScore(caps, info.capacity),
+    capacity:     info.capacity,
     lastSeen:     now,
     registeredAt: existing?.registeredAt ?? now,
   }
@@ -470,7 +517,12 @@ export async function printMeshStatus(): Promise<void> {
               : n.status === 'stale'   ? `${yellow}●${reset}`
               : `${red}○${reset}`
     const caps = n.capabilities.length > 0 ? n.capabilities.join(', ') : 'none'
-    console.log(`${dot}  ${bold}${n.hostname.padEnd(20)}${reset}  ${n.ip.padEnd(16)}  ${dim}${caps}${reset}`)
+    const hwInfo = n.capacity
+      ? `  ${dim}${n.capacity.cpuCores}c ${n.capacity.ramGb}GB` +
+        (n.capacity.ollamaModels.length ? ` ${n.capacity.ollamaModels.length}model(s)` : '') +
+        `${reset}`
+      : ''
+    console.log(`${dot}  ${bold}${n.hostname.padEnd(20)}${reset}  ${n.ip.padEnd(16)}  ${dim}${caps}${reset}${hwInfo}  ${dim}score=${n.score}${reset}`)
   }
 
   const healthy = nodes.filter(n => n.status === 'healthy').length
