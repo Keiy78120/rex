@@ -728,6 +728,7 @@ $transcript
       loadAgents(),
       loadMcpServers(),
       loadBackgroundProcesses(),
+      loadBurnRate(),
     ]);
 
     isLoading = false;
