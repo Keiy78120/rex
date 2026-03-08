@@ -2018,6 +2018,39 @@ $transcript
     notifyListeners();
   }
 
+  // ── Review ─────────────────────────────────────────────────────────
+
+  List<Map<String, dynamic>> _reviewResults = [];
+  bool _isReviewing = false;
+  String _reviewMode = 'quick';
+
+  List<Map<String, dynamic>> get reviewResults => _reviewResults;
+  bool get isReviewing => _isReviewing;
+  String get reviewMode => _reviewMode;
+
+  Future<void> runReview({String mode = 'quick'}) async {
+    _isReviewing = true;
+    _reviewMode = mode;
+    _reviewResults = [];
+    notifyListeners();
+    try {
+      final modeArg = mode == 'full' ? '--full' : mode == 'ai' ? '--ai' : null;
+      final args = ['review', '--json', if (modeArg != null) modeArg];
+      final output = await _runRexArgs(args, timeout: 120);
+      final json = _extractJson(output);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json) as Map<String, dynamic>;
+        _reviewResults = (parsed['results'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+      }
+    } catch (_) {}
+    _isReviewing = false;
+    notifyListeners();
+  }
+
+  // ── End Review ──────────────────────────────────────────────────────
+
   @override
   void dispose() {
     _recordingTimer?.cancel();

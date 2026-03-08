@@ -372,12 +372,36 @@ rex doctor --fix     # Auto-fix then health check
 | Auto-provider rotation: callWithAutoFallback() — tries all, skips rate-limited | `free-tiers.ts` |
 | PR #7: feat/hub-registry-recommendations | GitHub |
 
+### ✅ Terminé (session 2026-03-10 — adaptive loading + mesh + setup wizard + review UI)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| context-loader.ts: IntentContext → ContextProfile (7 intents, guards/MCPs/skills) | `context-loader.ts` |
+| preload.ts: wired context-loader — buildContextProfile() remplace intentToPreloadLine() | `preload.ts` |
+| rex-launcher.ts: single entry point (user tape `rex` pas `claude`) + PID + recovery | `rex-launcher.ts` |
+| node-mesh.ts: REX Fabric — capability detection zero LLM, routeTask(), hub registration | `node-mesh.ts` |
+| paths.ts: LAUNCHER_PID_PATH + RECOVERY_STATE_PATH | `paths.ts` |
+| daemon.ts: buildLocalNodeInfo() + registerWithHub() toutes les 60s | `daemon.ts` |
+| hub.ts: GET /api/nodes/status via getMeshStatus() | `hub.ts` |
+| gateway.ts: routeTask('llm') avant handleText() — mesh routing | `gateway.ts` |
+| index.ts: `rex` (no subcommand) → launchRex(), `rex kill`, `rex relaunch`, `rex mesh/nodes` | `index.ts` |
+| §20 action.md: context-loader spec | `docs/plans/action.md` |
+| §21 action.md: rex-launcher + node-mesh spec | `docs/plans/action.md` |
+| §22 action.md: Token Economy rules | `docs/plans/action.md` |
+| §23 action.md: REX uses REX — internal routing rule | `docs/plans/action.md` |
+| setup-wizard.ts: parallel discovery (Promise.all) + wow moment display + organize phase | `setup-wizard.ts` |
+| index.ts: `rex setup` → setupWizard(), first-run detection | `index.ts` |
+| review_page.dart: Review UI — Quick/Full modes, banner, result rows, status chips | `review_page.dart` |
+| rex_service.dart: runReview() + reviewResults + isReviewing state | `rex_service.dart` |
+| main.dart + rex_sidebar.dart: ReviewPage wired (13 pages, shield icon) | `main.dart`, `rex_sidebar.dart` |
+| §23 audit: zero direct SDK calls in any CLI file — all routed via orchestrator chain | all `cli/src/*.ts` |
+
 ### 🔄 En cours / A faire
 
-**AUDIT v7 (2026-03-09)** : 90% DONE. Remaining:
-- MCP one-click marketplace install (guard-ast, config-lint, burn-rate, mcp-discover wiring)
-- Cross-platform Flutter (Windows/Linux)
-- Setup wizard Flutter pages (P3)
+**AUDIT v7 (Phase 2 ~95% DONE)** Remaining:
+- sandbox_page.dart — agent sandboxed execution UI (P3)
+- Cross-platform Flutter (Windows/Linux) — Phase 3
+- MCP one-click from marketplace to installed (UI flow)
 
 ---
 
@@ -405,16 +429,20 @@ REX = **hub centralisateur** de toutes les ressources disponibles pour un dev so
 
 CLI, Gateway Telegram, Memory, Flutter app, Doctor, Daemon, Agents, MCP registry, Provider detection, Budget tracking, Event journal, Semantic cache, Backup/restore, Git workflow, Guard manager, Review pipeline, Observer/Reflector, Sync degraded mode, Install profiles, Orchestrator base, Resource inventory, Backend runner.
 
-### Phase 2 — Integration & Marketplace (EN COURS)
+### Phase 2 — Integration & Marketplace (✅ 95% DONE)
 
-| Tache | Priorite | Detail |
-|-------|----------|--------|
-| **MCP Marketplace hub** | 🔴 CRITIQUE | Connexion aux hubs MCP (awesome-mcp-server GitHub, registres tiers). Browse, search, one-click install dans REX. L'user clique "Download" → installe + active le MCP automatiquement |
-| **LiteLLM integration** | 🔴 CRITIQUE | Proxy unifie pour free tiers (Groq free, Together free, Cerebras, HF Inference). Auto-detection des cles API + rate limits. REX gere la rotation entre providers free quand un atteint sa limite |
-| **Providers API key config** | 🔴 CRITIQUE | UI Flutter dans Providers page : champs pour ANTHROPIC_API_KEY, OPENAI_API_KEY, GROQ_API_KEY, TOGETHER_API_KEY, etc. Sauvegarde dans settings.json env. Validation live (test API call) |
-| **Free model catalog** | HAUTE | Base de donnees des modeles gratuits : Groq (Llama 3.1 70B free), Together (Llama free tier), Cerebras (Llama fast), HF (Inference API free), Mistral (free tier). Avec limites connues (RPM, TPM, quotas) |
-| **Auto-provider rotation** | HAUTE | Quand un free tier atteint sa rate limit, REX bascule auto sur le suivant. Ordre : Groq → Cerebras → Together → HF → Ollama local → subscription |
-| **Proactive session management** | HAUTE | REX doit detecter et gerer proactivement : rate limits (prevoir compaction avant epuisement), context window usage (auto-compact a 70%), session continuity (sauvegarder etat avant coupure) |
+| Tache | Status | Detail |
+|-------|--------|--------|
+| **MCP Marketplace hub** | ✅ DONE | mcp_registry.ts + marketplace cache (20 serveurs), search/install CLI |
+| **LiteLLM integration** | ✅ DONE | litellm-config.ts — génère litellm_config.yaml depuis providers détectés |
+| **Providers API key config** | ✅ DONE | providers_page.dart + settings Advanced + callWithAutoFallback() |
+| **Free model catalog** | ✅ DONE | free-tiers.ts — Groq, Cerebras, Together, HF, Mistral, Cohere, OpenRouter + RPM |
+| **Auto-provider rotation** | ✅ DONE | callWithAutoFallback() — rotation auto sur 429, skip providers rate-limités |
+| **Context adaptive loading** | ✅ DONE | context-loader.ts + rex-launcher.ts — intent → guards/MCPs/skills à la volée |
+| **Node mesh fabric** | ✅ DONE | node-mesh.ts — capability detection zero LLM, hub registration, routeTask() |
+| **Setup wizard** | ✅ DONE | setup-wizard.ts — parallel discovery, wow moment, first-run detection |
+| **Review UI** | ✅ DONE | review_page.dart — Quick/Full, result rows, status chips |
+| **Proactive session management** | 🔄 PARTIAL | auto-compact 75% configuré, session continuity via recovery-state.json |
 
 ### Phase 3 — Hub & Multi-node (FUTUR)
 
