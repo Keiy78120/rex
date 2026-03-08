@@ -72,7 +72,7 @@ function findGitRepos(rootDir: string, depth = 2): string[] {
     if (currentDepth > depth) return
     try {
       const entries = readdirSync(dir)
-      if (entries.includes('.git')) {
+      if (currentDepth > 0 && entries.includes('.git')) {
         repos.push(dir)
         return  // don't recurse into git repos
       }
