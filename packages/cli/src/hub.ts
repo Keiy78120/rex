@@ -383,6 +383,219 @@ addRoute('GET', '/api/v1/monitor', async (_req, res) => {
   }
 })
 
+// ── Web Dashboard ──────────────────────────────────────
+
+function buildDashboardHtml(): string {
+  const port = parseInt(process.env.REX_HUB_PORT ?? String(DEFAULT_PORT), 10)
+  const token = HUB_TOKEN ? `?token=${HUB_TOKEN}` : ''
+  const apiBase = `/api`
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REX Dashboard</title>
+  <style>
+    :root { --bg: #1c1c24; --surface: #26262f; --card: #2e2e3a; --accent: #e5484d; --text: #f0f0f5; --dim: #8888a0; --green: #4caf50; --yellow: #ffb347; --red: #e5484d; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', monospace; font-size: 14px; }
+    .header { background: var(--surface); border-bottom: 1px solid #333; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+    .logo { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; }
+    .header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; }
+    .header .status { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; padding: 20px 24px; }
+    .card { background: var(--card); border-radius: 10px; padding: 16px; border: 1px solid rgba(255,255,255,0.06); }
+    .card h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin-bottom: 12px; }
+    .stat { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .stat:last-child { border-bottom: none; }
+    .stat-label { color: var(--dim); }
+    .stat-value { font-weight: 600; font-family: 'SF Mono', monospace; }
+    .repo-bar { margin: 6px 0; }
+    .repo-name { font-size: 12px; color: var(--dim); margin-bottom: 2px; }
+    .repo-row { display: flex; align-items: center; gap: 8px; }
+    .bar { height: 6px; background: var(--accent); border-radius: 3px; min-width: 4px; }
+    .bar-label { font-size: 11px; color: var(--dim); }
+    .badge { display: inline-block; background: rgba(229,72,77,0.15); color: var(--accent); padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+    .loading { color: var(--dim); text-align: center; padding: 20px; }
+    .err { color: var(--red); font-size: 12px; }
+    .memory-list { max-height: 200px; overflow-y: auto; }
+    .memory-item { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; color: var(--dim); }
+    .memory-item:last-child { border-bottom: none; }
+    .category { display: inline-block; background: rgba(255,255,255,0.08); padding: 1px 6px; border-radius: 3px; font-size: 10px; margin-right: 4px; }
+    .refresh-btn { background: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-left: auto; }
+    .refresh-btn:hover { opacity: 0.85; }
+    .footer { text-align: center; padding: 16px; color: var(--dim); font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">R</div>
+    <h1>REX Dashboard</h1>
+    <div class="status">
+      <div class="dot" id="status-dot"></div>
+      <span id="status-text">Connecting…</span>
+      <button class="refresh-btn" onclick="loadAll()">Refresh</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card" id="health-card">
+      <h2>Health</h2>
+      <div class="loading">Loading…</div>
+    </div>
+    <div class="card" id="monitor-card">
+      <h2>Dev Activity (24h)</h2>
+      <div class="loading">Loading…</div>
+    </div>
+    <div class="card" id="memory-card">
+      <h2>Memory</h2>
+      <div class="loading">Loading…</div>
+    </div>
+    <div class="card" id="nodes-card">
+      <h2>Nodes</h2>
+      <div class="loading">Loading…</div>
+    </div>
+    <div class="card" id="events-card">
+      <h2>Recent Events</h2>
+      <div class="loading">Loading…</div>
+    </div>
+    <div class="card" id="queue-card">
+      <h2>Sync Queue</h2>
+      <div class="loading">Loading…</div>
+    </div>
+  </div>
+
+  <div class="footer">REX Hub · port ${port} · <span id="last-refresh">never</span></div>
+
+  <script>
+    const BASE = '${apiBase}';
+    const HEADERS = {};
+
+    async function get(path) {
+      const r = await fetch(BASE + path, { headers: HEADERS });
+      if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+      return r.json();
+    }
+
+    function stat(label, value) {
+      return '<div class="stat"><span class="stat-label">' + label + '</span><span class="stat-value">' + value + '</span></div>';
+    }
+
+    async function loadHealth() {
+      const card = document.getElementById('health-card');
+      try {
+        const d = await get('/health');
+        const dot = document.getElementById('status-dot');
+        const txt = document.getElementById('status-text');
+        dot.style.background = d.status === 'healthy' ? '#4caf50' : '#ffb347';
+        txt.textContent = d.status.toUpperCase();
+        card.innerHTML = '<h2>Health</h2>' +
+          stat('Status', '<span class="badge">' + d.status + '</span>') +
+          stat('Version', d.version ?? '—') +
+          stat('Node', d.hostname ?? '—') +
+          stat('Uptime', d.uptime ? Math.floor(d.uptime / 60) + 'm' : '—');
+      } catch(e) { card.innerHTML = '<h2>Health</h2><div class="err">' + e.message + '</div>'; }
+    }
+
+    async function loadMonitor() {
+      const card = document.getElementById('monitor-card');
+      try {
+        const d = await get('/v1/monitor');
+        let html = '<h2>Dev Activity (24h)</h2>' +
+          stat('Commits', d.totalCommits) +
+          stat('Sessions', d.sessionCount) +
+          stat('Pending memories', d.pendingMemories);
+        if (d.commits && d.commits.length > 0) {
+          html += '<div style="margin-top:10px">';
+          const max = Math.max(...d.commits.slice(0,5).map(c => c.count));
+          d.commits.slice(0,5).forEach(c => {
+            const w = Math.max(8, Math.round((c.count / max) * 120));
+            html += '<div class="repo-bar"><div class="repo-name">' + c.repo + '</div>' +
+              '<div class="repo-row"><div class="bar" style="width:' + w + 'px"></div><span class="bar-label">' + c.count + 'c — ' + c.lastMessage.slice(0,45) + '</span></div></div>';
+          });
+          html += '</div>';
+        }
+        card.innerHTML = html;
+      } catch(e) { card.innerHTML = '<h2>Dev Activity</h2><div class="err">' + e.message + '</div>'; }
+    }
+
+    async function loadMemory() {
+      const card = document.getElementById('memory-card');
+      try {
+        const d = await get('/v1/memory');
+        let html = '<h2>Memory</h2>' +
+          stat('Total', d.total) +
+          stat('Pending', d.pendingCount);
+        if (d.byCategory) {
+          html += '<div style="margin-top:10px">';
+          Object.entries(d.byCategory).slice(0,6).forEach(([k,v]) => {
+            html += stat('<span class="category">' + k + '</span>', v);
+          });
+          html += '</div>';
+        }
+        card.innerHTML = html;
+      } catch(e) { card.innerHTML = '<h2>Memory</h2><div class="err">' + e.message + '</div>'; }
+    }
+
+    async function loadNodes() {
+      const card = document.getElementById('nodes-card');
+      try {
+        const d = await get('/nodes');
+        const nodes = d.data?.nodes ?? d.nodes ?? [];
+        let html = '<h2>Nodes</h2>' + stat('Total', nodes.length);
+        nodes.slice(0,5).forEach(n => {
+          const online = n.lastSeen && (Date.now() - new Date(n.lastSeen).getTime()) < 120000;
+          html += stat(n.hostname ?? n.id, '<span style="color:' + (online ? '#4caf50' : '#888') + '">' + (online ? '● online' : '○ offline') + '</span>');
+        });
+        if (nodes.length === 0) html += '<div style="color:var(--dim);padding:8px 0;font-size:12px">No nodes registered</div>';
+        card.innerHTML = html;
+      } catch(e) { card.innerHTML = '<h2>Nodes</h2><div class="err">' + e.message + '</div>'; }
+    }
+
+    async function loadEvents() {
+      const card = document.getElementById('events-card');
+      try {
+        const d = await get('/v1/events?limit=6');
+        const events = d.data?.events ?? d.events ?? [];
+        let html = '<h2>Recent Events</h2>';
+        if (events.length === 0) {
+          html += '<div style="color:var(--dim);padding:8px 0;font-size:12px">No events yet</div>';
+        } else {
+          events.slice(0,6).forEach(ev => {
+            const ts = new Date(ev.ts ?? ev.timestamp ?? ev.created_at).toLocaleTimeString();
+            html += '<div class="memory-item"><span class="category">' + (ev.type ?? 'event') + '</span>' + ts + ' — ' + (ev.source ?? '') + '</div>';
+          });
+        }
+        card.innerHTML = html;
+      } catch(e) { card.innerHTML = '<h2>Recent Events</h2><div class="err">' + e.message + '</div>'; }
+    }
+
+    async function loadQueue() {
+      const card = document.getElementById('queue-card');
+      try {
+        const d = await get('/v1/queue/stats');
+        const s = d.data ?? d;
+        card.innerHTML = '<h2>Sync Queue</h2>' +
+          stat('Total events', s.total ?? '—') +
+          stat('Unacked', s.unacked ?? '—') +
+          stat('Acked', s.acked ?? '—');
+      } catch(e) { card.innerHTML = '<h2>Sync Queue</h2><div class="err">' + e.message + '</div>'; }
+    }
+
+    async function loadAll() {
+      document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+      await Promise.allSettled([loadHealth(), loadMonitor(), loadMemory(), loadNodes(), loadEvents(), loadQueue()]);
+    }
+
+    loadAll();
+    setInterval(loadAll, 30000); // auto-refresh every 30s
+  </script>
+</body>
+</html>`
+}
+
 // ── Server lifecycle ───────────────────────────────────
 
 export async function startHub(port?: number): Promise<void> {
@@ -410,6 +623,14 @@ export async function startHub(port?: number): Promise<void> {
 
     const urlPath = req.url?.split('?')[0] ?? '/'
     const method = req.method ?? 'GET'
+
+    // Serve web dashboard at root (no auth needed — Tailscale handles perimeter)
+    if (urlPath === '/' || urlPath === '/dashboard') {
+      const html = buildDashboardHtml()
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end(html)
+      return
+    }
 
     // Auth middleware — skip for /api/health (always public)
     if (HUB_TOKEN && urlPath !== '/api/health') {
