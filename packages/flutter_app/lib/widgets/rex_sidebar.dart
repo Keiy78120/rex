@@ -245,6 +245,10 @@ class _SidebarFooter extends StatelessWidget {
         );
         final contextPct = (rex.burnRate['contextPercent'] as num?)?.toDouble() ?? 0;
         final dailyPct = (rex.burnRate['dailyPercent'] as num?)?.toDouble() ?? 0;
+        final burnRatePerHour = (rex.burnRate['burnRatePerHour'] as num?)?.toDouble() ?? 0;
+        final burnRateStr = burnRatePerHour >= 1000
+            ? '${(burnRatePerHour / 1000).toStringAsFixed(1)}k/h'
+            : '${burnRatePerHour.round()}/h';
 
         Color contextColor = CupertinoColors.systemGreen;
         if (contextPct >= 90) contextColor = CupertinoColors.systemRed;
@@ -319,6 +323,13 @@ class _SidebarFooter extends StatelessWidget {
                     ],
                   ],
                 ),
+                if (burnRatePerHour > 0) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '⚡ $burnRateStr',
+                    style: TextStyle(fontSize: 10, color: context.rex.textTertiary),
+                  ),
+                ],
               ],
               const SizedBox(height: 5),
               Text(
