@@ -311,3 +311,136 @@ export async function orchestrate(req: OrchestrateRequest): Promise<OrchestrateR
     progressLog: progressLog.length ? progressLog.map(p => p.handoffNote).join(' → ') : undefined,
   }
 }
+
+// ── Specialist profiles ────────────────────────────────
+// Each specialist knows its own limits and acts accordingly.
+// Before attempting, it checks if the task fits its profile.
+// If not → it documents why and passes the baton immediately.
+
+export interface SpecialistProfile {
+  kind: SpecialistKind
+  model: string
+  maxContextTokens: number      // context window limit
+  maxOutputTokens: number
+  avgLatencyMs: number          // expected latency
+  strengths: string[]           // task types it handles well
+  weaknesses: string[]          // task types it should avoid
+  costPerMToken: number         // USD per million tokens (0 = free)
+  canHandle: (req: OrchestrateRequest, inputTokens: number) => boolean
+  documentLimit: (req: OrchestrateRequest) => string  // what to say when passing baton
+}
+
+export const SPECIALIST_PROFILES: Record<string, SpecialistProfile> = {
+  'ollama/qwen2.5:1.5b': {
+    kind: 'ollama',
+    model: 'qwen2.5:1.5b',
+    maxContextTokens: 4096,
+    maxOutputTokens: 512,
+    avgLatencyMs: 200,
+    strengths: ['categorize', 'summarize', 'lint', 'classify'],
+    weaknesses: ['code', 'review', 'complex-reasoning'],
+    costPerMToken: 0,
+    canHandle: (req, tokens) => tokens < 3000 && ['categorize', 'summarize', 'lint'].includes(req.task),
+    documentLimit: (req) => `qwen2.5:1.5b — context too large or task (${req.task}) needs stronger model → passing to free tier`,
+  },
+  'ollama/qwen2.5:7b': {
+    kind: 'ollama',
+    model: 'qwen2.5:7b',
+    maxContextTokens: 32768,
+    maxOutputTokens: 2048,
+    avgLatencyMs: 800,
+    strengths: ['code', 'review', 'summarize', 'categorize'],
+    weaknesses: ['complex-reasoning', 'long-context'],
+    costPerMToken: 0,
+    canHandle: (req, tokens) => tokens < 30000,
+    documentLimit: (req) => `qwen2.5:7b — context limit or slow GPU → passing to free tier with partial result`,
+  },
+  'ollama/nomic-embed-text': {
+    kind: 'ollama',
+    model: 'nomic-embed-text',
+    maxContextTokens: 8192,
+    maxOutputTokens: 768, // embedding dimensions
+    avgLatencyMs: 50,
+    strengths: ['embed'],
+    weaknesses: ['code', 'summarize', 'categorize'],
+    costPerMToken: 0,
+    canHandle: (req, tokens) => req.task === 'embed' && tokens < 8000,
+    documentLimit: () => `nomic-embed-text — embed task only, context overflow → passing`,
+  },
+  'groq/llama-3.1-8b-instant': {
+    kind: 'free-tier',
+    model: 'llama-3.1-8b-instant',
+    maxContextTokens: 131072,
+    maxOutputTokens: 8192,
+    avgLatencyMs: 300,
+    strengths: ['categorize', 'summarize', 'lint', 'fast-tasks'],
+    weaknesses: ['complex-code', 'long-reasoning'],
+    costPerMToken: 0, // free tier
+    canHandle: (req, tokens) => tokens < 120000,
+    documentLimit: () => `Groq 8B — rate limit or context overflow → passing to 70B or subscription`,
+  },
+  'groq/llama-3.1-70b': {
+    kind: 'free-tier',
+    model: 'llama-3.1-70b',
+    maxContextTokens: 131072,
+    maxOutputTokens: 8192,
+    avgLatencyMs: 1200,
+    strengths: ['code', 'review', 'complex-reasoning', 'summarize'],
+    weaknesses: ['very-long-context'],
+    costPerMToken: 0,
+    canHandle: (req, tokens) => tokens < 120000,
+    documentLimit: () => `Groq 70B — quota exhausted or slow → passing to subscription with full context`,
+  },
+  'claude-haiku-4-5': {
+    kind: 'subscription',
+    model: 'claude-haiku-4-5',
+    maxContextTokens: 200000,
+    maxOutputTokens: 8192,
+    avgLatencyMs: 1500,
+    strengths: ['categorize', 'summarize', 'lint', 'fast-tasks', 'long-context'],
+    weaknesses: ['complex-reasoning'],
+    costPerMToken: 0.25,
+    canHandle: (_req, tokens) => tokens < 190000,
+    documentLimit: () => `Haiku — context maxed or quota → escalating to Sonnet`,
+  },
+  'claude-sonnet-4-6': {
+    kind: 'subscription',
+    model: 'claude-sonnet-4-6',
+    maxContextTokens: 200000,
+    maxOutputTokens: 8192,
+    avgLatencyMs: 3000,
+    strengths: ['code', 'review', 'complex-reasoning', 'all-tasks'],
+    weaknesses: [],
+    costPerMToken: 3,
+    canHandle: (_req, _tokens) => true, // Commander fallback — handles everything
+    documentLimit: () => `Sonnet — this is the Commander, should not need to pass baton`,
+  },
+}
+
+/**
+ * Estimate token count from string (rough: 1 token ≈ 4 chars)
+ */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4)
+}
+
+/**
+ * Check if a specialist can handle a request based on its profile.
+ * Returns the handoff note if it can't, null if it can.
+ */
+export function checkSpecialistLimits(profileKey: string, req: OrchestrateRequest): string | null {
+  const profile = SPECIALIST_PROFILES[profileKey]
+  if (!profile) return null
+
+  const inputTokens = estimateTokens((req.context ?? '') + req.prompt)
+
+  if (!profile.canHandle(req, inputTokens)) {
+    return profile.documentLimit(req)
+  }
+
+  if (!profile.strengths.includes(req.task) && profile.weaknesses.includes(req.task)) {
+    return `${profile.model} — task '${req.task}' is a known weakness → skipping to avoid degraded result`
+  }
+
+  return null // can handle it
+}
