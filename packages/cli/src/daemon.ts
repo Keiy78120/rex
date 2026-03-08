@@ -2,9 +2,16 @@
 import { existsSync, readFileSync, writeFileSync, readdirSync, unlinkSync, copyFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
+import { homedir } from 'node:os'
 import { MEMORY_DB_PATH, PENDING_DIR, BACKUPS_DIR, DAEMON_LOG_PATH, ensureRexDirs } from './paths.js'
 import { loadConfig } from './config.js'
 import { createLogger, rotateLog } from './logger.js'
+import { collectInventory, saveInventoryCache } from './inventory.js'
+import { syncBidirectional } from './sync.js'
+import { purgeOldEvents } from './sync-queue.js'
+import { appendEvent as journalAppend, purgeOldJournalEvents } from './event-journal.js'
+import { cacheClean } from './semantic-cache.js'
+import { getRoutableProviders } from './free-tiers.js'
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 const log = createLogger('daemon')
@@ -95,6 +102,7 @@ async function healthCheck(): Promise<void> {
 
   if (!ollamaUp) {
     log.warn('Ollama down — attempting restart')
+    journalAppend('daemon_action', 'health-check', { action: 'ollama_restart_attempt' })
     const restarted = await restartOllama()
     if (restarted) log.info('Ollama restarted successfully')
     else log.error('Ollama restart failed')
@@ -112,10 +120,12 @@ async function healthCheck(): Promise<void> {
   // Check DB integrity
   if (!checkDbIntegrity()) {
     log.error('DB integrity check FAILED')
+    journalAppend('daemon_action', 'health-check', { action: 'db_integrity_fail' })
     const backups = existsSync(BACKUPS_DIR) ? readdirSync(BACKUPS_DIR).filter(f => f.endsWith('.sqlite')).sort().reverse() : []
     if (backups.length) {
       copyFileSync(join(BACKUPS_DIR, backups[0]), MEMORY_DB_PATH)
       log.warn(`Restored DB from ${backups[0]}`)
+      journalAppend('daemon_action', 'health-check', { action: 'db_restored', backup: backups[0] })
       await sendTelegramNotify('⚠️ REX: DB integrity fail — restored from backup')
     }
   }
@@ -126,6 +136,19 @@ async function healthCheck(): Promise<void> {
     log.warn(`Disk low: ${freeGb}GB free`)
     pruneBackups(3)
     await sendTelegramNotify(`⚠️ REX: Disk low (${freeGb}GB free)`)
+  }
+
+  // Memory health check
+  try {
+    const { checkMemoryHealth } = await import('./memory-check.js')
+    const mh = checkMemoryHealth()
+    if (!mh.dbIntegrity.ok) log.warn(`Memory DB integrity: ${mh.dbIntegrity.message}`)
+    if (mh.orphans.count > 0) log.warn(`${mh.orphans.count} memories without embeddings`)
+    if (mh.duplicates.count > 0) log.info(`${mh.duplicates.count} duplicate memories detected`)
+    if (mh.pending.count > 100) log.warn(`Pending queue large: ${mh.pending.count} files`)
+    if (mh.pending.staleCount > 0) log.warn(`${mh.pending.staleCount} stale pending files (>24h)`)
+  } catch (e: any) {
+    log.debug(`Memory health check skipped: ${e.message?.slice(0, 100)}`)
   }
 }
 
@@ -138,6 +161,24 @@ async function ingestCycle(): Promise<void> {
   log.info('Ingest cycle done')
 }
 
+// ─── Full Backup (daily) ──────────────────────────────────
+async function dailyBackup(): Promise<void> {
+  try {
+    const { lastBackupAge, backupNow, rotateBackups: rotateFullBackups } = await import('./backup.js')
+    const age = lastBackupAge()
+    // Run if no backup exists or last backup is >24h old
+    if (age === null || age > 24 * 60 * 60 * 1000) {
+      const path = backupNow()
+      if (path) {
+        rotateFullBackups(7)
+        log.info('Daily full backup completed')
+      }
+    }
+  } catch (e: any) {
+    log.warn(`Daily backup failed: ${e.message?.slice(0, 200)}`)
+  }
+}
+
 // ─── Maintenance (every 60 min) ───────────────────────────
 async function maintenanceCycle(): Promise<void> {
   log.info('Maintenance cycle start')
@@ -146,6 +187,23 @@ async function maintenanceCycle(): Promise<void> {
   runCmd('rex projects', 30_000)
 
   rotateLog()
+
+  // Clean expired cache entries
+  try {
+    const removed = cacheClean()
+    if (removed > 0) log.info(`Cache cleaned: ${removed} expired entries`)
+  } catch (e: any) {
+    log.debug(`Cache clean skipped: ${e.message}`)
+  }
+
+  // Purge old journal events
+  try {
+    const purged = purgeOldJournalEvents(30)
+    if (purged > 0) log.info(`Journal purged: ${purged} old events`)
+  } catch (e: any) {
+    log.debug(`Journal purge skipped: ${e.message}`)
+  }
+
   log.info('Maintenance cycle done')
 }
 
@@ -173,6 +231,80 @@ async function selfReviewCycle(): Promise<void> {
   log.info('Self-review cycle done')
 }
 
+// ─── Inventory Refresh (every 30 min) ────────────────────
+async function refreshInventory(): Promise<void> {
+  try {
+    const inv = await collectInventory()
+    await saveInventoryCache(inv)
+    log.info('Inventory refreshed')
+  } catch (e: any) {
+    log.warn(`Inventory refresh failed: ${e.message}`)
+  }
+}
+
+// ─── Auto Sync (every 5 min) ─────────────────────────────
+async function autoSync(): Promise<void> {
+  try {
+    const result = await syncBidirectional()
+    if (result.pushed > 0 || result.pulled > 0) {
+      log.info(`Sync: pushed ${result.pushed}, pulled ${result.pulled}`)
+    }
+  } catch (e: any) {
+    log.debug(`Sync skipped: ${e.message}`)
+  }
+}
+
+// ─── Queue Purge (every 24h) ─────────────────────────────
+function purgeQueue(): void {
+  try {
+    const purged = purgeOldEvents(30)
+    if (purged > 0) log.info(`Purged ${purged} old events`)
+  } catch (e: any) {
+    log.warn(`Queue purge failed: ${e.message}`)
+  }
+}
+
+// ─── Reflector Cycle (every 6h) ──────────────────────────────
+async function reflectorCycle(): Promise<void> {
+  try {
+    const { reflectOnSession } = await import('./reflector.js')
+    const sessionsDir = join(homedir(), '.claude', 'projects')
+    if (!existsSync(sessionsDir)) return
+
+    // Find the most recent .jsonl session log
+    let newest = ''
+    let newestMtime = 0
+    const walk = (dir: string) => {
+      try {
+        for (const entry of readdirSync(dir)) {
+          const p = join(dir, entry)
+          try {
+            const s = statSync(p)
+            if (s.isDirectory()) walk(p)
+            else if (entry.endsWith('.jsonl') && s.mtimeMs > newestMtime) {
+              newest = p
+              newestMtime = s.mtimeMs
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+    walk(sessionsDir)
+
+    if (!newest) return
+
+    // Only reflect on sessions modified in the last 24h
+    if (Date.now() - newestMtime > 24 * 60 * 60 * 1000) return
+
+    const result = await reflectOnSession(newest)
+    if (result.promoted > 0) {
+      log.info(`Reflector: ${result.lessons.length} lessons, ${result.promoted} promoted`)
+    }
+  } catch (e: any) {
+    log.debug(`Reflector cycle skipped: ${e.message}`)
+  }
+}
+
 // ─── Main Loop ────────────────────────────────────────────
 export async function daemon(): Promise<void> {
   ensureRexDirs()
@@ -180,6 +312,9 @@ export async function daemon(): Promise<void> {
 
   log.info('REX Daemon started')
   log.info(`Health: ${config.daemon.healthCheckInterval}s | Ingest: ${config.daemon.ingestInterval}s | Maintenance: ${config.daemon.maintenanceInterval}s | Self-review: ${config.daemon.selfReviewInterval}s`)
+  const routable = getRoutableProviders()
+  log.info(`LLM routing chain: ${routable.map(p => p.name).join(' → ')}`)
+  journalAppend('daemon_action', 'daemon', { action: 'started' })
 
   // Initial health check
   await healthCheck()
@@ -189,9 +324,21 @@ export async function daemon(): Promise<void> {
   let lastIngest = Date.now()
   let lastMaintenance = Date.now()
   let lastSelfReview = Date.now()
+  let lastInventory = Date.now()
+  let lastSync = Date.now()
+  let lastPurge = Date.now()
+  let lastReflect = Date.now()
+  let lastFullBackup = Date.now()
 
   // Run maintenance immediately on start
   await maintenanceCycle()
+
+  // Run daily backup on start
+  await dailyBackup()
+
+  // Run initial inventory and queue purge
+  await refreshInventory()
+  purgeQueue()
 
   while (true) {
     const now = Date.now()
@@ -214,6 +361,36 @@ export async function daemon(): Promise<void> {
     if (now - lastSelfReview >= config.daemon.selfReviewInterval * 1000) {
       await selfReviewCycle()
       lastSelfReview = now
+    }
+
+    // Inventory refresh every 30 min
+    if (now - lastInventory >= 30 * 60 * 1000) {
+      await refreshInventory()
+      lastInventory = now
+    }
+
+    // Auto sync every 5 min
+    if (now - lastSync >= 5 * 60 * 1000) {
+      await autoSync()
+      lastSync = now
+    }
+
+    // Reflector every 6h
+    if (now - lastReflect >= 6 * 60 * 60 * 1000) {
+      await reflectorCycle()
+      lastReflect = now
+    }
+
+    // Full backup every 24h
+    if (now - lastFullBackup >= 24 * 60 * 60 * 1000) {
+      await dailyBackup()
+      lastFullBackup = now
+    }
+
+    // Queue purge every 24h
+    if (now - lastPurge >= 24 * 60 * 60 * 1000) {
+      purgeQueue()
+      lastPurge = now
     }
 
     // Sleep 30 seconds between loop iterations
