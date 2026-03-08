@@ -2,6 +2,8 @@ import { createServer, IncomingMessage, ServerResponse, Server } from 'node:http
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { execFile } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
+import { homedir } from 'node:os'
 import { REX_DIR, PENDING_DIR, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
 import { getInventoryCache } from './inventory.js'
@@ -12,7 +14,33 @@ const log = createLogger('hub')
 
 const NODES_PATH = join(REX_DIR, 'hub-nodes.json')
 const DEFAULT_PORT = 7420
-const VERSION = '6.2.0'
+const VERSION = '6.3.0'
+
+// ── Auth ───────────────────────────────────────────────
+
+function loadHubToken(): string | null {
+  if (process.env.REX_HUB_TOKEN) return process.env.REX_HUB_TOKEN
+  try {
+    const settingsPath = join(homedir(), '.claude', 'settings.json')
+    if (existsSync(settingsPath)) {
+      const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+      return settings.env?.REX_HUB_TOKEN ?? null
+    }
+  } catch {}
+  return null
+}
+
+/** Generate a cryptographically secure 64-char hex token for hub auth. */
+export function generateHubToken(): string {
+  return randomBytes(32).toString('hex')
+}
+
+const HUB_TOKEN = loadHubToken()
+const CORS_ORIGIN = process.env.REX_HUB_CORS_ORIGIN ?? 'http://localhost:7420'
+
+if (!HUB_TOKEN) {
+  log.warn('REX_HUB_TOKEN not set — hub is open (set REX_HUB_TOKEN to secure)')
+}
 
 // ── Node registry ──────────────────────────────────────
 
@@ -74,13 +102,13 @@ function parseBody(req: IncomingMessage): Promise<Record<string, unknown>> {
 
 function sendJson(res: ServerResponse, statusCode: number, data: unknown, meta?: Record<string, unknown>): void {
   const body = JSON.stringify({ data, meta: meta ?? {}, error: null })
-  res.writeHead(statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
+  res.writeHead(statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN })
   res.end(body)
 }
 
 function sendError(res: ServerResponse, statusCode: number, code: string, message: string): void {
   const body = JSON.stringify({ data: null, meta: {}, error: { code, message } })
-  res.writeHead(statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
+  res.writeHead(statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN })
   res.end(body)
 }
 
@@ -173,6 +201,31 @@ addRoute('POST', '/api/nodes/:id/heartbeat', (_req, res, params) => {
   }
   node.lastSeen = new Date().toISOString()
   sendJson(res, 200, { acked: true })
+})
+
+// ── Node health aggregation ────────────────────────────
+
+const STALE_MS = 5 * 60 * 1000   // 5 min → stale
+const OFFLINE_MS = 30 * 60 * 1000 // 30 min → offline
+
+addRoute('GET', '/api/v1/nodes/health', (_req, res) => {
+  const now = Date.now()
+  const health = [...nodes.values()].map(n => {
+    const lastSeenMs = n.lastSeen ? now - new Date(n.lastSeen).getTime() : Infinity
+    const status = lastSeenMs < STALE_MS ? 'healthy' : lastSeenMs < OFFLINE_MS ? 'stale' : 'offline'
+    return {
+      id: n.id,
+      hostname: n.hostname,
+      platform: n.platform,
+      ip: n.ip,
+      capabilities: n.capabilities,
+      lastSeenSec: isFinite(lastSeenMs) ? Math.floor(lastSeenMs / 1000) : null,
+      status,
+    }
+  })
+  const counts = { healthy: 0, stale: 0, offline: 0 }
+  for (const n of health) counts[n.status as keyof typeof counts]++
+  sendJson(res, 200, health, { total: health.length, ...counts })
 })
 
 addRoute('GET', '/api/events', (req, res) => {
@@ -326,9 +379,9 @@ export async function startHub(port?: number): Promise<void> {
     // CORS preflight
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': CORS_ORIGIN,
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       })
       res.end()
       return
@@ -341,6 +394,16 @@ export async function startHub(port?: number): Promise<void> {
 
     const urlPath = req.url?.split('?')[0] ?? '/'
     const method = req.method ?? 'GET'
+
+    // Auth middleware — skip for /api/health (always public)
+    if (HUB_TOKEN && urlPath !== '/api/health') {
+      const auth = req.headers.authorization
+      if (!auth || auth !== `Bearer ${HUB_TOKEN}`) {
+        log.warn(`Unauthorized ${method} ${urlPath} from ${req.socket.remoteAddress}`)
+        sendError(res, 401, 'UNAUTHORIZED', 'Valid Bearer token required (REX_HUB_TOKEN)')
+        return
+      }
+    }
     const matched = matchRoute(urlPath, method)
 
     if (!matched) {
