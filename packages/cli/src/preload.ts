@@ -5,7 +5,8 @@ import { join } from 'node:path'
 import { MEMORY_DB_PATH } from './paths.js'
 import { findProject } from './projects.js'
 import { createLogger } from './logger.js'
-import { detectIntent, intentToPreloadLine } from './project-intent.js'
+import { detectIntent } from './project-intent.js'
+import { buildContextProfile, profileToPreloadLine } from './context-loader.js'
 
 const log = createLogger('preload')
 
@@ -130,11 +131,13 @@ export async function preload(cwd: string): Promise<string> {
     }
   }
 
-  // 5. Project intent detection (signal-based, 0 LLM)
+  // 5. Context profile: intent → guards + MCPs + skills (0 LLM)
   try {
     const intent = detectIntent(project?.path ?? cwd)
-    const line = intentToPreloadLine(intent)
+    const profile = buildContextProfile(intent)
+    const line = profileToPreloadLine(profile)
     if (line) sections.push(line)
+    if (profile.note) sections.push(`  ${profile.note.slice(0, 120)}`)
   } catch {
     // non-blocking — intent detection is best-effort
   }

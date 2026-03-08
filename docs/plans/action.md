@@ -629,3 +629,70 @@ Regles :
 Si tu touches du runtime, produis une verification concrete.
 Si tu touches seulement la doc, dis explicitement que build/tests n'ont pas ete relances.
 ```
+
+---
+
+## Section 20 — Real-Time Adaptive Loading (context-loader.ts)
+
+**Principe fondateur** : rien n'est chargé statiquement sauf `dangerous-cmd-guard` + `event-journal`.
+Tout le reste (guards, MCPs, skills) est déterminé à partir de l'intent détecté au démarrage de session.
+
+### Fichiers
+
+| Fichier | Rôle |
+|---------|------|
+| `packages/cli/src/context-loader.ts` | Mappe `IntentContext` → `ContextProfile` |
+| `packages/cli/src/project-intent.ts` | Détecte l'intent (0 LLM, signaux git) |
+| `packages/cli/src/preload.ts` | SessionStart : appelle context-loader, injecte le profil |
+
+### Types
+
+```typescript
+export interface ContextProfile {
+  intent: ProjectIntent       // 'new-project' | 'feature' | 'bug-fix' | 'refactor' | 'infra' | 'docs' | 'explore'
+  confidence: string          // 'high' | 'medium' | 'low'
+  guards: string[]            // toujours ['dangerous-cmd-guard']
+  mcps: string[]              // filtrés sur les MCPs installés (fallback = tous suggérés)
+  skills: string[]            // skills pertinents à l'intent
+  note: string                // ligne human-readable pour le contexte preload
+}
+```
+
+### Table profils par intent
+
+| Intent | Guards | MCPs | Skills | Note |
+|--------|--------|------|--------|------|
+| `new-project` | dangerous-cmd-guard | filesystem | project-init, ux-flow, api-design | New project — scaffold with /project-init |
+| `feature` | dangerous-cmd-guard | github, context7 | ux-flow, api-design, test-strategy | Feature — map flows first, design contracts |
+| `bug-fix` | dangerous-cmd-guard | github | debug-assist, test-strategy | /debug-assist + rex search |
+| `refactor` | dangerous-cmd-guard | github | code-review, test-strategy | rex review avant de merger |
+| `infra` | dangerous-cmd-guard | github | error-handling, build-validate | Guards critiques en mode infra |
+| `docs` | dangerous-cmd-guard | context7 | doc | context7 pour refs up-to-date |
+| `explore` | dangerous-cmd-guard | context7 | — | rex context + rex search |
+
+### Exports publics
+
+```typescript
+buildContextProfile(ctx: IntentContext): ContextProfile
+profileToPreloadLine(profile: ContextProfile): string   // ≤200 chars
+printContextProfile(profile: ContextProfile): void      // pour rex context --profile
+```
+
+### Intégration preload.ts
+
+Au lieu de `intentToPreloadLine(intent)` (simple texte), preload appelle maintenant :
+1. `detectIntent(cwd)` → `IntentContext`
+2. `buildContextProfile(intent)` → `ContextProfile`
+3. `profileToPreloadLine(profile)` → injecté dans le contexte SessionStart
+
+Sortie exemple :
+```
+Profile: bug-fix (high) | MCPs: github | Skills: /debug-assist, /test-strategy
+  Bug-fix — use /debug-assist, search past solutions with rex search "<error>"
+```
+
+### Règles de routage MCPs
+
+- Si des MCPs du profil sont dans `~/.claude/settings.json mcpServers` → n'activer que ceux-là
+- Si aucun n'est installé → suggérer tous (l'user voit ce qu'il peut installer)
+- Fallback silencieux si settings.json inaccessible (Set vide → tous suggérés)
