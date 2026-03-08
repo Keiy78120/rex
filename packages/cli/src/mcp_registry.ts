@@ -878,7 +878,27 @@ export async function mcpRegistry(args: string[]) {
       await runScan(jsonMode)
       return
     }
+    case 'serve': {
+      const { startMcpServer } = await import('./rex-mcp-server.js')
+      await startMcpServer()
+      return
+    }
+    case 'register': {
+      const { getMcpServerConfig } = await import('./rex-mcp-server.js')
+      const settingsPath = join(HOME, '.claude', 'settings.json')
+      let settings: Record<string, any> = {}
+      try {
+        if (existsSync(settingsPath)) settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+      } catch {}
+      if (!settings.mcpServers) settings.mcpServers = {}
+      const config = getMcpServerConfig()
+      Object.assign(settings.mcpServers, config)
+      writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
+      console.log('✓ REX registered as MCP server in ~/.claude/settings.json')
+      console.log('  Restart Claude Code to pick up the new server.')
+      return
+    }
     default:
-      console.log('Usage: rex mcp <list|add|add-url|remove|enable|disable|check|sync-claude|import-claude|export|discover|search|install|refresh-marketplace|auto|scan> ...')
+      console.log('Usage: rex mcp <list|add|add-url|remove|enable|disable|check|sync-claude|import-claude|export|discover|search|install|refresh-marketplace|auto|scan|serve|register> ...')
   }
 }
