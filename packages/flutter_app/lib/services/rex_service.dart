@@ -2227,6 +2227,12 @@ $transcript
     notifyListeners();
   }
 
+  Future<void> generateLiteLLMConfig() async {
+    try {
+      await _runRexArgs(['litellm-config'], timeout: 15);
+    } catch (_) {}
+  }
+
   Future<String> runQuickSetup() async {
     try {
       return await _runRexArgs(['setup', '--quick'], timeout: 30);

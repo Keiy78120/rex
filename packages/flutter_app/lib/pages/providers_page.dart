@@ -33,6 +33,11 @@ class _ProvidersPageState extends State<ProvidersPage> {
       title: 'Providers',
       actions: [
         RexHeaderButton(
+          icon: CupertinoIcons.doc_text,
+          label: 'LiteLLM',
+          onPressed: () => context.read<RexService>().generateLiteLLMConfig(),
+        ),
+        RexHeaderButton(
           icon: CupertinoIcons.refresh,
           label: 'Refresh',
           onPressed: _loadAll,
