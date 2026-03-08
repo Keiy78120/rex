@@ -199,16 +199,14 @@ async function main() {
     }
 
     case 'setup': {
-      // rex setup --quick → zero-question auto-detection
       if (process.argv.includes('--quick')) {
         const { quickSetup } = await import('./quick-setup.js')
         await quickSetup()
         break
       }
-      const { setup } = await import('./setup.js')
-      const nonInteractive = process.argv.includes('--yes') || process.argv.includes('--non-interactive')
-      const skipTelegram = process.argv.includes('--skip-telegram')
-      await setup({ nonInteractive, skipTelegram, autoInstallDeps: nonInteractive })
+      // Default: full interactive wizard (the "wow moment" experience)
+      const { setupWizard } = await import('./setup-wizard.js')
+      await setupWizard()
       break
     }
 
@@ -1146,7 +1144,13 @@ async function main() {
     }
 
     case undefined: {
-      // `rex` with no subcommand → launch Claude with intent-driven profile
+      // First run? Run the wizard so the user gets the "wow moment" before launching
+      const { isFirstRun, setupWizard } = await import('./setup-wizard.js')
+      if (isFirstRun()) {
+        await setupWizard()
+        break
+      }
+      // Normal launch: spawn Claude Code with intent-driven profile
       const { launchRex } = await import('./rex-launcher.js')
       await launchRex(process.cwd())
       break
