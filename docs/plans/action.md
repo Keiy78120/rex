@@ -817,3 +817,46 @@ rex → detect intent → build profile → write settings.json → spawn claude
                                                (injecte memory + recovery state)
 ```
 
+
+---
+
+## 22. TOKEN ECONOMY — Règle absolue REX
+
+**REX doit être économe en tokens à chaque niveau.**
+
+### Principes
+
+1. **Script avant LLM** — si un script bash/python peut faire le travail, pas de LLM
+2. **Haiku avant Sonnet** — scan, lecture, classement, extraction = Haiku. Code, refactor = Sonnet. Orchestration finale = Opus
+3. **Batch** — grouper les opérations similaires en une seule passe (ex: lire 10 fichiers en 1 appel, pas 10 appels)
+4. **Cache agressif** — semantic cache (`semantic-cache.ts`) avant tout appel LLM. Si réponse similaire en cache → servir le cache
+5. **Lazy loading** — ne charger les MCPs/guards/skills que quand la session est lancée, pas au boot daemon
+6. **Preload minimal** — `preload.ts` injecte uniquement les N facts les plus pertinents (max 3-5), pas tout le contexte mémoire
+7. **Context compaction** — quand contexte >70% → compacter proactivement avant que Claude Code force-compact
+8. **Output streaming** — préférer les réponses streamées aux réponses bulk pour libérer le contexte plus tôt
+9. **Parallel reads** — `Promise.all()` pour les lectures simultanées, jamais séquentielles
+10. **Early exit** — si intent clair dès le début → ne pas continuer à analyser
+
+### Anti-patterns interdits dans REX
+
+- ❌ Lire tout le repo pour une question simple
+- ❌ Appeler Sonnet pour classer/trier des données (Haiku suffit)
+- ❌ Faire N appels LLM séquentiels quand 1 appel avec N items suffit
+- ❌ Recharger la mémoire complète à chaque session (utiliser le diff depuis la dernière session)
+- ❌ Garder des MCPs démarrés qui ne servent pas cette session
+- ❌ Passer tout l'historique de session au prochain agent (résumer d'abord)
+
+### Dans le code REX
+
+```typescript
+// ✅ BON : batch + cache
+const [fileA, fileB, fileC] = await Promise.all([read(a), read(b), read(c)])
+const cached = await semanticCache.get(query)
+if (cached) return cached
+
+// ❌ MAUVAIS : séquentiel + pas de cache
+const fileA = await read(a)
+const fileB = await read(b)
+const result = await callLLM(query)  // sans cache
+```
+
