@@ -172,12 +172,21 @@ async function healthCheck(): Promise<void> {
     }
   }
 
-  // Check disk space
+  // Check disk space — escalating response by severity
   const freeGb = checkDiskSpace()
-  if (freeGb < 1) {
+  if (freeGb < 5) {
     log.warn(`Disk low: ${freeGb}GB free`)
     pruneBackups(3)
-    await sendTelegramNotify(`⚠️ REX: Disk low (${freeGb}GB free)`)
+    if (freeGb < 2) {
+      // Critical: also prune oldest memories
+      log.warn(`Disk critical (${freeGb}GB) — pruning old memories`)
+      journalAppend('daemon_action', 'health-check', { action: 'disk_critical_prune', freeGb })
+      try {
+        runCmd('rex prune --days=90 --quiet', 60_000)
+        log.info('Pruned memories older than 90 days')
+      } catch {}
+      await sendTelegramNotify(`🚨 REX: Disk critical (${freeGb}GB free). Auto-pruned old memories + backups.`)
+    }
   }
 
   // Memory health check
