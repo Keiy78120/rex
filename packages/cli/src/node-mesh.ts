@@ -132,6 +132,31 @@ function tailscaleConnected(): boolean {
   } catch { return false }
 }
 
+/**
+ * Get Tailscale peer IPs for online peers only.
+ * Returns empty array if tailscale is not running or has no peers.
+ */
+function getTailscalePeerIps(): string[] {
+  if (!whichExists('tailscale')) return []
+  try {
+    const out = execSync('tailscale status --json 2>/dev/null', { timeout: 3000, stdio: 'pipe' }).toString()
+    const data = JSON.parse(out) as {
+      BackendState?: string
+      Peer?: Record<string, { TailscaleIPs?: string[]; Online?: boolean }>
+    }
+    if (data.BackendState !== 'Running' || !data.Peer) return []
+    const ips: string[] = []
+    for (const peer of Object.values(data.Peer)) {
+      if (peer.Online && peer.TailscaleIPs?.length) {
+        // Take first IPv4 address only
+        const ip4 = peer.TailscaleIPs.find(ip => !ip.includes(':'))
+        if (ip4) ips.push(ip4)
+      }
+    }
+    return ips
+  } catch { return [] }
+}
+
 function sshRunning(): boolean {
   try {
     execSync('pgrep -x sshd', { timeout: 1000, stdio: 'pipe' })
@@ -201,34 +226,68 @@ function getHubUrl(): string | null {
 }
 
 /**
+ * Probe a candidate URL to check if it's a REX hub.
+ * Returns the URL if it responds to /api/health, otherwise null.
+ */
+async function probeHub(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2000) })
+    if (res.ok) return url
+  } catch {}
+  return null
+}
+
+/**
+ * Discover REX hubs on the Tailscale network by probing port 7420 on each online peer.
+ * Returns an array of discovered hub URLs (e.g. ["http://100.x.x.x:7420"]).
+ * Results are cached in the mesh-cache alongside node data.
+ */
+export async function autoDiscoverHubs(): Promise<string[]> {
+  const peers = getTailscalePeerIps()
+  if (peers.length === 0) return []
+
+  const probes = peers.map(ip => probeHub(`http://${ip}:7420`))
+  const results = await Promise.all(probes)
+  const found = results.filter((u): u is string => u !== null)
+
+  if (found.length > 0) {
+    log.info(`Tailscale hub discovery: found ${found.length} hub(s) — ${found.join(', ')}`)
+  }
+  return found
+}
+
+/**
  * Register this node with the hub (POST /api/nodes/register).
- * Silently skips if no hub is configured.
+ * Priority: configured URL → Tailscale peer discovery → localhost:7420
  */
 export async function registerWithHub(nodeInfo?: MeshNode): Promise<boolean> {
-  // Try configured URL, then auto-discover localhost:7420
-  const hubUrl = getHubUrl() ?? 'http://localhost:7420'
-
   const info = nodeInfo ?? buildLocalNodeInfo()
 
-  try {
-    const res = await fetch(`${hubUrl}/api/nodes/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(info),
-      signal: AbortSignal.timeout(5000),
-    })
-    if (res.ok) {
-      log.info(`Registered with hub: ${info.id} (${info.capabilities.join(', ') || 'no caps'})`)
-      // Update mesh cache with fresh hub data
-      try { saveMeshCache(await fetchMeshNodes(hubUrl)) } catch {}
-      return true
+  // Build candidate list: configured > tailscale-discovered > localhost fallback
+  const configured = getHubUrl()
+  const candidates: string[] = configured
+    ? [configured]
+    : [...(await autoDiscoverHubs()), 'http://localhost:7420']
+
+  for (const hubUrl of candidates) {
+    try {
+      const res = await fetch(`${hubUrl}/api/nodes/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(info),
+        signal: AbortSignal.timeout(5000),
+      })
+      if (res.ok) {
+        log.info(`Registered with hub ${hubUrl}: ${info.id} (${info.capabilities.join(', ') || 'no caps'})`)
+        try { saveMeshCache(await fetchMeshNodes(hubUrl)) } catch {}
+        return true
+      }
+      log.warn(`Hub registration failed at ${hubUrl}: HTTP ${res.status}`)
+    } catch (e: any) {
+      log.debug(`Hub unreachable at ${hubUrl}: ${e.message?.slice(0, 80)}`)
     }
-    log.warn(`Hub registration failed: HTTP ${res.status}`)
-    return false
-  } catch (e: any) {
-    log.debug(`Hub unreachable: ${e.message?.slice(0, 80)}`)
-    return false
   }
+  return false
 }
 
 // ── Mesh cache (offline fallback) ─────────────────────────────────
@@ -270,17 +329,21 @@ async function fetchMeshNodes(hubUrl: string): Promise<MeshNode[]> {
 export async function routeTask(taskType: TaskType): Promise<MeshNode | null> {
   const required = TASK_REQUIRES[taskType] ?? []
 
-  // Try hub first, fall back to cache
+  // Try configured hub, then Tailscale-discovered hubs, then cache
   let nodes: MeshNode[] = []
-  const hubUrl = getHubUrl()
-  if (hubUrl) {
+  const configured = getHubUrl()
+  const hubCandidates = configured ? [configured] : await autoDiscoverHubs()
+
+  let fetched = false
+  for (const hubUrl of hubCandidates) {
     try {
       nodes = await fetchMeshNodes(hubUrl)
       saveMeshCache(nodes)
-    } catch {
-      nodes = readMeshCache()
-    }
-  } else {
+      fetched = true
+      break
+    } catch { /* try next */ }
+  }
+  if (!fetched) {
     nodes = readMeshCache()
   }
 
@@ -372,9 +435,12 @@ export async function printMeshStatus(): Promise<void> {
   const green = '\x1b[32m', yellow = '\x1b[33m', red = '\x1b[31m'
 
   let nodes: MeshNode[] = []
-  // Try configured URL first, then auto-discover localhost:7420
+  // Priority: configured URL → Tailscale-discovered hubs → localhost
   const configuredUrl = getHubUrl()
-  const candidates = configuredUrl ? [configuredUrl] : ['http://localhost:7420']
+  const tailscaleHubs = configuredUrl ? [] : await autoDiscoverHubs()
+  const candidates = configuredUrl
+    ? [configuredUrl]
+    : [...tailscaleHubs, 'http://localhost:7420']
   let resolved = false
 
   for (const url of candidates) {
