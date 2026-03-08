@@ -412,10 +412,55 @@ async function main() {
     }
 
     case 'hub': {
+      const sub = process.argv[3]
+      if (sub === 'token' || process.argv.includes('--generate-token')) {
+        const { generateHubToken } = await import('./hub.js')
+        const token = generateHubToken()
+        console.log(`\n  Hub token: ${COLORS.green}${token}${COLORS.reset}`)
+        console.log(`\n  Add to ~/.claude/settings.json env:`)
+        console.log(`  ${COLORS.dim}"REX_HUB_TOKEN": "${token}"${COLORS.reset}\n`)
+        break
+      }
       const { startHub } = await import('./hub.js')
       const portArg = process.argv.find(a => a.startsWith('--port='))
       const port = portArg ? parseInt(portArg.split('=')[1]) : undefined
       await startHub(port)
+      break
+    }
+
+    case 'tools': {
+      const toolSub = process.argv[3] ?? 'list'
+      const { loadRegistry, syncAvailability, enableTool, disableTool, printRegistry } = await import('./tool-registry.js')
+      switch (toolSub) {
+        case 'list':
+        default: {
+          const tools = loadRegistry()
+          printRegistry(tools)
+          break
+        }
+        case 'check': {
+          console.log('Checking tool availability...')
+          const tools = syncAvailability()
+          printRegistry(tools)
+          break
+        }
+        case 'enable': {
+          const id = process.argv[4]
+          if (!id) { console.error('Usage: rex tools enable <id>'); process.exit(1) }
+          const ok = enableTool(id)
+          if (ok) console.log(`${COLORS.green}✓${COLORS.reset} Enabled: ${id}`)
+          else console.error(`${COLORS.red}✗${COLORS.reset} Tool not found: ${id}`)
+          break
+        }
+        case 'disable': {
+          const id = process.argv[4]
+          if (!id) { console.error('Usage: rex tools disable <id>'); process.exit(1) }
+          const ok = disableTool(id)
+          if (ok) console.log(`${COLORS.green}✓${COLORS.reset} Disabled: ${id}`)
+          else console.error(`${COLORS.red}✗${COLORS.reset} Cannot disable: ${id}`)
+          break
+        }
+      }
       break
     }
 
@@ -1043,6 +1088,15 @@ async function main() {
       break
     }
 
+    case 'litellm-config': {
+      const { generateLiteLLMConfig } = await import('./litellm-config.js')
+      const outputArg = process.argv.find(a => a.startsWith('--output='))
+      const output = outputArg?.split('=')[1]
+      const print = process.argv.includes('--print')
+      await generateLiteLLMConfig({ output, print })
+      break
+    }
+
     case 'help':
     default:
       console.log(`
@@ -1127,8 +1181,20 @@ ${COLORS.bold}Event Journal & Cache:${COLORS.reset}
   rex cache            Show semantic cache stats (--json)
   rex cache clean      Remove expired cache entries
 
+${COLORS.bold}Tool Registry:${COLORS.reset}
+  rex tools            List all tools with tier and status
+  rex tools check      Re-check tool availability, sync
+  rex tools enable <id>   Enable a tool
+  rex tools disable <id>  Disable a tool
+
+${COLORS.bold}LiteLLM:${COLORS.reset}
+  rex litellm-config         Generate litellm_config.yaml from detected providers
+  rex litellm-config --print Print config to stdout (no file write)
+  rex litellm-config --output=<path>  Write to custom path
+
 ${COLORS.bold}Hub & Network:${COLORS.reset}
   rex hub              Start REX hub API server (port 7420)
+  rex hub token        Generate a secure REX_HUB_TOKEN
   rex hub --port=N     Start on custom port
   rex node status      Show node identity and hub connection
   rex node register    Register this node with hub

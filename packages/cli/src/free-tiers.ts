@@ -268,6 +268,46 @@ export async function validateProvider(provider: FreeTierProvider): Promise<bool
   }
 }
 
+/**
+ * Call the prompt against all available providers in routing order,
+ * automatically falling back to the next when one is rate-limited or unavailable.
+ * Order: Ollama → Groq → Cerebras → Together → Mistral → OpenRouter → DeepSeek
+ *
+ * Throws only when ALL providers fail.
+ */
+export async function callWithAutoFallback(
+  prompt: string,
+  system?: string,
+  opts: { modelId?: string; maxProviders?: number } = {},
+): Promise<{ text: string; provider: string; model: string }> {
+  const candidates = getRoutableProviders()
+  if (candidates.length === 0) throw new Error('NO_PROVIDERS: no configured providers available')
+
+  const limit = opts.maxProviders ?? candidates.length
+  const tried: string[] = []
+  let lastErr: Error | null = null
+
+  for (const p of candidates.slice(0, limit)) {
+    try {
+      const text = await callProvider(p, prompt, system, opts.modelId)
+      log.info(`Auto-fallback: success via ${p.name}`)
+      return { text, provider: p.name, model: opts.modelId ?? p.defaultModel }
+    } catch (err) {
+      const msg = String(err)
+      tried.push(p.name)
+      lastErr = err instanceof Error ? err : new Error(msg)
+      if (msg.startsWith('RATE_LIMIT:') || msg.startsWith('NO_KEY:')) {
+        log.warn(`Auto-fallback: ${p.name} unavailable (${msg}), trying next...`)
+        continue
+      }
+      // Non-rate-limit errors: still try next but log as warning
+      log.warn(`Auto-fallback: ${p.name} failed: ${msg.slice(0, 80)}, trying next...`)
+    }
+  }
+
+  throw new Error(`All providers failed [${tried.join(', ')}]: ${lastErr?.message}`)
+}
+
 export function getProvidersSnapshot(): object[] {
   return FREE_TIER_PROVIDERS.map(p => ({
     name: p.name,
