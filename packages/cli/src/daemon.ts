@@ -385,6 +385,7 @@ export async function daemon(): Promise<void> {
   let lastSessionGuard = 0  // check immediately
   let lastCurious = Date.now() - 23 * 60 * 60 * 1000  // run ~1h after daemon start
   let lastDailySummaryDate = ''  // tracks 'YYYY-MM-DD' to send once per day
+  let lastAlertDate = ''  // disk/backlog alerts — max once per day
 
   // Run maintenance immediately on start
   await maintenanceCycle()
@@ -489,6 +490,20 @@ export async function daemon(): Promise<void> {
         }
       } catch (e: any) {
         log.debug(`Daily summary skipped: ${e.message?.slice(0, 80)}`)
+      }
+    }
+
+    // Smart alerts: disk space + memory backlog (once per day)
+    if (lastAlertDate !== todayStr) {
+      const diskFree = checkDiskSpace()
+      const pending = countPending()
+      const alerts: string[] = []
+      if (diskFree < 5) alerts.push(`⚠️ Disk low: ${diskFree}GB free`)
+      if (pending > 100) alerts.push(`📥 Memory backlog: ${pending} chunks pending embed`)
+      if (alerts.length > 0) {
+        await sendTelegramNotify(alerts.join('\n'))
+        log.warn(`Smart alerts sent: ${alerts.join(' | ')}`)
+        lastAlertDate = todayStr
       }
     }
 

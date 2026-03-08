@@ -373,6 +373,16 @@ addRoute('GET', '/api/v1/memory/pending', (_req, res) => {
   }
 })
 
+addRoute('GET', '/api/v1/monitor', async (_req, res) => {
+  try {
+    const { getDevStatus } = await import('./dev-monitor.js')
+    const report = await getDevStatus()
+    sendJson(res, 200, report)
+  } catch (err: any) {
+    sendError(res, 500, 'INTERNAL_ERROR', err.message?.slice(0, 100) ?? 'Monitor failed')
+  }
+})
+
 // ── Server lifecycle ───────────────────────────────────
 
 export async function startHub(port?: number): Promise<void> {
