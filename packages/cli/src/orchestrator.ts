@@ -8,6 +8,7 @@ import { createDefaultRegistry, type Provider } from './providers.js'
 import { trackUsage, getDailyUsage } from './budget.js'
 import { appendEvent } from './sync-queue.js'
 import { pickModel } from './router.js'
+import { callWithAutoFallback } from './free-tiers.js'
 import { createLogger } from './logger.js'
 
 const log = createLogger('orchestrator')
@@ -124,14 +125,24 @@ async function executeProvider(
       return executeClaudeCode(prompt, timeout)
     case 'claude-api':
       return executeClaudeApi(prompt, maxTokens, timeout)
-    default:
-      throw new Error(`No executor for provider: ${provider.name}`)
+    default: {
+      // Free-tier providers (Groq, Cerebras, Together, Mistral, OpenRouter, DeepSeek)
+      // callWithAutoFallback handles provider selection + rate-limit rotation internally
+      const start = Date.now()
+      const result = await callWithAutoFallback(prompt)
+      return {
+        provider: result.provider,
+        response: result.text,
+        durationMs: Date.now() - start,
+      }
+    }
   }
 }
 
 // ── Fallback chain order ───────────────────────────────
+// ollama (local, free) → free-tier APIs (Groq/Cerebras/Together/etc) → claude-code → claude-api
 
-const FALLBACK_ORDER = ['ollama', 'claude-code', 'claude-api']
+const FALLBACK_ORDER = ['ollama', 'groq', 'cerebras', 'together-ai', 'mistral', 'openrouter', 'deepseek', 'claude-code', 'claude-api']
 
 // ── Main entry ─────────────────────────────────────────
 
