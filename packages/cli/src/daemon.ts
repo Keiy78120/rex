@@ -90,6 +90,40 @@ function runCmd(cmd: string, timeout: number = 120_000): void {
   }
 }
 
+// ─── Hub health tracking ─────────────────────────────────
+let hubEverStarted = false
+let hubRestartCount = 0
+const HUB_MAX_RESTARTS = 3  // disable after this many consecutive failures
+
+async function checkHubHealth(): Promise<boolean> {
+  try {
+    const res = await fetch('http://localhost:7420/api/health', { signal: AbortSignal.timeout(2000) })
+    return res.ok
+  } catch { return false }
+}
+
+async function tryRestartHub(): Promise<boolean> {
+  if (hubRestartCount >= HUB_MAX_RESTARTS) return false
+  try {
+    const { startHub } = await import('./hub.js')
+    startHub().catch(() => {})
+    await new Promise(r => setTimeout(r, 1000))
+    const ok = await checkHubHealth()
+    if (ok) {
+      hubRestartCount = 0
+      log.info('Hub restarted successfully')
+    } else {
+      hubRestartCount++
+      log.warn(`Hub restart attempt ${hubRestartCount}/${HUB_MAX_RESTARTS} failed`)
+    }
+    return ok
+  } catch (e: any) {
+    hubRestartCount++
+    log.warn(`Hub restart error: ${e.message?.slice(0, 80)}`)
+    return false
+  }
+}
+
 async function sendTelegramNotify(message: string): Promise<void> {
   try {
     const token = process.env.REX_TELEGRAM_BOT_TOKEN
@@ -157,6 +191,21 @@ async function healthCheck(): Promise<void> {
     if (mh.pending.staleCount > 0) log.warn(`${mh.pending.staleCount} stale pending files (>24h)`)
   } catch (e: any) {
     log.debug(`Memory health check skipped: ${e.message?.slice(0, 100)}`)
+  }
+
+  // Hub crash detection: restart if it was started but is no longer responding
+  if (hubEverStarted) {
+    const hubUp = await checkHubHealth()
+    if (!hubUp) {
+      log.warn('Hub unresponsive — attempting restart')
+      journalAppend('daemon_action', 'health-check', { action: 'hub_restart_attempt', attempt: hubRestartCount + 1 })
+      const restarted = await tryRestartHub()
+      if (!restarted && hubRestartCount >= HUB_MAX_RESTARTS) {
+        log.error(`Hub restart failed ${HUB_MAX_RESTARTS} times — disabled until daemon restart`)
+        await sendTelegramNotify(`❌ REX Hub: crashed and failed to restart ${HUB_MAX_RESTARTS}x.\nRun: rex daemon restart`)
+        hubEverStarted = false  // stop checking until next daemon start
+      }
+    }
   }
 }
 
@@ -448,7 +497,13 @@ export async function daemon(): Promise<void> {
   try {
     const { startHub } = await import('./hub.js')
     startHub().catch((e: any) => log.debug(`Hub start skipped: ${e.message?.slice(0, 80)}`))
-    log.info('Hub started on port 7420')
+    // Give it a moment to bind the port, then mark as started for crash monitoring
+    setTimeout(async () => {
+      if (await checkHubHealth()) {
+        hubEverStarted = true
+        log.info('Hub started on port 7420')
+      }
+    }, 2000)
   } catch (e: any) {
     log.debug(`Hub unavailable: ${e.message?.slice(0, 80)}`)
   }
