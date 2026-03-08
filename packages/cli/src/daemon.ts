@@ -407,14 +407,6 @@ export async function daemon(): Promise<void> {
     log.debug(`Hub unavailable: ${e.message?.slice(0, 80)}`)
   }
 
-  // Register this node with the hub (non-blocking, best-effort)
-  setTimeout(async () => {
-    try {
-      const { registerWithHub } = await import('./node-mesh.js')
-      await registerWithHub()
-    } catch { /* silent */ }
-  }, 3000) // wait 3s for hub to fully start
-
   // Initial health check
   await healthCheck()
 
