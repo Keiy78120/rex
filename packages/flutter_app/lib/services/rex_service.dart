@@ -2077,6 +2077,26 @@ $transcript
 
   // ── End Sandbox ────────────────────────────────────────────────────────
 
+  // ── Session Guard ────────────────────────────────────────────────────────
+
+  Map<String, dynamic> _sessionGuard = {};
+
+  Map<String, dynamic> get sessionGuard => _sessionGuard;
+
+  Future<void> checkSessionGuard() async {
+    try {
+      final output = await _runRexArgs(['session-guard', '--json']);
+      final json = _extractJson(output);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic>) {
+          _sessionGuard = parsed;
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+  }
+
   // ── Agent Factory (B2B clients) ─────────────────────────────────────────
 
   List<Map<String, dynamic>> _clients = [];

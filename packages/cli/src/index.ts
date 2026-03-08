@@ -1166,6 +1166,34 @@ async function main() {
     }
 
     // ── Agent Factory ──────────────────────────────────────────────────────
+    case 'session-guard': {
+      // rex session-guard         → check + print status (no Telegram)
+      // rex session-guard --alert → check + send Telegram if thresholds hit
+      // rex session-guard --clear → clear compact signal
+      const { printSessionGuardStatus, checkSessionGuard, clearCompactSignal, readCompactSignal } = await import('./session-guard.js')
+      const subAction = process.argv[3]
+      const jsonOut = process.argv.includes('--json')
+      if (subAction === '--clear' || subAction === 'clear') {
+        clearCompactSignal()
+        if (!jsonOut) console.log('Compact signal cleared.')
+      } else if (subAction === '--alert' || subAction === 'alert') {
+        const report = await checkSessionGuard({ silent: false })
+        if (jsonOut) {
+          console.log(JSON.stringify({ ...report, signal: readCompactSignal() }, null, 2))
+        } else if (report.alerted.length > 0) {
+          console.log(`Alerts sent: ${report.alerted.join(', ')}`)
+        } else {
+          console.log(`No thresholds hit. ctx=${report.contextPercent.toFixed(0)}% daily=${report.dailyPercent.toFixed(0)}%`)
+        }
+      } else if (jsonOut) {
+        const report = await checkSessionGuard({ silent: true })
+        console.log(JSON.stringify({ ...report, signal: readCompactSignal() }, null, 2))
+      } else {
+        await printSessionGuardStatus()
+      }
+      break
+    }
+
     case 'create-client': {
       // rex create-client --name "Jean Martin" --trade "plombier" [--plan=pro] [--phone=...] [--email=...] [--dry-run]
       const { createClient, printClientDetail } = await import('./client-factory.js')

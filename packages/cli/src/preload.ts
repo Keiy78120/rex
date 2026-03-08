@@ -131,7 +131,19 @@ export async function preload(cwd: string): Promise<string> {
     }
   }
 
-  // 5. Context profile: intent → guards + MCPs + skills (0 LLM)
+  // 5. Compact signal — warn if context was high in last session
+  try {
+    const { readCompactSignal } = await import('./session-guard.js')
+    const signal = readCompactSignal()
+    if (signal) {
+      const age = Date.now() - new Date(signal.ts).getTime()
+      if (age < 2 * 3600_000) { // only surface if <2h old
+        sections.push(`⚠ Context was at ${signal.contextPercent.toFixed(0)}% (${signal.reason}) — ${signal.hint}`)
+      }
+    }
+  } catch { /* non-blocking */ }
+
+  // 6. Context profile: intent → guards + MCPs + skills (0 LLM)
   try {
     const intent = detectIntent(project?.path ?? cwd)
     const profile = buildContextProfile(intent)

@@ -331,6 +331,7 @@ export async function daemon(): Promise<void> {
   let lastReflect = Date.now()
   let lastFullBackup = Date.now()
   let lastNodeRegister = 0  // register immediately on start
+  let lastSessionGuard = 0  // check immediately
 
   // Run maintenance immediately on start
   await maintenanceCycle()
@@ -404,6 +405,20 @@ export async function daemon(): Promise<void> {
         log.debug(`Node registration skipped: ${e.message?.slice(0, 80)}`)
       }
       lastNodeRegister = now
+    }
+
+    // Session guard — check context window + daily budget every 5 min
+    if (now - lastSessionGuard >= 5 * 60_000) {
+      try {
+        const { checkSessionGuard } = await import('./session-guard.js')
+        const report = await checkSessionGuard()
+        if (report.alerted.length > 0) {
+          log.info(`Session guard fired: ${report.alerted.join(', ')} | ctx=${report.contextPercent.toFixed(0)}% daily=${report.dailyPercent.toFixed(0)}%`)
+        }
+      } catch (e: any) {
+        log.debug(`Session guard skipped: ${e.message?.slice(0, 80)}`)
+      }
+      lastSessionGuard = now
     }
 
     // Sleep 30 seconds between loop iterations
