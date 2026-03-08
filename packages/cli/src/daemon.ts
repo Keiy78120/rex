@@ -12,6 +12,7 @@ import { purgeOldEvents } from './sync-queue.js'
 import { appendEvent as journalAppend, purgeOldJournalEvents } from './event-journal.js'
 import { cacheClean } from './semantic-cache.js'
 import { getRoutableProviders } from './free-tiers.js'
+import { buildLocalNodeInfo, registerWithHub } from './node-mesh.js'
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 const log = createLogger('daemon')
@@ -329,6 +330,7 @@ export async function daemon(): Promise<void> {
   let lastPurge = Date.now()
   let lastReflect = Date.now()
   let lastFullBackup = Date.now()
+  let lastNodeRegister = 0  // register immediately on start
 
   // Run maintenance immediately on start
   await maintenanceCycle()
@@ -391,6 +393,17 @@ export async function daemon(): Promise<void> {
     if (now - lastPurge >= 24 * 60 * 60 * 1000) {
       purgeQueue()
       lastPurge = now
+    }
+
+    // Node registration every 60s (advertise capabilities to hub)
+    if (now - lastNodeRegister >= 60_000) {
+      try {
+        const nodeInfo = buildLocalNodeInfo()
+        await registerWithHub(nodeInfo)
+      } catch (e: any) {
+        log.debug(`Node registration skipped: ${e.message?.slice(0, 80)}`)
+      }
+      lastNodeRegister = now
     }
 
     // Sleep 30 seconds between loop iterations
