@@ -238,15 +238,97 @@ class _SidebarFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Text(
-        'v7.0.0',
-        style: TextStyle(
-          fontSize: 11,
-          color: context.rex.textTertiary,
-        ),
-      ),
+    return Consumer<RexService>(
+      builder: (context, rex, _) {
+        final daemonRunning = rex.backgroundProcesses.any(
+          (p) => p.name.contains('daemon') && p.running,
+        );
+        final contextPct = (rex.burnRate['contextPercent'] as num?)?.toDouble() ?? 0;
+        final dailyPct = (rex.burnRate['dailyPercent'] as num?)?.toDouble() ?? 0;
+
+        Color contextColor = CupertinoColors.systemGreen;
+        if (contextPct >= 90) contextColor = CupertinoColors.systemRed;
+        else if (contextPct >= 70) contextColor = CupertinoColors.systemYellow;
+
+        Color dailyColor = CupertinoColors.systemGreen;
+        if (dailyPct >= 90) dailyColor = CupertinoColors.systemRed;
+        else if (dailyPct >= 70) dailyColor = CupertinoColors.systemYellow;
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(height: 0.5, color: context.rex.separator),
+              const SizedBox(height: 10),
+              // Daemon status
+              Row(
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: daemonRunning
+                          ? CupertinoColors.systemGreen
+                          : context.rex.textTertiary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    daemonRunning ? 'Daemon running' : 'Daemon stopped',
+                    style: TextStyle(fontSize: 10, color: context.rex.textTertiary),
+                  ),
+                ],
+              ),
+              // Token stats (only if loaded)
+              if (contextPct > 0 || dailyPct > 0) ...[
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    if (contextPct > 0) ...[
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: contextColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Ctx ${contextPct.round()}%',
+                        style: TextStyle(fontSize: 10, color: context.rex.textTertiary),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    if (dailyPct > 0) ...[
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: dailyColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Daily ${dailyPct.round()}%',
+                        style: TextStyle(fontSize: 10, color: context.rex.textTertiary),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+              const SizedBox(height: 5),
+              Text(
+                'v7.0.0',
+                style: TextStyle(fontSize: 10, color: context.rex.textTertiary),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
