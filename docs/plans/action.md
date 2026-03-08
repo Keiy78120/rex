@@ -709,3 +709,111 @@ await applyContextProfile(profile)
 - Sessions VPS/infra → dangerous-cmd en mode strict automatiquement
 - Moins de context window gaspillé en preload inutile
 - MCP servers non-pertinents ne sont pas démarrés (RAM/perf)
+
+---
+
+## 21. DÉCISIONS ARCHITECTURE — 2026-03-08
+
+### 21.1 Hub node — recommandé VPS, pas obligatoire
+
+Le hub REX tourne sur le nœud le plus stable disponible :
+- **Recommandé** : VPS (toujours allumé, IP fixe)
+- **Fallback** : Mac, Raspberry Pi, NAS, n'importe quelle machine stable
+- REX détecte automatiquement via `inventory.ts` quel nœud est le plus adapté au rôle hub
+- Pas de dépendance hard sur VPS — dégradation propre si absent
+
+### 21.2 REX = Entry Point Unique (paradigme shift critique)
+
+**On n'invoque plus `claude` directement. On invoque `rex`.**
+
+REX est le controller. Claude Code est un worker sous sa supervision.
+
+```
+User → rex
+  ↓ detect intent (project-intent.ts)
+  ↓ build context profile (context-loader.ts)
+  ↓ write ~/.claude/settings.json dynamically (guards + MCPs + account)
+  ↓ spawn `claude` as managed subprocess (rex-launcher.ts)
+  ↓ daemon monitors PID + session state
+  ↓ intent drift? → save state → kill → reconfigure → relaunch
+```
+
+**Fichier clé à créer : `rex-launcher.ts`**
+
+```typescript
+// rex-launcher.ts
+// Responsabilités :
+// 1. Détecter l'intent du projet courant
+// 2. Construire le profil (guards, MCPs, account, model routing)
+// 3. Écrire ~/.claude/settings.json dynamiquement pour ce profil
+// 4. Spawner `claude` comme subprocess managé (PTY)
+// 5. Monitorer le PID via daemon
+// 6. Sur intent drift ou kill signal : dump state → reconfigure → relaunch
+
+export async function launchRex(opts: LaunchOptions): Promise<void>
+export async function killAndRelaunch(reason: string): Promise<void>
+export async function dumpSessionState(): Promise<void>  // → recovery-state.json
+export async function restoreSessionState(): Promise<string | null>  // → context string pour preload
+```
+
+**Flux kill/relaunch sans perte :**
+1. Daemon détecte drift ou reçoit signal relaunch
+2. `dumpSessionState()` → sauvegarde git diff + memory pending + last N messages dans `~/.claude/rex/recovery-state.json`
+3. Kill propre du process `claude` (SIGTERM + timeout → SIGKILL)
+4. `buildContextProfile(newIntent)` → nouveau profil
+5. Write `~/.claude/settings.json` avec nouveaux guards/MCPs
+6. Spawn nouveau `claude`
+7. `preload.ts` détecte `recovery-state.json` → l'injecte en SessionStart context
+8. Supprimer `recovery-state.json` après injection réussie
+
+**`rex` sans sous-commande = lancer Claude Code :**
+```bash
+rex          # détecte intent + lance claude avec bon profil
+rex --intent feature   # force un intent
+rex --profile infra    # force un profil
+rex kill     # dump state + kill
+rex relaunch # dump + kill + relaunch avec re-détection
+```
+
+### 21.3 Memory sync strategy — une master DB
+
+**Règle : une seule DB SQLite master, les autres sont des replicas read-only.**
+
+- Le nœud hub (VPS ou plus stable) détient la **master DB**
+- Les nœuds Mac/RPi ont une **replica locale** pour accès offline
+- Sync via `sync-queue.ts` : les nodes pushent des events, le hub consolide
+- Merge strategy : **last-write-wins sur les sessions**, **append-only sur les facts/lessons**
+- Conflict resolution : si même session ID écrite depuis deux nœuds → merger par timestamp + déduplication par hash
+
+**À implémenter dans `sync.ts` :**
+```typescript
+export type NodeRole = 'hub' | 'replica'
+export function getNodeRole(): NodeRole  // lit inventory.ts → is_hub flag
+export async function syncToHub(): Promise<void>   // replica → hub push
+export async function pullFromHub(): Promise<void>  // hub → replica pull
+```
+
+### 21.4 `self-improve.ts` — staging area obligatoire
+
+Auto-modification de CLAUDE.md interdite sans review.
+
+Nouveau flux :
+1. `self-improve.ts` extrait les lessons → écrit dans `~/.claude/rex/lessons-pending.yaml`
+2. `rex lessons` liste les lessons en attente avec preview
+3. `rex lessons accept <id>` → merge dans CLAUDE.md
+4. `rex lessons reject <id>` → supprime
+5. Optionnel : `rex lessons auto-accept --min-confidence 0.9` pour les lessons à haute confiance
+
+### 21.5 context-loader — pré-session uniquement
+
+Le `context-loader.ts` ne s'exécute PAS comme hook SessionStart.
+Il s'exécute dans `rex-launcher.ts` AVANT de spawner `claude`.
+
+Séquence correcte :
+```
+rex → detect intent → build profile → write settings.json → spawn claude
+                                                              ↓
+                                               SessionStart hook → preload.ts
+                                               (injecte memory + recovery state)
+```
+
