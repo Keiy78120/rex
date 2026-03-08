@@ -153,9 +153,60 @@ async function healthCheck(): Promise<void> {
   }
 }
 
-// ─── Ingest Cycle (every 30 min) ──────────────────────────
+// ─── Ollama latency probe ─────────────────────────────────
+async function measureOllamaLatencyMs(): Promise<number> {
+  const start = Date.now()
+  try {
+    await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(15_000) })
+    return Date.now() - start
+  } catch {
+    return Infinity
+  }
+}
+
+// ─── Ingest Cycle (adaptive, every 30 min) ────────────────
 async function ingestCycle(): Promise<void> {
-  log.info('Ingest cycle start')
+  const pending = countPending()
+  const latencyMs = await measureOllamaLatencyMs()
+  const ollamaUp = latencyMs < 15_000
+
+  log.info(`Ingest cycle start — pending=${pending}, ollama=${ollamaUp ? `${latencyMs}ms` : 'down'}`)
+
+  // Always ingest (save to pending/ is instant, no Ollama needed)
+  runCmd('rex ingest')
+
+  if (!ollamaUp) {
+    // Ollama down — skip embed/categorize, chunks already saved in pending/
+    log.warn('Ollama down — skipping embed+categorize, will retry next cycle')
+    return
+  }
+
+  if (pending > 2000) {
+    // Urgency mode: embed only, skip categorize, alert
+    log.warn(`Pending queue critical (${pending}) — embed-only urgency mode`)
+    await sendTelegramNotify(`⚠️ REX: Ingest queue critical — ${pending} pending chunks, embed-only mode`)
+    runCmd('rex ingest --max=200', 300_000)
+    log.info('Ingest cycle done (urgency mode)')
+    return
+  }
+
+  if (pending > 500) {
+    // Backlog mode: embed only, defer categorize
+    log.warn(`Pending queue large (${pending}) — embed-only, deferring categorize`)
+    runCmd('rex ingest --max=100', 240_000)
+    log.info('Ingest cycle done (backlog mode, categorize deferred)')
+    return
+  }
+
+  if (latencyMs > 2_000) {
+    // Ollama slow — embed only with tiny model, skip heavy categorize
+    log.info(`Ollama slow (${latencyMs}ms) — embed-only mode, skipping categorize`)
+    runCmd('rex ingest')
+    log.info('Ingest cycle done (slow-ollama mode)')
+    return
+  }
+
+  // Normal mode: full pipeline
   runCmd('rex ingest')
   runCmd('rex categorize --batch=100', 180_000)
   runCmd('rex recategorize --batch=20', 180_000)

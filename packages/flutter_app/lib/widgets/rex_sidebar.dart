@@ -25,8 +25,12 @@ class RexSidebar extends StatelessWidget {
     (icon: CupertinoIcons.link, label: 'MCP'),
     (icon: CupertinoIcons.bolt_fill, label: 'Optimize'),
     (icon: CupertinoIcons.person_2_fill, label: 'Clients'),
+    (icon: CupertinoIcons.chart_bar_alt_fill, label: 'Tokens'),
+    (icon: CupertinoIcons.eye_fill, label: 'Observer'),
+    (icon: CupertinoIcons.arrow_branch, label: 'Workflow'),
     (icon: CupertinoIcons.checkmark_shield_fill, label: 'Review'),
     (icon: CupertinoIcons.square_stack_3d_up, label: 'Sandbox'),
+    (icon: CupertinoIcons.folder_fill, label: 'Projects'),
     (icon: CupertinoIcons.doc_text, label: 'Logs'),
     (icon: CupertinoIcons.gear, label: 'Settings'),
   ];
@@ -237,7 +241,7 @@ class _SidebarFooter extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Text(
-        'v6.0.0',
+        'v7.0.0',
         style: TextStyle(
           fontSize: 11,
           color: context.rex.textTertiary,

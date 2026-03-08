@@ -103,9 +103,9 @@ Personne d'autre ne combine **deux orchestrators distincts** avec mémoire parta
 | Provider routing auto | ❌ | ❌ | ❌ | ❌ | ✅ cache→local→free→sub |
 | Gateway mobile | ❌ | ❌ | ❌ | ❌ | ✅ Telegram |
 | Self-healing daemon | ❌ | ❌ | ❌ | ❌ | ✅ watchdog + auto-fix |
-| Scripts dynamiques adaptatifs | ❌ | ❌ | ❌ | ❌ | 🔄 en cours |
-| Multi-account OAuth | ❌ | ❌ | ❌ | ❌ | 🔄 planifié |
-| MCP marketplace one-click | ❌ | ❌ | ❌ | ❌ | 🔄 en cours |
+| Scripts dynamiques adaptatifs | ❌ | ❌ | ❌ | ❌ | ✅ daemon ingest adaptatif |
+| Multi-account OAuth | ❌ | ❌ | ❌ | ❌ | ✅ account-pool.ts |
+| MCP marketplace one-click | ❌ | ❌ | ❌ | ❌ | ✅ mcp_registry.ts |
 
 ---
 

@@ -396,11 +396,30 @@ rex doctor --fix     # Auto-fix then health check
 | main.dart + rex_sidebar.dart: ReviewPage wired (13 pages, shield icon) | `main.dart`, `rex_sidebar.dart` |
 | §23 audit: zero direct SDK calls in any CLI file — all routed via orchestrator chain | all `cli/src/*.ts` |
 
+### ✅ Terminé (session 2026-03-11 — UI pages + hub CLI fixes)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **token_page.dart**: Token Analytics — burn rate, session stats, model breakdown | `pages/token_page.dart`, `rex_service.dart` |
+| **observer_page.dart**: 4 tabs (Runbooks, Observations, Habits, Facts) + add forms | `pages/observer_page.dart` |
+| **workflow_page.dart**: Git status + Backups + Journal/Cache intel | `pages/workflow_page.dart` |
+| **projects_page.dart**: Project scanner UI — filter, stack chips, cards with relative dates | `pages/projects_page.dart` |
+| **Sidebar + IndexedStack**: Observer, Workflow, Projects wired (19 pages total) | `main.dart`, `rex_sidebar.dart` |
+| **CLI: `rex backup list/create --json`**: returns `{ backups }` / `{ success, path, rotated }` | `packages/cli/src/index.ts` |
+| **CLI: `rex projects --json`**: returns `{ projects, total }` | `packages/cli/src/index.ts` |
+| **CLI: `rex hub status --json`**: non-blocking status check via HTTP → `{ running, port, nodesCount }` | `hub.ts`, `index.ts` |
+| **CLI: `rex hub start`**: background-spawn hub process, return immediately | `index.ts` |
+| **CLI: `rex hub stop`**: pkill hub process | `index.ts` |
+| **hub.ts: `getHubStatus()`**: exported function, HTTP GET /api/health with 3s timeout | `hub.ts` |
+| **Flutter: `_loadHubStatus()`**: now calls `hub status --json` instead of blocking `hub --json` | `rex_service.dart` |
+| **RexService**: loadObservations, loadHabits, loadFacts, loadBackups, loadGitStatus, loadProjects + action methods | `rex_service.dart` |
+| CLI build ✅ (pnpm build — zero errors) | — |
+
 ### 🔄 En cours / A faire
 
-**AUDIT v7 (Phase 2 ~95% DONE)** Remaining:
-- sandbox_page.dart — agent sandboxed execution UI (P3)
+**AUDIT v7 (Phase 2 ~98% DONE)** Remaining:
 - Cross-platform Flutter (Windows/Linux) — Phase 3
+- Debug pass on all 19 pages (deferred)
 - MCP one-click from marketplace to installed (UI flow)
 
 ---

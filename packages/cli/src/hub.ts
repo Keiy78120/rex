@@ -1,4 +1,4 @@
-import { createServer, IncomingMessage, ServerResponse, Server } from 'node:http'
+import { createServer, get as httpGet, IncomingMessage, ServerResponse, Server } from 'node:http'
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { execFile } from 'node:child_process'
@@ -15,7 +15,7 @@ const log = createLogger('hub')
 
 const NODES_PATH = join(REX_DIR, 'hub-nodes.json')
 const DEFAULT_PORT = 7420
-const VERSION = '6.3.0'
+const VERSION = '7.0.0'
 
 // ── Auth ───────────────────────────────────────────────
 
@@ -455,4 +455,45 @@ export function stopHub(): void {
     server = null
     log.info('Hub stopped')
   }
+}
+
+export async function getHubStatus(): Promise<{
+  running: boolean
+  port: number
+  nodesCount: number
+  nodes: NodeInfo[]
+  uptime?: number
+}> {
+  const port = parseInt(process.env.REX_HUB_PORT ?? String(DEFAULT_PORT), 10)
+  try {
+    const res = await new Promise<{ statusCode: number; data: string }>((resolve, reject) => {
+      const req = httpGet(
+        { host: 'localhost', port, path: '/api/health', timeout: 3000 },
+        (r: IncomingMessage) => {
+          let data = ''
+          r.on('data', (c: Buffer) => { data += c.toString() })
+          r.on('end', () => resolve({ statusCode: r.statusCode ?? 0, data }))
+        }
+      )
+      req.on('error', reject)
+      req.on('timeout', () => { req.destroy(); reject(new Error('timeout')) })
+    })
+    if (res.statusCode === 200) {
+      try {
+        const body = JSON.parse(res.data) as Record<string, unknown>
+        return {
+          running: true,
+          port,
+          nodesCount: (body.nodeCount as number) ?? 0,
+          nodes: [],
+          uptime: body.uptime as number | undefined,
+        }
+      } catch {
+        return { running: true, port, nodesCount: 0, nodes: [] }
+      }
+    }
+  } catch {
+    // Hub not running
+  }
+  return { running: false, port, nodesCount: 0, nodes: [] }
 }

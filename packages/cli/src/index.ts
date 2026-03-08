@@ -371,13 +371,18 @@ async function main() {
 
     case 'projects': {
       const { scanProjects, saveProjectIndex } = await import('./projects.js')
-      console.log(`${COLORS.cyan}Scanning projects...${COLORS.reset}`)
+      const jsonFlag = process.argv.includes('--json')
+      if (!jsonFlag) console.log(`${COLORS.cyan}Scanning projects...${COLORS.reset}`)
       const projects = scanProjects()
       saveProjectIndex(projects)
-      console.log(`\n${COLORS.bold}${projects.length} projects found${COLORS.reset}\n`)
-      for (const p of projects) {
-        const dot = p.status === 'active' ? `${COLORS.green}●${COLORS.reset}` : `${COLORS.dim}○${COLORS.reset}`
-        console.log(`  ${dot} ${COLORS.bold}${p.name.padEnd(20)}${COLORS.reset} ${p.stack.join(', ').padEnd(30)} ${COLORS.dim}${p.lastActive}${COLORS.reset}`)
+      if (jsonFlag) {
+        console.log(JSON.stringify({ projects, total: projects.length }, null, 2))
+      } else {
+        console.log(`\n${COLORS.bold}${projects.length} projects found${COLORS.reset}\n`)
+        for (const p of projects) {
+          const dot = p.status === 'active' ? `${COLORS.green}●${COLORS.reset}` : `${COLORS.dim}○${COLORS.reset}`
+          console.log(`  ${dot} ${COLORS.bold}${p.name.padEnd(20)}${COLORS.reset} ${p.stack.join(', ').padEnd(30)} ${COLORS.dim}${p.lastActive}${COLORS.reset}`)
+        }
       }
       break
     }
@@ -422,6 +427,7 @@ async function main() {
 
     case 'hub': {
       const sub = process.argv[3]
+      const jsonFlag = process.argv.includes('--json')
       if (sub === 'token' || process.argv.includes('--generate-token')) {
         const { generateHubToken } = await import('./hub.js')
         const token = generateHubToken()
@@ -430,6 +436,49 @@ async function main() {
         console.log(`  ${COLORS.dim}"REX_HUB_TOKEN": "${token}"${COLORS.reset}\n`)
         break
       }
+      if (sub === 'status' || (jsonFlag && sub !== 'start' && sub !== 'stop')) {
+        const { getHubStatus } = await import('./hub.js')
+        const status = await getHubStatus()
+        if (jsonFlag) {
+          console.log(JSON.stringify(status))
+        } else {
+          const runColor = status.running ? COLORS.green : COLORS.red
+          console.log(`\n  Hub: ${runColor}${status.running ? 'running' : 'stopped'}${COLORS.reset}  port=${status.port}  nodes=${status.nodesCount}`)
+        }
+        break
+      }
+      if (sub === 'stop') {
+        const { execSync } = await import('node:child_process')
+        try { execSync(`pkill -f "rex hub"`) } catch {}
+        if (!jsonFlag) console.log(`${COLORS.green}✓${COLORS.reset} Hub stopped`)
+        if (jsonFlag) console.log(JSON.stringify({ stopped: true }))
+        break
+      }
+      if (sub === 'start') {
+        // Start hub as detached background process
+        const { spawn } = await import('node:child_process')
+        const portArg2 = process.argv.find(a => a.startsWith('--port='))
+        const hubArgs = ['hub']
+        if (portArg2) hubArgs.push(portArg2)
+        const child = spawn(process.execPath, [process.argv[1], ...hubArgs], {
+          detached: true,
+          stdio: 'ignore',
+        })
+        child.unref()
+        // Wait a moment then check if it's running
+        await new Promise(r => setTimeout(r, 1000))
+        const { getHubStatus } = await import('./hub.js')
+        const status = await getHubStatus()
+        if (jsonFlag) {
+          console.log(JSON.stringify(status))
+        } else {
+          console.log(status.running
+            ? `${COLORS.green}✓${COLORS.reset} Hub started on port ${status.port}`
+            : `${COLORS.red}✗${COLORS.reset} Hub failed to start`)
+        }
+        break
+      }
+      // Default: run hub in foreground (for daemon / manual use)
       const { startHub } = await import('./hub.js')
       const portArg = process.argv.find(a => a.startsWith('--port='))
       const port = portArg ? parseInt(portArg.split('=')[1]) : undefined
@@ -885,7 +934,10 @@ async function main() {
       switch (sub) {
         case 'list': {
           const backups = listBackups()
-          if (backups.length === 0) {
+          const jsonFlag = process.argv.includes('--json')
+          if (jsonFlag) {
+            console.log(JSON.stringify({ backups }, null, 2))
+          } else if (backups.length === 0) {
             console.log(`${COLORS.dim}No backups found.${COLORS.reset}`)
           } else {
             console.log(`\n${COLORS.bold}REX Backups${COLORS.reset}\n`)
@@ -907,14 +959,23 @@ async function main() {
           break
         }
         default: {
-          console.log(`${COLORS.cyan}Creating backup...${COLORS.reset}`)
+          const jsonFlag2 = process.argv.includes('--json')
+          if (!jsonFlag2) console.log(`${COLORS.cyan}Creating backup...${COLORS.reset}`)
           const path = backupNow()
           if (path) {
-            console.log(`${COLORS.green}✓${COLORS.reset} Backup saved: ${path}`)
             const removed = rotateBackups(7)
-            if (removed > 0) console.log(`${COLORS.dim}Rotated ${removed} old backups${COLORS.reset}`)
+            if (jsonFlag2) {
+              console.log(JSON.stringify({ success: true, path, rotated: removed }))
+            } else {
+              console.log(`${COLORS.green}✓${COLORS.reset} Backup saved: ${path}`)
+              if (removed > 0) console.log(`${COLORS.dim}Rotated ${removed} old backups${COLORS.reset}`)
+            }
           } else {
-            console.log(`${COLORS.red}✗${COLORS.reset} Backup failed`)
+            if (jsonFlag2) {
+              console.log(JSON.stringify({ success: false, path: null }))
+            } else {
+              console.log(`${COLORS.red}✗${COLORS.reset} Backup failed`)
+            }
           }
         }
       }
@@ -1190,6 +1251,37 @@ async function main() {
         console.log(JSON.stringify({ ...report, signal: readCompactSignal() }, null, 2))
       } else {
         await printSessionGuardStatus()
+      }
+      break
+    }
+
+    case 'burn-rate': {
+      // rex burn-rate          → print dashboard
+      // rex burn-rate --json   → JSON output for Flutter
+      const { getBurnRateStats, printBurnRateDashboard } = await import('./burn-rate.js')
+      const jsonOut = process.argv.includes('--json')
+      if (jsonOut) {
+        const stats = getBurnRateStats(true)
+        console.log(JSON.stringify({
+          sessionTokensIn: stats.sessionTokensIn,
+          sessionTokensOut: stats.sessionTokensOut,
+          sessionTotal: stats.sessionTotal,
+          sessionDurationMs: stats.sessionDurationMs,
+          burnRatePerMin: stats.burnRatePerMin,
+          burnRatePerHour: stats.burnRatePerHour,
+          contextUsed: stats.contextUsed,
+          contextTotal: stats.contextTotal,
+          contextPercent: stats.contextPercent,
+          dailyTokensIn: stats.dailyTokensIn,
+          dailyTokensOut: stats.dailyTokensOut,
+          dailyTotal: stats.dailyTotal,
+          dailyLimit: stats.dailyLimit,
+          dailyPercent: stats.dailyPercent,
+          estimatedMinutesLeft: stats.estimatedMinutesLeft,
+          estimatedDepletionAt: stats.estimatedDepletionAt?.toISOString() ?? null,
+        }, null, 2))
+      } else {
+        printBurnRateDashboard()
       }
       break
     }

@@ -205,6 +205,22 @@ class RexService extends ChangeNotifier {
   Map<String, dynamic>? budgetSummary;
   List<Map<String, dynamic>> runbooks = [];
 
+  // Observer
+  List<Map<String, dynamic>> observations = [];
+  Map<String, dynamic> observationStats = {};
+  List<Map<String, dynamic>> habits = [];
+  List<Map<String, dynamic>> facts = [];
+  Map<String, dynamic> factStats = {};
+
+  // Workflow / Git
+  Map<String, dynamic> gitStatus = {};
+  List<Map<String, dynamic>> backups = [];
+  Map<String, dynamic> journalStats = {};
+  Map<String, dynamic> cacheStats = {};
+
+  // Projects
+  List<Map<String, dynamic>> projects = [];
+
   // Agents & MCP
   List<String> callEvents = [];
   List<AgentInfo> agents = [];
@@ -1906,7 +1922,7 @@ $transcript
   }
 
   Future<void> _loadHubStatus() async {
-    final out = await _runRexArgs(['hub', '--json'], timeout: 10);
+    final out = await _runRexArgs(['hub', 'status', '--json'], timeout: 10);
     try {
       final parsed = jsonDecode(out.trim());
       if (parsed is Map<String, dynamic>) hubStatus = parsed;
@@ -2013,6 +2029,199 @@ $transcript
         runbooks = raw
             .whereType<Map<String, dynamic>>()
             .toList();
+      }
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> loadObservations() async {
+    try {
+      final out = await _runRexArgs(['observations', '--json'], timeout: 10);
+      final parsed = jsonDecode(_extractJson(out));
+      if (parsed is Map<String, dynamic>) {
+        observations = (parsed['observations'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+        observationStats = (parsed['stats'] as Map<String, dynamic>?) ?? {};
+      }
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> loadHabits() async {
+    try {
+      final out = await _runRexArgs(['habits', '--json'], timeout: 10);
+      final parsed = jsonDecode(_extractJson(out));
+      if (parsed is Map<String, dynamic>) {
+        habits = (parsed['habits'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+      }
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> loadFacts() async {
+    try {
+      final out = await _runRexArgs(['facts', '--json'], timeout: 10);
+      final parsed = jsonDecode(_extractJson(out));
+      if (parsed is Map<String, dynamic>) {
+        facts = (parsed['facts'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+        factStats = (parsed['stats'] as Map<String, dynamic>?) ?? {};
+      }
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> addObservationEntry(String type, String content, {String project = ''}) async {
+    try {
+      final args = ['observe', type, content];
+      if (project.isNotEmpty) args.addAll(['--project=$project']);
+      await _runRexArgs(args, timeout: 10);
+      await loadObservations();
+    } catch (_) {}
+  }
+
+  Future<void> addRunbookEntry(String name, String trigger, List<String> steps) async {
+    try {
+      final stepsArg = steps.join(',');
+      await _runRexArgs([
+        'runbooks', 'add', name,
+        '--trigger=$trigger',
+        '--steps=$stepsArg',
+      ], timeout: 10);
+      await loadRunbooks();
+    } catch (_) {}
+  }
+
+  Future<void> deleteRunbookEntry(int id) async {
+    try {
+      await _runRexArgs(['runbooks', 'delete', '$id'], timeout: 10);
+      await loadRunbooks();
+    } catch (_) {}
+  }
+
+  Future<void> addFactEntry(String category, String content) async {
+    try {
+      await _runRexArgs(['facts', 'add', category, content], timeout: 10);
+      await loadFacts();
+    } catch (_) {}
+  }
+
+  // ── Workflow / Git ─────────────────────────────────────────────────
+
+  Future<void> loadGitStatus([String? projectPath]) async {
+    try {
+      final home = Platform.environment['HOME'] ?? '';
+      final cwd = projectPath ?? '$home/Documents/Developer/keiy/rex';
+      final result = await Process.run('git', ['-C', cwd, 'status', '--porcelain=v1']);
+      final branchResult = await Process.run('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD']);
+      final logResult = await Process.run('git', ['-C', cwd, 'log', '--oneline', '-5']);
+      final lines = (result.stdout as String).split('\n').where((l) => l.isNotEmpty).toList();
+      gitStatus = {
+        'branch': (branchResult.stdout as String).trim(),
+        'modified': lines.where((l) => l.startsWith(' M') || l.startsWith('M ')).length,
+        'added': lines.where((l) => l.startsWith('A ') || l.startsWith('??')).length,
+        'deleted': lines.where((l) => l.startsWith(' D') || l.startsWith('D ')).length,
+        'total': lines.length,
+        'files': lines.take(15).toList(),
+        'recentCommits': (logResult.stdout as String).trim().split('\n').where((l) => l.isNotEmpty).take(5).toList(),
+        'cwd': cwd,
+      };
+    } catch (_) {
+      gitStatus = {'branch': 'unknown', 'total': 0, 'files': <String>[], 'recentCommits': <String>[]};
+    }
+    notifyListeners();
+  }
+
+  Future<void> loadBackups() async {
+    try {
+      final out = await _runRexArgs(['backup', 'list', '--json'], timeout: 10);
+      final json = _extractJson(out);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic> && parsed['backups'] is List) {
+          backups = (parsed['backups'] as List).whereType<Map<String, dynamic>>().toList();
+        } else if (parsed is List) {
+          backups = parsed.whereType<Map<String, dynamic>>().toList();
+        }
+      }
+    } catch (_) {
+      backups = [];
+    }
+    notifyListeners();
+  }
+
+  Future<void> loadJournalStats() async {
+    try {
+      final out = await _runRexArgs(['journal', '--json'], timeout: 10);
+      final parsed = jsonDecode(_extractJson(out));
+      if (parsed is Map<String, dynamic>) journalStats = parsed;
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> loadCacheStats() async {
+    try {
+      final out = await _runRexArgs(['cache', '--json'], timeout: 10);
+      final parsed = jsonDecode(_extractJson(out));
+      if (parsed is Map<String, dynamic>) cacheStats = parsed;
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<String> runWorkflow(String sub, [String? arg]) async {
+    try {
+      final args = ['workflow', sub, if (arg != null) arg];
+      final out = await _runRexArgs(args, timeout: 30);
+      return out.trim();
+    } catch (e) {
+      return 'Error: $e';
+    }
+  }
+
+  Future<String> createBackup() async {
+    try {
+      final out = await _runRexArgs(['backup', '--json'], timeout: 30);
+      await loadBackups();
+      final json = _extractJson(out);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json) as Map<String, dynamic>;
+        return parsed['success'] == true ? 'Backup saved: ${parsed['path']}' : 'Backup failed';
+      }
+      return out.trim();
+    } catch (e) {
+      return 'Error: $e';
+    }
+  }
+
+  Future<void> cleanCache() async {
+    try {
+      await _runRexArgs(['cache', 'clean'], timeout: 10);
+      await loadCacheStats();
+    } catch (_) {}
+  }
+
+  Future<void> replayJournal() async {
+    try {
+      await _runRexArgs(['journal', 'replay'], timeout: 15);
+      await loadJournalStats();
+    } catch (_) {}
+  }
+
+  Future<void> loadProjects() async {
+    try {
+      final out = await _runRexArgs(['projects', '--json'], timeout: 30);
+      final json = _extractJson(out);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic> && parsed['projects'] is List) {
+          projects = (parsed['projects'] as List)
+              .whereType<Map<String, dynamic>>()
+              .toList();
+        }
       }
     } catch (_) {}
     notifyListeners();
@@ -2170,6 +2379,34 @@ $transcript
   }
 
   // ── End Agent Factory ───────────────────────────────────────────────────
+
+  // ── Token / Burn Rate ────────────────────────────────────────────────────
+
+  Map<String, dynamic> _burnRate = {};
+  Map<String, dynamic> get burnRate => _burnRate;
+
+  Future<void> loadBurnRate() async {
+    try {
+      final output = await _runRexArgs(['burn-rate', '--json']);
+      final json = _extractJson(output);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic>) {
+          _burnRate = parsed;
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> clearCompactSignal() async {
+    try {
+      await _runRexArgs(['session-guard', 'clear']);
+      await checkSessionGuard();
+    } catch (_) {}
+  }
+
+  // ── End Token ────────────────────────────────────────────────────────────
 
   @override
   void dispose() {

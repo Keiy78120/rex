@@ -14,7 +14,11 @@ import 'pages/agents_page.dart';
 import 'pages/mcp_page.dart';
 import 'pages/optimize_page.dart';
 import 'pages/clients_page.dart';
+import 'pages/token_page.dart';
+import 'pages/observer_page.dart';
+import 'pages/workflow_page.dart';
 import 'pages/review_page.dart';
+import 'pages/projects_page.dart';
 import 'pages/sandbox_page.dart';
 import 'pages/logs_page.dart';
 import 'pages/settings_page.dart';
@@ -93,8 +97,12 @@ class _RexMainWindowState extends State<RexMainWindow> {
                   McpPage(),
                   OptimizePage(),
                   ClientsPage(),
+                  TokenPage(),
+                  ObserverPage(),
+                  WorkflowPage(),
                   ReviewPage(),
                   SandboxPage(),
+                  ProjectsPage(),
                   LogsPage(),
                   SettingsPage(),
                 ],
