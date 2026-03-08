@@ -19,29 +19,113 @@ const SMART_INGEST = process.env.REX_SMART_INGEST !== "0";
 const VALID_CATEGORIES = ["debug", "fix", "idea", "architecture", "pattern", "lesson", "config", "session"] as const;
 type Category = (typeof VALID_CATEGORIES)[number];
 
-const PREFERRED_MODELS = ["qwen3.5:9b", "qwen3.5:4b", "qwen2.5:1.5b", "llama3.2", "mistral"];
+// Preferred models for classify — smallest first (speed over quality in ingest)
+const CLASSIFY_MODELS = ["qwen2.5:1.5b", "qwen3.5:4b", "qwen3.5:9b", "llama3.2", "mistral"];
+// Larger models that are too slow for classify (> 2GB — avoid in auto mode)
+const SLOW_MODELS = ["qwen3.5:9b", "qwen3:8b", "deepseek", "codestral"];
 
-async function detectModel(): Promise<string> {
+async function detectFastModel(): Promise<string> {
   if (process.env.REX_LLM_MODEL) return process.env.REX_LLM_MODEL;
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/tags`);
+    const res = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(3000) });
     const data = (await res.json()) as { models: Array<{ name: string }> };
-    const available = data.models.map((m: any) => m.name);
-    for (const pref of PREFERRED_MODELS) {
+    const available = data.models.map((m: any) => m.name as string);
+    // Prefer smallest classify model
+    for (const pref of CLASSIFY_MODELS) {
       const base = pref.split(":")[0];
-      const match = available.find((a: string) => a.includes(base));
+      const match = available.find((a) => a.startsWith(base));
       if (match) return match;
     }
-    return available.find((a: string) => !a.includes("embed")) || available[0];
+    // Fallback: any non-embed, non-slow model
+    return available.find((a) => !a.includes("embed") && !SLOW_MODELS.some(s => a.includes(s))) || available[0] || "qwen2.5:1.5b";
   } catch {
-    return "qwen3.5:4b";
+    return "qwen2.5:1.5b";
   }
 }
 
-async function classifyAndSummarize(chunk: string): Promise<{ category: Category; summary: string }> {
+// ── Adaptive ingest context ─────────────────────────────
+
+type IngestMode = 'smart' | 'fast' | 'bulk' | 'offline'
+
+interface IngestContext {
+  mode: IngestMode
+  model: string | null
+  maxPerRun: number
+  pendingFiles: number
+  totalChunks: number
+  ollamaLatencyMs: number | null
+}
+
+const BASE_MAX_EMBED = parseInt(process.env.REX_MAX_EMBED_PER_RUN || '30', 10)
+
+async function measureOllamaLatency(): Promise<number | null> {
+  const start = Date.now()
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(5000) })
+    if (!res.ok) return null
+    return Date.now() - start
+  } catch {
+    return null
+  }
+}
+
+async function detectIngestContext(): Promise<IngestContext> {
+  // Count pending backlog
+  let pendingFiles = 0
+  let totalChunks = 0
+  if (existsSync(PENDING_DIR)) {
+    const files = readdirSync(PENDING_DIR).filter(f => f.endsWith('.json'))
+    pendingFiles = files.length
+    for (const f of files) {
+      try {
+        const chunks = JSON.parse(readFileSync(join(PENDING_DIR, f), 'utf-8'))
+        totalChunks += Array.isArray(chunks) ? chunks.length : 0
+      } catch { /* corrupt file — skip */ }
+    }
+  }
+
+  // Explicit overrides take priority
+  const override = process.env.REX_SMART_INGEST
+  if (override === '0') {
+    return { mode: 'fast', model: null, maxPerRun: BASE_MAX_EMBED, pendingFiles, totalChunks, ollamaLatencyMs: null }
+  }
+  if (override === '1') {
+    const model = await detectFastModel()
+    return { mode: 'smart', model, maxPerRun: BASE_MAX_EMBED, pendingFiles, totalChunks, ollamaLatencyMs: null }
+  }
+
+  // Dynamic detection: measure Ollama latency
+  const ollamaLatencyMs = await measureOllamaLatency()
+
+  if (ollamaLatencyMs === null) {
+    // Ollama offline — queue only, no embed
+    return { mode: 'offline', model: null, maxPerRun: 0, pendingFiles, totalChunks, ollamaLatencyMs: null }
+  }
+
+  // Critical backlog: > 2000 chunks → bulk mode, max throughput
+  if (totalChunks > 2000) {
+    return { mode: 'bulk', model: null, maxPerRun: Math.max(BASE_MAX_EMBED * 10, 500), pendingFiles, totalChunks, ollamaLatencyMs }
+  }
+
+  // Large backlog: > 500 chunks → fast embed-only, higher throughput
+  if (totalChunks > 500) {
+    return { mode: 'fast', model: null, maxPerRun: Math.max(BASE_MAX_EMBED * 5, 200), pendingFiles, totalChunks, ollamaLatencyMs }
+  }
+
+  // Fast Ollama (< 2s) → smart classify with smallest available model
+  if (ollamaLatencyMs < 2000) {
+    const model = await detectFastModel()
+    return { mode: 'smart', model, maxPerRun: BASE_MAX_EMBED, pendingFiles, totalChunks, ollamaLatencyMs }
+  }
+
+  // Slow Ollama (2-10s) → embed-only to avoid blocking
+  return { mode: 'fast', model: null, maxPerRun: BASE_MAX_EMBED, pendingFiles, totalChunks, ollamaLatencyMs }
+}
+
+async function classifyAndSummarize(chunk: string, resolvedModel?: string): Promise<{ category: Category; summary: string }> {
   const fallback = { category: "session" as Category, summary: chunk };
   try {
-    const model = await detectModel();
+    const model = resolvedModel ?? await detectFastModel();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
@@ -230,38 +314,45 @@ function chunkText(lines: string[]): string[] {
   return chunks.slice(0, MAX_CHUNKS_PER_FILE);
 }
 
-async function checkOllama(): Promise<boolean> {
-  try {
-    const res = await fetch(`${OLLAMA_URL}/api/tags`);
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
 const PENDING_DIR = join(process.env.HOME || '~', '.claude', 'rex', 'memory', 'pending')
 
 async function savePending(chunks: Array<{ text: string; source: string; project: string }>) {
   if (!existsSync(PENDING_DIR)) mkdirSync(PENDING_DIR, { recursive: true });
   const filename = `pending-${Date.now()}.json`;
   writeFS(join(PENDING_DIR, filename), JSON.stringify(chunks, null, 2));
-  console.log(`  Saved ${chunks.length} chunks to pending/ (Ollama offline)`);
 }
 
 const EMBED_THROTTLE_MS = parseInt(process.env.REX_EMBED_THROTTLE_MS || '500', 10);
-const MAX_EMBED_PER_RUN = parseInt(process.env.REX_MAX_EMBED_PER_RUN || '30', 10);
 
-async function processPending() {
+async function processPending(ctx?: IngestContext) {
   if (!existsSync(PENDING_DIR)) return;
   const files = readdirSync(PENDING_DIR).filter((f) => f.endsWith(".json"));
   if (files.length === 0) return;
 
-  console.log(`  Processing ${files.length} pending file(s) (max ${MAX_EMBED_PER_RUN} chunks/run, ${EMBED_THROTTLE_MS}ms throttle)...`);
+  // Detect context if not provided
+  const context = ctx ?? await detectIngestContext();
+  const { mode, model, maxPerRun, totalChunks } = context;
+
+  if (mode === 'offline') {
+    console.log(`  Ollama offline — ${files.length} pending file(s) queued, will embed when Ollama is up.`);
+    return;
+  }
+
+  const modeLabel = mode === 'smart' ? `smart (${model})` : mode;
+  const estimatedMinutes = totalChunks > 0 && maxPerRun > 0
+    ? Math.ceil((totalChunks / maxPerRun) * (EMBED_THROTTLE_MS / 1000 / 60))
+    : 0;
+
+  console.log(`  Processing ${files.length} file(s) · ${totalChunks} chunks · mode=${modeLabel} · max=${maxPerRun}/run${estimatedMinutes > 0 ? ` · ~${estimatedMinutes}min to clear` : ''}`);
+  if (mode === 'bulk') console.warn(`  ⚠ Critical backlog detected (${totalChunks} chunks) — bulk mode active`);
+
+  const cycleStart = Date.now();
   let totalEmbedded = 0;
 
   for (const file of files) {
-    if (totalEmbedded >= MAX_EMBED_PER_RUN) {
-      console.log(`  Reached ${MAX_EMBED_PER_RUN} chunk limit — rest will process next run.`);
+    if (totalEmbedded >= maxPerRun) {
+      const remaining = totalChunks - totalEmbedded;
+      console.log(`  Reached ${maxPerRun} chunk limit — ${remaining} chunks will process next run.`);
       break;
     }
 
@@ -271,10 +362,10 @@ async function processPending() {
       let processed = 0;
 
       for (const chunk of chunks) {
-        if (totalEmbedded >= MAX_EMBED_PER_RUN) break;
+        if (totalEmbedded >= maxPerRun) break;
 
-        if (SMART_INGEST) {
-          const { category, summary } = await classifyAndSummarize(chunk.text);
+        if (mode === 'smart' && model) {
+          const { category, summary } = await classifyAndSummarize(chunk.text, model);
           await learn(summary, category, chunk.source, chunk.project);
         } else {
           await learn(chunk.text, "session", chunk.source, chunk.project);
@@ -282,28 +373,28 @@ async function processPending() {
         processed++;
         totalEmbedded++;
 
-        // Throttle to avoid CPU spikes
-        if (EMBED_THROTTLE_MS > 0) {
+        // Throttle to avoid CPU spikes (skip throttle in bulk mode)
+        if (EMBED_THROTTLE_MS > 0 && mode !== 'bulk') {
           await new Promise((r) => setTimeout(r, EMBED_THROTTLE_MS));
         }
       }
 
       if (processed >= chunks.length) {
-        // Fully processed — remove file
         unlinkSync(filePath);
-        console.log(`  ${file}: ${processed} chunks embedded`);
       } else {
-        // Partial — rewrite with remaining chunks
         const remaining = chunks.slice(processed);
         writeFS(filePath, JSON.stringify(remaining, null, 2));
-        console.log(`  ${file}: ${processed}/${chunks.length} embedded, ${remaining.length} remaining`);
       }
     } catch (err) {
       console.error(`  Error processing ${file}: ${(err as Error).message}`);
     }
   }
 
-  if (totalEmbedded > 0) console.log(`  Embedded ${totalEmbedded} chunks total this run.`);
+  const elapsed = ((Date.now() - cycleStart) / 1000).toFixed(1);
+  const chunksPerMin = totalEmbedded > 0 ? Math.round(totalEmbedded / (parseFloat(elapsed) / 60)) : 0;
+  if (totalEmbedded > 0) {
+    console.log(`  Embedded ${totalEmbedded} chunks in ${elapsed}s (${chunksPerMin}/min). Remaining: ${Math.max(0, totalChunks - totalEmbedded)}`);
+  }
 }
 
 const LOCK_FILE = join(process.env.HOME || '~', '.claude', 'rex', 'memory', 'ingest.lock');
@@ -325,8 +416,7 @@ function acquireLock(): boolean {
     }
 
     // Atomic create — fails with EEXIST if another process created it first
-    const { writeFileSync: atomicWrite } = require('fs');
-    atomicWrite(LOCK_FILE, String(process.pid), { flag: 'wx' });
+    writeFS(LOCK_FILE, String(process.pid), { flag: 'wx' });
     return true;
   } catch (e: any) {
     if (e?.code === 'EEXIST') {
@@ -344,11 +434,17 @@ async function ingestSessions() {
   if (!acquireLock()) return;
 
   try {
-    const ollamaUp = await checkOllama();
+    // Detect adaptive context once — drives mode selection for processPending and new-session ingestion
+    const ctx = await detectIngestContext();
 
-    // If Ollama is up, process any pending backlog first
-    if (ollamaUp) {
-      await processPending();
+    if (ctx.mode !== 'offline') {
+      if (ctx.totalChunks > 0) {
+        const latencyInfo = ctx.ollamaLatencyMs !== null ? ` (Ollama ${ctx.ollamaLatencyMs}ms)` : '';
+        console.log(`Ingest: mode=${ctx.mode}${latencyInfo} · ${ctx.totalChunks} pending chunks · max=${ctx.maxPerRun}/run`);
+      }
+      await processPending(ctx);
+    } else {
+      console.log(`Ingest: Ollama offline — new sessions will be queued to pending/`);
     }
 
     const sessionsDir = join(process.env.HOME || "~", ".claude", "projects");
