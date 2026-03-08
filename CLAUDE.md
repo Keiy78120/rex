@@ -497,12 +497,14 @@ rex doctor --fix     # Auto-fix then health check
 | Auth: dashboard `/` et `/api/health` publics, toutes autres routes protégées | `hub.ts` |
 | fix(sync): self-sync loop prevented (isLocalHub guard) | `sync.ts` |
 | docs(readme): REX repositionné comme superlayer au-dessus des LLMs | `README.md` |
+| Gateway spooled replay: chatId in spooled event, notify on hub recovery, /replay command | `gateway.ts` |
 
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 IN PROGRESS**:
 - Cross-platform Flutter (Windows/Linux) — Phase 3 later
 - Hub API: full routes done, VPS brain + Tailscale mesh partial
+- Tailscale auto-join: Phase 3 — detect + guide + health in node-mesh.ts
 
 ---
 
