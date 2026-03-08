@@ -154,3 +154,78 @@ export function workflowPR(): void {
     console.log(`Branch pushed. Create PR manually or install/configure 'gh' CLI.`)
   }
 }
+
+export function workflowDeploy(env: 'staging' | 'prod'): void {
+  const branch = currentBranch()
+
+  // 1. Check CI status (if gh available)
+  let ciPassed: boolean | null = null
+  try {
+    const runs = execSync(`gh run list --branch ${branch} --limit 1 --json status,conclusion 2>/dev/null`, {
+      encoding: 'utf-8', timeout: 15_000, stdio: 'pipe',
+    })
+    const parsed = JSON.parse(runs) as Array<{ status: string; conclusion: string }>
+    if (parsed.length > 0) {
+      ciPassed = parsed[0].conclusion === 'success'
+      if (!ciPassed && parsed[0].status !== 'in_progress') {
+        console.log(`CI status: ${parsed[0].conclusion} — deploy blocked. Fix CI first.`)
+        process.exit(1)
+      }
+    }
+  } catch {
+    log.warn('Could not check CI status (gh not configured or no runs)')
+  }
+
+  // 2. Prod confirmation
+  if (env === 'prod') {
+    const readline = require('readline').createInterface({ input: process.stdin, output: process.stdout })
+    const answer: string = execSync(
+      'read -p "Deploy to PRODUCTION? (yes/no): " ans && echo $ans',
+      { encoding: 'utf-8', shell: '/bin/bash', timeout: 30_000 }
+    ).trim()
+    if (answer.toLowerCase() !== 'yes') {
+      console.log('Deploy cancelled.')
+      process.exit(0)
+    }
+  }
+
+  // 3. Auto-generate changelog from commits since last tag
+  let changelog = ''
+  try {
+    const lastTag = git('describe --tags --abbrev=0 2>/dev/null || echo ""').trim()
+    const range = lastTag ? `${lastTag}..HEAD` : 'HEAD'
+    changelog = git(`log ${range} --oneline`).split('\n').map((l: string) => `- ${l}`).join('\n')
+  } catch {}
+
+  // 4. Push to deploy branch / trigger deploy
+  const deployBranch = env === 'prod' ? 'main' : `deploy/${env}`
+  log.info(`Deploying to ${env} (branch: ${deployBranch})`)
+
+  if (env === 'prod') {
+    // Tag + push
+    const tag = `v${Date.now()}`
+    try {
+      git(`tag ${tag}`)
+      git(`push origin ${tag}`)
+      git(`push origin ${branch}:main`)
+      log.info(`Tagged and pushed: ${tag}`)
+      console.log(`Deployed to ${env}: ${tag}`)
+      if (changelog) console.log(`\nChangelog:\n${changelog}`)
+    } catch (e: any) {
+      log.error(`Deploy failed: ${e.message?.slice(0, 200)}`)
+      console.log('Deploy failed. Check your remote and CI configuration.')
+    }
+  } else {
+    // Push to staging branch
+    try {
+      execSync(`git push -u origin ${branch}:${deployBranch} --force-with-lease`, {
+        encoding: 'utf-8', timeout: 30_000, stdio: 'pipe',
+      })
+      log.info(`Pushed to ${deployBranch}`)
+      console.log(`Deployed to ${env}: branch ${deployBranch}`)
+    } catch (e: any) {
+      log.error(`Staging push failed: ${e.message?.slice(0, 200)}`)
+      console.log(`Push to ${deployBranch} failed.`)
+    }
+  }
+}

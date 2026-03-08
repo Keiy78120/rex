@@ -1104,8 +1104,14 @@ async function main() {
           workflowPR()
           break
         }
+        case 'deploy': {
+          const env = (process.argv[4] === 'prod' ? 'prod' : 'staging') as 'staging' | 'prod'
+          const { workflowDeploy } = await import('./workflow.js')
+          workflowDeploy(env)
+          break
+        }
         default:
-          console.log(`Usage: rex workflow [feature|bugfix|pr]`)
+          console.log(`Usage: rex workflow [feature|bugfix|pr|deploy [staging|prod]]`)
       }
       break
     }
@@ -1333,10 +1339,11 @@ async function main() {
       break
     }
 
-    case 'pool': {
+    case 'pool':
+    case 'accounts': {
       const { printPool, printSetupHint } = await import('./account-pool.js')
       const sub = process.argv[3] ?? 'list'
-      if (sub === 'setup') { printSetupHint(); break }
+      if (sub === 'setup' || sub === 'add') { printSetupHint(); break }
       printPool()
       break
     }
@@ -1566,6 +1573,90 @@ async function main() {
       break
     }
 
+    // ── Sandbox ────────────────────────────────────────────────────────────
+    case 'sandbox': {
+      const { sandboxRun, sandboxShell, sandboxClaude, sandboxCodex, printSandboxStatus, detectRisk } = await import('./sandbox.js')
+      const sub = process.argv[3]
+      const modeArg = process.argv.find(a => a.startsWith('--mode='))?.split('=')[1] as 'light' | 'full' | 'off' | undefined
+      const mode = modeArg ?? 'light'
+      const noNetwork = process.argv.includes('--no-network')
+
+      switch (sub) {
+        case 'status': {
+          printSandboxStatus(mode)
+          break
+        }
+        case 'shell': {
+          await sandboxShell({ mode })
+          break
+        }
+        case 'run': {
+          const cmd = process.argv.slice(4).join(' ')
+          if (!cmd) { console.error('Usage: rex sandbox run "<command>"'); process.exit(1) }
+          const risk = detectRisk(cmd)
+          if (risk.level === 'full' && mode === 'light') {
+            console.log(`\x1b[33m! Risk detected: ${risk.reason}\x1b[0m`)
+            console.log(`  Consider: rex sandbox run "${cmd}" --mode=full`)
+          }
+          await sandboxRun(cmd, { mode, network: !noNetwork })
+          break
+        }
+        case 'claude': {
+          const task = process.argv.slice(4).join(' ')
+          if (!task) { console.error('Usage: rex sandbox claude "<task>"'); process.exit(1) }
+          await sandboxClaude(task, { mode, network: !noNetwork })
+          break
+        }
+        case 'codex': {
+          const task = process.argv.slice(4).join(' ')
+          if (!task) { console.error('Usage: rex sandbox codex "<task>"'); process.exit(1) }
+          await sandboxCodex(task, { mode, network: !noNetwork })
+          break
+        }
+        default: {
+          printSandboxStatus(mode)
+          console.log('Usage:')
+          console.log('  rex sandbox status              Show sandbox runtime status')
+          console.log('  rex sandbox shell               Interactive shell in sandbox')
+          console.log('  rex sandbox run "<cmd>"         Run command in sandbox')
+          console.log('  rex sandbox claude "<task>"     Run Claude Code in sandbox')
+          console.log('  rex sandbox codex "<task>"      Run Codex in sandbox')
+          console.log()
+          console.log('Flags:')
+          console.log('  --mode=light|full|off           Isolation level (default: light)')
+          console.log('  --no-network                    Block network access in sandbox')
+        }
+      }
+      break
+    }
+
+    // ── Project Init ────────────────────────────────────────────────────────
+    case 'project': {
+      const sub = process.argv[3]
+      if (sub === 'init') {
+        const { initProject, previewInit } = await import('./project-init.js')
+        const targetPath = process.argv.find(a => a.startsWith('--path='))?.split('=')[1] ?? process.cwd()
+        const dryRun = process.argv.includes('--dry-run')
+        const force = process.argv.includes('--force')
+        const github = process.argv.includes('--github')
+
+        if (dryRun) {
+          console.log(`\n\x1b[1mREX Project Init\x1b[0m  \x1b[2m(dry-run)\x1b[0m\n`)
+          await previewInit(targetPath)
+        } else {
+          console.log(`\n\x1b[1mREX Project Init\x1b[0m\n`)
+          await initProject(targetPath, { github, dryRun, force })
+        }
+      } else {
+        console.log('Usage:')
+        console.log('  rex project init             Bootstrap project (CLAUDE.md + git + skills)')
+        console.log('  rex project init --github    + create GitHub repo via gh')
+        console.log('  rex project init --force     Overwrite existing CLAUDE.md')
+        console.log('  rex project init --dry-run   Preview without changes')
+      }
+      break
+    }
+
     case undefined: {
       // First run? Run the wizard so the user gets the "wow moment" before launching
       const { isFirstRun, setupWizard } = await import('./setup-wizard.js')
@@ -1672,6 +1763,21 @@ ${COLORS.bold}Agent Factory (B2B):${COLORS.reset}
 ${COLORS.bold}Account Pool:${COLORS.reset}
   rex pool             List Claude accounts in the pool
   rex pool setup       Show instructions to add more accounts
+  rex accounts         Alias for rex pool (list/add)
+
+${COLORS.bold}Sandbox:${COLORS.reset}
+  rex sandbox status           Show isolation runtime status (seatbelt/docker)
+  rex sandbox shell            Interactive shell in sandbox
+  rex sandbox run "<cmd>"      Run command with OS-level isolation
+  rex sandbox claude "<task>"  Run Claude Code in sandbox
+  rex sandbox codex "<task>"   Run Codex in sandbox
+  Flags: --mode=light|full|off  --no-network
+
+${COLORS.bold}Project Bootstrap:${COLORS.reset}
+  rex project init             Detect stack, create CLAUDE.md, init git, install skills
+  rex project init --github    + create private GitHub repo via gh
+  rex project init --force     Overwrite existing CLAUDE.md
+  rex project init --dry-run   Preview without changes
 
 ${COLORS.bold}Providers & Budget:${COLORS.reset}
   rex providers        Show available providers (owned-first order)
@@ -1722,6 +1828,7 @@ ${COLORS.bold}Workflow:${COLORS.reset}
   rex workflow feature <name>   Start feature branch + FEATURE.md
   rex workflow bugfix <desc>    Start bugfix branch + BUG.md
   rex workflow pr               Push + create PR via gh
+  rex workflow deploy [env]     Deploy to staging|prod (review + CI check + tag)
 
 ${COLORS.bold}Background:${COLORS.reset}
   rex daemon           Start persistent background daemon
