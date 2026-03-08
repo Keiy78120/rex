@@ -1015,6 +1015,20 @@ async function main() {
       break
     }
 
+    case 'intent': {
+      const { detectIntent, printIntent } = await import('./project-intent.js')
+      const targetPath = process.argv[3] ?? process.cwd()
+      const debugMode = process.argv.includes('--debug')
+      const jsonMode = process.argv.includes('--json')
+      const ctx = detectIntent(targetPath)
+      if (jsonMode) {
+        console.log(JSON.stringify(ctx, null, 2))
+      } else {
+        printIntent(ctx, debugMode)
+      }
+      break
+    }
+
     case 'help':
     default:
       console.log(`
@@ -1077,6 +1091,9 @@ ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex preload [path]   Show pre-loaded context for a path
   rex context [path]   Analyze project, recommend MCP/skills
   rex projects         Scan and index all dev projects
+  rex intent [path]    Detect project intent from git signals (new/feature/fix/refactor)
+  rex intent --debug   Show raw signals used for detection
+  rex intent --json    JSON output
 
 ${COLORS.bold}Providers & Budget:${COLORS.reset}
   rex providers        Show available providers (owned-first order)

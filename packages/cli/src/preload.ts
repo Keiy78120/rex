@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { MEMORY_DB_PATH } from './paths.js'
 import { findProject } from './projects.js'
 import { createLogger } from './logger.js'
+import { detectIntent, intentToPreloadLine } from './project-intent.js'
 
 const log = createLogger('preload')
 
@@ -127,6 +128,15 @@ export async function preload(cwd: string): Promise<string> {
     if (skills.length > 0) {
       sections.push(`Skills: ${skills.join(', ')}`)
     }
+  }
+
+  // 5. Project intent detection (signal-based, 0 LLM)
+  try {
+    const intent = detectIntent(project?.path ?? cwd)
+    const line = intentToPreloadLine(intent)
+    if (line) sections.push(line)
+  } catch {
+    // non-blocking — intent detection is best-effort
   }
 
   const output = sections.join('\n')
