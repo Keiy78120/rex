@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawn, execSync, ChildProcess } from 'node:child_process'
+import { selectAccount, acquireAccount, releaseAccount, getAccountEnv } from './account-pool.js'
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -307,16 +308,27 @@ async function runWithClaude(agent: AgentDef, task?: string): Promise<RunResult>
     }
   }
 
+  // Select account from pool (falls back to per-agent dir if pool only has 1 entry)
+  const poolAccount = selectAccount()
+  const accountId = poolAccount?.id ?? 0
+  if (poolAccount) acquireAccount(accountId)
+
   return new Promise<RunResult>((resolve) => {
     const cwd = agent.cwd || process.cwd()
     // Remove CLAUDECODE env var to allow spawning from within CC sessions
     const env = { ...process.env, CLAUDE_CODE_ENTRYPOINT: 'rex-agent' }
     delete env.CLAUDECODE
     delete env.CLAUDE_CODE_SESSION
-    // Multi-instance: isolate config per agent to avoid session conflicts
-    const agentConfigDir = join(HOME, `.claude-agent-${agent.id}`)
-    if (!existsSync(agentConfigDir)) mkdirSync(agentConfigDir, { recursive: true })
+    // Use pool account dir if available, otherwise per-agent isolation
+    let agentConfigDir: string
+    if (poolAccount && poolAccount.id > 1) {
+      agentConfigDir = poolAccount.configDir
+    } else {
+      agentConfigDir = join(HOME, `.claude-agent-${agent.id}`)
+      if (!existsSync(agentConfigDir)) mkdirSync(agentConfigDir, { recursive: true })
+    }
     env.CLAUDE_CONFIG_DIR = agentConfigDir
+    if (poolAccount) Object.assign(env, getAccountEnv(poolAccount))
     const child = spawn(claudePath, args, {
       cwd,
       env,
@@ -356,6 +368,10 @@ async function runWithClaude(agent: AgentDef, task?: string): Promise<RunResult>
         if (!output) output = stdout || stderr
       }
 
+      // Detect rate limit (Claude returns code 1 with "rate limit" in stderr)
+      const rateLimited = code !== 0 && /rate.?limit/i.test(stderr)
+      if (poolAccount) releaseAccount(accountId, { error: code !== 0, rateLimited })
+
       resolve({
         ok: code === 0,
         output: output.slice(0, 10000), // cap log size
@@ -368,6 +384,7 @@ async function runWithClaude(agent: AgentDef, task?: string): Promise<RunResult>
     })
 
     child.on('error', (err) => {
+      if (poolAccount) releaseAccount(accountId, { error: true })
       resolve({
         ok: false,
         output: '',
@@ -377,6 +394,95 @@ async function runWithClaude(agent: AgentDef, task?: string): Promise<RunResult>
         turns: 0,
         error: err.message,
       })
+    })
+  })
+}
+
+// ─── Codex Runner (background worker) ────────────────────────
+
+function findCodexCli(): string | null {
+  try {
+    const path = execSync('which codex', { encoding: 'utf-8', timeout: 5000 }).trim()
+    return path || null
+  } catch { return null }
+}
+
+/**
+ * Run an agent task via Codex CLI (non-interactive, background worker mode).
+ * Uses `codex exec --full-auto --json <prompt>` — no human in the loop.
+ * Codex is a background worker, NOT a co-orchestrator. Claude Code stays primary.
+ */
+async function runWithCodex(agent: AgentDef, task?: string): Promise<RunResult> {
+  const codexPath = findCodexCli()
+  if (!codexPath) {
+    return {
+      ok: false, output: '', exitCode: 1, duration: 0, toolsUsed: [], turns: 0,
+      error: 'Codex CLI not found. Install: npm i -g @openai/codex',
+    }
+  }
+
+  const prompt = (task || agent.prompt) + '\n\n' + buildAgentContext(agent)
+  const start = Date.now()
+
+  const args = ['exec', '--full-auto', '--json', prompt]
+
+  // Override model if agent specifies localModel (e.g., "o3", "gpt-4o")
+  if (agent.localModel && agent.localModel !== 'qwen3.5:4b') {
+    args.push('-c', `model="${agent.localModel}"`)
+  }
+
+  return new Promise<RunResult>((resolve) => {
+    const cwd = agent.cwd || process.cwd()
+    const env = { ...process.env, CLAUDE_CODE_ENTRYPOINT: undefined }
+    delete env.CLAUDE_CODE_ENTRYPOINT
+
+    const child = spawn(codexPath, args, {
+      cwd,
+      env: env as NodeJS.ProcessEnv,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 600_000,
+    })
+
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
+    child.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+
+    child.on('close', (code) => {
+      const duration = Date.now() - start
+
+      // Codex --json outputs JSONL; extract last message event
+      let output = ''
+      let turns = 0
+      const lines = stdout.trim().split('\n')
+      for (const line of lines.reverse()) {
+        try {
+          const obj = JSON.parse(line)
+          // Codex JSONL event types: message, turn_end, error
+          if (obj.type === 'message' && obj.role === 'assistant' && obj.content) {
+            output = Array.isArray(obj.content)
+              ? obj.content.map((c: any) => c.text || '').join('')
+              : String(obj.content)
+            break
+          }
+          if (obj.type === 'turn_end') turns = obj.turn ?? turns
+        } catch { /* skip non-JSON */ }
+      }
+      if (!output) output = stdout || stderr
+
+      resolve({
+        ok: code === 0,
+        output: output.slice(0, 10000),
+        exitCode: code,
+        duration,
+        toolsUsed: [],
+        turns,
+        error: code !== 0 ? (stderr || `Exit code ${code}`).slice(0, 2000) : undefined,
+      })
+    })
+
+    child.on('error', (err) => {
+      resolve({ ok: false, output: '', exitCode: 1, duration: Date.now() - start, toolsUsed: [], turns: 0, error: err.message })
     })
   })
 }
@@ -437,7 +543,11 @@ async function runWithOllama(agent: AgentDef, task?: string): Promise<RunResult>
 // ─── Agent Executor (with retry & self-correction) ──────────
 
 async function executeAgent(agent: AgentDef, task?: string): Promise<RunResult> {
-  const runner = agent.model === 'claude' ? runWithClaude : runWithOllama
+  const runner = agent.model === 'claude'
+    ? runWithClaude
+    : (agent.model as string) === 'codex'
+      ? runWithCodex
+      : runWithOllama
   let lastResult: RunResult = { ok: false, output: '', exitCode: 1, duration: 0, toolsUsed: [], turns: 0 }
 
   for (let attempt = 0; attempt <= agent.maxRetries; attempt++) {

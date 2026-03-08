@@ -1021,6 +1021,14 @@ async function main() {
       break
     }
 
+    case 'pool': {
+      const { printPool, printSetupHint } = await import('./account-pool.js')
+      const sub = process.argv[3] ?? 'list'
+      if (sub === 'setup') { printSetupHint(); break }
+      printPool()
+      break
+    }
+
     case 'intent': {
       const { detectIntent, printIntent } = await import('./project-intent.js')
       const targetPath = process.argv[3] ?? process.cwd()
@@ -1101,6 +1109,10 @@ ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex intent [path]    Detect project intent from git signals (new/feature/fix/refactor)
   rex intent --debug   Show raw signals used for detection
   rex intent --json    JSON output
+
+${COLORS.bold}Account Pool:${COLORS.reset}
+  rex pool             List Claude accounts in the pool
+  rex pool setup       Show instructions to add more accounts
 
 ${COLORS.bold}Providers & Budget:${COLORS.reset}
   rex providers        Show available providers (owned-first order)
