@@ -464,6 +464,19 @@ rex doctor --fix     # Auto-fix then health check
 | Orchestrator: free-tier APIs (Groq/Cerebras/Together/Mistral/OpenRouter/DeepSeek) wired into FALLBACK_ORDER | `orchestrator.ts` |
 | Fix memory-check: load sqlite-vec extension → embedding count now 5523/5523 (100%) | `memory-check.ts` |
 
+### ✅ Terminé (session 2026-03-12 — curious proactive discovery)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| `curious.ts`: proactive discovery — Ollama library, GitHub trending (mcp-server + ai-agent), Hacker News AI filter | `packages/cli/src/curious.ts` |
+| `rex curious [--json]` CLI command | `packages/cli/src/index.ts` |
+| Daemon: curious cycle every 24h (wired in while loop) | `packages/cli/src/daemon.ts` |
+| Gateway: `/curious` command + `🔭 Curious` button in Advanced menu | `packages/cli/src/gateway.ts` |
+| Flutter `curious_page.dart`: filter bar (all/model/mcp/repo/news), NEW badge, URL copy, grouped by type | `packages/flutter_app/lib/pages/curious_page.dart` |
+| RexService: `loadCurious()`, `runCuriousCheck()`, discoveries state | `packages/flutter_app/lib/services/rex_service.dart` |
+| Sidebar: Curious item (scope icon) wired in sidebar + IndexedStack (20 pages total) | `main.dart`, `rex_sidebar.dart` |
+| living-rex-vision.md: Curieux/proactif → ✅ | `docs/plans/living-rex-vision.md` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 IN PROGRESS**:

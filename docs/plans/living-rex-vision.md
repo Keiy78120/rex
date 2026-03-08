@@ -435,7 +435,7 @@ Il est curieux : il cherche activement de nouvelles solutions.
 | Tunnels sécurisés auto | ❌ | ❌ | ❌ | ❌ | 🔄 |
 | Monitor vie dev | ❌ | ❌ | ❌ | ❌ | 🔄 |
 | Fine-tuning modèle | ❌ | ❌ | ❌ | ❌ | 🔄 |
-| Curieux / proactif | ❌ | ❌ | ❌ | ❌ | 🔄 |
+| Curieux / proactif | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 ---
 
