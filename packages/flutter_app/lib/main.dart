@@ -20,6 +20,7 @@ import 'pages/workflow_page.dart';
 import 'pages/review_page.dart';
 import 'pages/projects_page.dart';
 import 'pages/sandbox_page.dart';
+import 'pages/curious_page.dart';
 import 'pages/logs_page.dart';
 import 'pages/settings_page.dart';
 import 'widgets/rex_sidebar.dart';
@@ -103,6 +104,7 @@ class _RexMainWindowState extends State<RexMainWindow> {
                   ReviewPage(),
                   SandboxPage(),
                   ProjectsPage(),
+                  CuriousPage(),
                   LogsPage(),
                   SettingsPage(),
                 ],

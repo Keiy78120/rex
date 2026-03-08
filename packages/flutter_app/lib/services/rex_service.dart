@@ -2479,6 +2479,62 @@ $transcript
     } catch (_) {}
   }
 
+  // ── Curious / Proactive Discovery ────────────────────────────────────────
+
+  List<Map<String, dynamic>> _discoveries = [];
+  bool _isLoadingCurious = false;
+  bool _isRunningCurious = false;
+  String _curiousCheckedAt = '';
+  int _curiousNewCount = 0;
+
+  List<Map<String, dynamic>> get discoveries => _discoveries;
+  bool get isLoadingCurious => _isLoadingCurious;
+  bool get isRunningCurious => _isRunningCurious;
+  String get curiousCheckedAt => _curiousCheckedAt;
+  int get curiousNewCount => _curiousNewCount;
+
+  Future<void> loadCurious() async {
+    _isLoadingCurious = true;
+    notifyListeners();
+    try {
+      final output = await _runRexArgs(['curious', '--json']);
+      final json = _extractJson(output);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic>) {
+          _discoveries = (parsed['discoveries'] as List? ?? [])
+              .whereType<Map<String, dynamic>>()
+              .toList();
+          _curiousNewCount = (parsed['newCount'] as num?)?.toInt() ?? 0;
+          _curiousCheckedAt = parsed['checkedAt'] as String? ?? '';
+        }
+      }
+    } catch (_) {}
+    _isLoadingCurious = false;
+    notifyListeners();
+  }
+
+  Future<void> runCuriousCheck() async {
+    _isRunningCurious = true;
+    notifyListeners();
+    try {
+      final output = await _runRexArgs(['curious', '--json']);
+      final json = _extractJson(output);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic>) {
+          _discoveries = (parsed['discoveries'] as List? ?? [])
+              .whereType<Map<String, dynamic>>()
+              .toList();
+          _curiousNewCount = (parsed['newCount'] as num?)?.toInt() ?? 0;
+          _curiousCheckedAt = parsed['checkedAt'] as String? ?? '';
+        }
+      }
+    } catch (_) {}
+    _isRunningCurious = false;
+    notifyListeners();
+  }
+
   // ── End Token ────────────────────────────────────────────────────────────
 
   @override
