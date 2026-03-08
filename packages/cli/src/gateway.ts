@@ -461,7 +461,7 @@ function mainMenu() {
       { text: '🔌 Mac Status', callback_data: 'mac_status' },
     ],
     [
-      { text: '📋 Sessions', callback_data: 'sessions' },
+      { text: '📋 Standup', callback_data: 'standup' },
       { text: '📝 Logs', callback_data: 'logs' },
       { text: '📎 Files', callback_data: 'files_menu' },
     ],
@@ -1814,6 +1814,31 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
       break
     }
 
+    case 'standup': {
+      await editMessage(token, chatId, messageId, '📋 Generating standup…', backMenu())
+      try {
+        const { getDevStatus } = await import('./dev-monitor.js')
+        const report = await getDevStatus()
+        const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
+        const lines = [`📋 *Standup — ${today}*`, '']
+        if (report.commits.length > 0) {
+          lines.push('*Hier :*')
+          for (const c of report.commits.slice(0, 5)) {
+            lines.push(`  \\- \`${c.repo}\` — ${c.lastMessage.slice(0, 60)}`)
+          }
+        } else {
+          lines.push('*Hier :* Pas de commits')
+        }
+        lines.push('')
+        lines.push(`📊 ${report.totalCommits} commit${report.totalCommits !== 1 ? 's' : ''} · ${report.sessionCount} session${report.sessionCount !== 1 ? 's' : ''} Claude`)
+        if (report.pendingMemories > 0) lines.push(`📥 ${report.pendingMemories} memories en attente`)
+        await editMessage(token, chatId, messageId, lines.join('\n'), backMenu())
+      } catch (e: any) {
+        await editMessage(token, chatId, messageId, `⚠️ Standup failed: ${e.message?.slice(0, 100)}`, backMenu())
+      }
+      break
+    }
+
     case 'notifs': {
       const { text: t, buttons } = buildNotifsMessage(null, 0)
       await editMessage(token, chatId, messageId, t, buttons)
@@ -2345,6 +2370,62 @@ async function handleText(token: string, chatId: string, text: string, from: str
       await editMessage(token, chatId, loading.message_id, `⚠️ Monitor failed: ${e.message?.slice(0, 100)}`)
     }
     logCommand(from, '/monitor', 'shown')
+    return
+  }
+
+  if (cmd === '/standup') {
+    const loading = await send(token, chatId, '📋 Generating standup…')
+    try {
+      const { getDevStatus } = await import('./dev-monitor.js')
+      const report = await getDevStatus()
+      const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
+      const lines = [`📋 *Standup — ${today}*`, '']
+
+      if (report.commits.length > 0) {
+        lines.push('*Hier :*')
+        for (const c of report.commits.slice(0, 5)) {
+          lines.push(`  \\- \`${c.repo}\` — ${c.lastMessage.slice(0, 60)}`)
+        }
+      } else {
+        lines.push('*Hier :* Pas de commits')
+      }
+
+      lines.push('')
+      lines.push(`📊 ${report.totalCommits} commit${report.totalCommits !== 1 ? 's' : ''} · ${report.sessionCount} session${report.sessionCount !== 1 ? 's' : ''} Claude`)
+
+      if (report.pendingMemories > 0) {
+        lines.push(`📥 ${report.pendingMemories} memories en attente`)
+      }
+
+      await editMessage(token, chatId, loading.message_id, lines.join('\n'))
+    } catch (e: any) {
+      await editMessage(token, chatId, loading.message_id, `⚠️ Standup failed: ${e.message?.slice(0, 100)}`)
+    }
+    logCommand(from, '/standup', 'shown')
+    return
+  }
+
+  if (cmd.startsWith('/remember ') || cmd === '/remember' || (cmd.startsWith('/r ') && cmd.length > 3)) {
+    const note = cmd.startsWith('/remember ') ? text.trim().slice('/remember '.length)
+               : cmd.startsWith('/r ') ? text.trim().slice('/r '.length)
+               : ''
+    if (!note) {
+      await send(token, chatId, '💡 Usage: `/remember <texte>`\nEx: `/remember checker les logs Tailscale`')
+      return
+    }
+    try {
+      // Write to pending/ dir so ingest picks it up in next cycle
+      const { PENDING_DIR } = await import('./paths.js')
+      const { writeFileSync, mkdirSync } = await import('node:fs')
+      mkdirSync(PENDING_DIR, { recursive: true })
+      const ts = Date.now()
+      const chunk = { source: 'gateway-note', content: note, timestamp: new Date().toISOString() }
+      writeFileSync(join(PENDING_DIR, `note-${ts}.json`), JSON.stringify(chunk))
+      await send(token, chatId, `📝 Mémorisé: _${note.slice(0, 100)}_\n\n_Sera indexé au prochain cycle ingest._`)
+    } catch (e: any) {
+      await send(token, chatId, `⚠️ Erreur: ${e.message?.slice(0, 80)}`)
+    }
+    logCommand(from, '/remember', 'saved')
     return
   }
 
