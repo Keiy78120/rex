@@ -44,7 +44,10 @@ class _MemoryPageState extends State<MemoryPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadStats());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadStats();
+      context.read<RexService>().loadMemoryHealth();
+    });
   }
 
   Future<void> _loadStats() async {
@@ -214,6 +217,48 @@ class _MemoryPageState extends State<MemoryPage> {
                       label: 'Categories',
                       value: '${_categories.length}',
                       icon: CupertinoIcons.collections,
+                    ),
+                    Consumer<RexService>(
+                      builder: (context, rex, _) {
+                        final health = rex.memoryHealth;
+                        if (health.isEmpty) return const SizedBox.shrink();
+                        final pendingCount = (health['pending']?['count'] as int?) ?? 0;
+                        final duplicatesCount = (health['duplicates']?['count'] as int?) ?? 0;
+                        final orphansCount = (health['orphans']?['count'] as int?) ?? 0;
+                        if (pendingCount == 0 && duplicatesCount == 0 && orphansCount == 0) {
+                          return RexStatRow(
+                            label: 'Health',
+                            value: 'OK',
+                            valueColor: c.success,
+                            icon: CupertinoIcons.checkmark_shield_fill,
+                          );
+                        }
+                        return Column(
+                          children: [
+                            if (pendingCount > 0)
+                              RexStatRow(
+                                label: 'Pending embed',
+                                value: '$pendingCount',
+                                valueColor: c.warning,
+                                icon: CupertinoIcons.clock_fill,
+                              ),
+                            if (duplicatesCount > 0)
+                              RexStatRow(
+                                label: 'Duplicates',
+                                value: '$duplicatesCount',
+                                valueColor: c.warning,
+                                icon: CupertinoIcons.doc_on_doc_fill,
+                              ),
+                            if (orphansCount > 0)
+                              RexStatRow(
+                                label: 'Orphans',
+                                value: '$orphansCount',
+                                valueColor: c.error,
+                                icon: CupertinoIcons.exclamationmark_circle_fill,
+                              ),
+                          ],
+                        );
+                      },
                     ),
                     if (_totalEntries > 0) ...[
                       const SizedBox(height: 8),

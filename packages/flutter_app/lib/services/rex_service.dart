@@ -2251,6 +2251,24 @@ $transcript
     }
   }
 
+  // ── Memory Health ────────────────────────────────────────────────────
+  Map<String, dynamic> _memoryHealth = {};
+  Map<String, dynamic> get memoryHealth => _memoryHealth;
+
+  Future<void> loadMemoryHealth() async {
+    try {
+      final out = await _runRexArgs(['memory-check', '--json'], timeout: 15);
+      final json = _extractJson(out);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic>) {
+          _memoryHealth = parsed;
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+  }
+
   // ── Review ─────────────────────────────────────────────────────────
 
   List<Map<String, dynamic>> _reviewResults = [];
