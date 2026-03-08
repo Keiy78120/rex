@@ -2227,6 +2227,14 @@ $transcript
     notifyListeners();
   }
 
+  Future<String> runQuickSetup() async {
+    try {
+      return await _runRexArgs(['setup', '--quick'], timeout: 30);
+    } catch (_) {
+      return '';
+    }
+  }
+
   /// Open a project directory in Claude Code via `rex launch --path=<path>`.
   /// Fire-and-forget — we don't await the Claude process.
   Future<void> launchProject(String projectPath) async {
