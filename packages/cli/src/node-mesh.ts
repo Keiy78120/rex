@@ -205,11 +205,8 @@ function getHubUrl(): string | null {
  * Silently skips if no hub is configured.
  */
 export async function registerWithHub(nodeInfo?: MeshNode): Promise<boolean> {
-  const hubUrl = getHubUrl()
-  if (!hubUrl) {
-    log.debug('No REX_HUB_URL configured — skipping node registration')
-    return false
-  }
+  // Try configured URL, then auto-discover localhost:7420
+  const hubUrl = getHubUrl() ?? 'http://localhost:7420'
 
   const info = nodeInfo ?? buildLocalNodeInfo()
 
@@ -375,22 +372,27 @@ export async function printMeshStatus(): Promise<void> {
   const green = '\x1b[32m', yellow = '\x1b[33m', red = '\x1b[31m'
 
   let nodes: MeshNode[] = []
-  const hubUrl = getHubUrl()
+  // Try configured URL first, then auto-discover localhost:7420
+  const configuredUrl = getHubUrl()
+  const candidates = configuredUrl ? [configuredUrl] : ['http://localhost:7420']
+  let resolved = false
 
-  if (hubUrl) {
+  for (const url of candidates) {
     try {
-      nodes = await fetchMeshNodes(hubUrl)
+      nodes = await fetchMeshNodes(url)
       saveMeshCache(nodes)
-    } catch {
-      nodes = readMeshCache()
-      console.log(`${yellow}Hub unreachable — showing cached data${reset}\n`)
-    }
-  } else {
+      resolved = true
+      break
+    } catch { /* try next */ }
+  }
+
+  if (!resolved) {
     nodes = readMeshCache()
     if (nodes.length === 0) {
-      // No hub, no cache — show local node
       nodes = [{ ...buildLocalNodeInfo(), status: 'healthy' }]
-      console.log(`${dim}No hub configured (REX_HUB_URL). Showing local node only.${reset}\n`)
+      console.log(`${dim}Hub not reachable. Showing local node only.${reset}\n`)
+    } else {
+      console.log(`${yellow}Hub unreachable — showing cached data${reset}\n`)
     }
   }
 
