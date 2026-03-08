@@ -43,6 +43,18 @@ function saveState(state: SyncState): void {
   }
 }
 
+// ── Helpers ───────────────────────────────────────────
+
+/** True when the hub URL resolves to this machine (prevents self-sync loop). */
+function isLocalHub(url: string): boolean {
+  try {
+    const { hostname } = new URL(url)
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+  } catch {
+    return false
+  }
+}
+
 // ── Push ──────────────────────────────────────────────
 
 export async function syncPush(hubUrl?: string): Promise<{ pushed: number; failed: number }> {
@@ -56,6 +68,19 @@ export async function syncPush(hubUrl?: string): Promise<{ pushed: number; faile
   if (events.length === 0) {
     log.debug('No unacked events to push')
     return { pushed: 0, failed: 0 }
+  }
+
+  // Self-sync guard: hub is on the same machine → ack events directly (no HTTP round-trip).
+  // Pushing to localhost would re-append events to the same DB creating an infinite loop.
+  if (isLocalHub(url)) {
+    for (const event of events) ackEvent(event.id)
+    const state = loadState()
+    state.lastPushAt = new Date().toISOString()
+    state.lastPushCount = events.length
+    state.consecutiveFailures = 0
+    saveState(state)
+    log.debug(`Local hub — acked ${events.length} events directly`)
+    return { pushed: events.length, failed: 0 }
   }
 
   let pushed = 0
@@ -105,6 +130,16 @@ export async function syncPull(hubUrl?: string): Promise<{ pulled: number }> {
   const url = hubUrl || await discoverHub()
   if (!url) {
     log.warn('Hub unreachable, skipping sync pull')
+    return { pulled: 0 }
+  }
+
+  // Self-sync guard: pulling from localhost would import our own events back.
+  if (isLocalHub(url)) {
+    log.debug('Local hub — skipping pull (events already local)')
+    const state = loadState()
+    state.lastPullAt = new Date().toISOString()
+    state.lastPullCount = 0
+    saveState(state)
     return { pulled: 0 }
   }
 

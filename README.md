@@ -2,9 +2,9 @@
 
 # REX
 
-**A local-first operating layer for Claude Code.**
+**The superlayer above your LLMs.**
 
-Make Claude Code safer, less forgetful, cheaper to run, and easier to control across your machines.
+REX prepares context, routes resources, enforces guards, and manages memory — then calls Claude Code (Opus/Sonnet) or Codex when the task actually needs a frontier model. Claude Code is not the entry point. REX is.
 
 [![npm](https://img.shields.io/npm/v/rex-claude?color=blue&label=npm)](https://www.npmjs.com/package/rex-claude)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -18,19 +18,18 @@ Make Claude Code safer, less forgetful, cheaper to run, and easier to control ac
 
 ## Why REX
 
-Claude Code is strong at producing code and has recently added basic memory features (CLAUDE.md, auto-memory).
-It is still weaker at deep cross-session recall, guardrails, cost control, multi-machine operation, and remote access.
+Frontier models like Claude Opus are powerful — but they have no memory of your past sessions, no awareness of the tools and machines you already own, no cost discipline, and no guardrails beyond what you manually set up.
 
-REX adds that missing layer:
+REX is the layer that runs **before** Opus sees your task:
 
-- **Memory**: deep semantic search and cross-session recall beyond Claude's built-in auto-memory
-- **Guards**: block dangerous or low-quality actions before they land
-- **Control**: operate through CLI, Telegram, and a Flutter desktop app
-- **Cost routing**: use what you already own before paying for more inference
-- **Topology awareness**: useful with one machine, a small cluster, or a larger fleet
+- **Loads memory**: injects relevant past sessions, errors, and runbooks into context
+- **Routes resources**: checks cache, local scripts, Ollama, and free tiers before paying for inference
+- **Applies guards**: blocks dangerous commands, weak completions, and scope creep before they land
+- **Manages the fleet**: one machine, a small cluster, or a larger set of nodes — all degrade cleanly
+- **Operates remotely**: CLI, Telegram, and Flutter app are all first-class control surfaces
 
-> REX is not a theme, wrapper, or dashboard gimmick.
-> It is meant to become a practical developer control plane.
+> REX is not a wrapper or a dashboard.
+> It is the operating layer that decides, prepares, and delegates — so Opus only runs when it actually needs to.
 
 ---
 
@@ -57,11 +56,12 @@ REX adds that missing layer:
 
 | Without REX | With REX |
 |-------------|----------|
-| Claude Code has basic memory (CLAUDE.md, auto-memory) but no semantic search or cross-session recall | Deep local memory with embeddings, semantic search, context reinjection, and session-aware preloading |
-| Expensive defaults become normal | Owned hardware, scripts, CLIs, and free tiers are considered first |
-| Remote control is awkward | Telegram + CLI + app surfaces |
-| "Done" can still be fake | Guards catch TODOs, weak test fixes, dangerous commands, and repeated failures |
-| Every workflow is repeated manually | Successful patterns can become reusable runbooks |
+| Opus starts cold — no memory of past sessions, errors, or solutions | REX injects relevant memory at session start — Opus arrives with context |
+| Every task hits the paid API by default | REX checks cache, local scripts, Ollama, and free tiers first |
+| No guardrails beyond what you manually wire | 8 guards catch dangerous commands, fake completions, weak test fixes, and scope creep |
+| Remote control is awkward | Telegram + CLI + Flutter app — all backed by the same API |
+| Successful workflows disappear after the session ends | REX promotes patterns into runbooks, lessons into rules |
+| One machine = one context | REX manages topology across 1 machine, a small cluster, or a larger fleet |
 
 ---
 
@@ -384,29 +384,78 @@ REX ships a large built-in skill set for design, engineering, review, delivery, 
 
 ---
 
-## Architecture Snapshot
+## Architecture
+
+REX sits **above** Claude Code. When you invoke REX — via CLI, Telegram, or the Flutter app — REX prepares everything first: memory, context, resources, guards, routing. Only then does it hand off to Claude Code (Opus/Sonnet) or Codex for the actual reasoning and coding work.
+
+Claude Code is not the entry point. **REX is.**
+
+```text
+You / Operator
+(CLI · Telegram · Flutter App)
+         │
+         ▼
+┌─────────────────────────────────────────────────┐
+│                    REX                          │
+│                                                 │
+│  Memory · Guards · Router · Budget              │
+│  Scripts · Context prep · Skills                │
+│  Inventory · Daemon · Hub API                   │
+│                                                 │
+│  load memory → apply guards → route → delegate │
+└────────────────────┬────────────────────────────┘
+                     │
+          ┌──────────┴──────────┐
+          ▼                     ▼
+┌──────────────────┐  ┌─────────────────────┐
+│  Claude Code     │  │  Codex Worker       │
+│  (Opus / Sonnet) │  │  (non-interactive)  │
+│  reasoning       │  │  background exec    │
+│  coding          │  │  codex --full-auto  │
+└──────────────────┘  └─────────────────────┘
+          │
+          ▼
+┌─────────────────────────────────────────────────┐
+│  Resource Chain (owned-first)                   │
+│  Cache → Script/CLI → Ollama → Free tier → Paid │
+└─────────────────────────────────────────────────┘
+```
+
+**70/30 principle**: 70% of tasks stay local and free. 30% warrant paid inference. REX enforces this automatically.
+
+### What REX does before Opus sees anything
+
+1. Injects relevant memory and past session context
+2. Runs guards (dangerous command check, scope check, completion quality)
+3. Routes to the cheapest resource that can do the job
+4. Provides the full resource inventory so Opus can make better decisions
+5. Tracks cost, captures results, promotes successes into runbooks
+
+### Component map
 
 ```text
 rex-claude
-├── CLI (TypeScript/Node)
-├── Memory (SQLite + embeddings)
-├── Guards (Claude hooks)
-├── Telegram gateway
-├── Flutter desktop app
-├── Hub API (built-in Node.js http server)
-├── Provider registry (owned-first routing)
-├── Sync queue (SQLite, append-only)
-└── Reflector (session analysis, lessons, runbooks)
+├── CLI (TypeScript/Node)           ← entry point for all operations
+├── Memory (SQLite + embeddings)    ← semantic search, session recall
+├── Guards (Claude hooks)           ← Pre/PostToolUse, SessionStart/End
+├── Router (llm.ts + free-tiers)   ← owned-first model routing
+├── Daemon (daemon.ts)              ← background cycles, health, sync
+├── Telegram gateway                ← remote control surface
+├── Flutter desktop app             ← operator UI
+├── Hub API (Node.js http)          ← shared control plane for all surfaces
+├── Provider registry               ← inventory of all available resources
+├── Sync queue (SQLite)             ← append-only, ack, replay
+└── Reflector                       ← lessons, runbooks from sessions
 ```
 
-### Planned hub shape
+### Hub shape (current + planned)
 
-- **Hub**: always-on daemon on a VPS or other stable machine
-- **Nodes**: Mac, Linux, GPU box, NAS
-- **Routing**: cache -> script/tool -> owned hardware -> free provider -> paid provider
-- **Tool policy**: CLI/script -> MCP -> API -> other
+- **Hub**: always-on daemon on a VPS or the main machine
+- **Nodes**: Mac, Linux, GPU box, NAS — register and heartbeat
+- **Routing**: cache → script/tool → owned hardware → free provider → paid provider
+- **Tool policy**: CLI/script → MCP → API → other
 - **Transport**: Tailscale first
-- **Reliability**: no sync feature before durable journaling and replay
+- **Reliability**: durable journaling and replay before any real-time feature
 
 ---
 
