@@ -353,6 +353,18 @@ async function main() {
       break
     }
 
+    case 'reindex': {
+      // rex reindex — re-embed all memories with current Ollama model
+      try {
+        const memDir = findMemoryPackage()
+        if (!memDir) { console.log('Memory package not found. Run from the REX monorepo.'); process.exit(1) }
+        const { execSync } = await import('node:child_process')
+        const dryRun = process.argv.includes('--dry-run') ? '--dry-run' : ''
+        execSync(`npx tsx src/reindex.ts ${dryRun}`.trim(), { cwd: memDir, stdio: 'inherit' })
+      } catch { process.exit(1) }
+      break
+    }
+
     case 'inventory': {
       const { showInventory, collectInventory, saveInventoryCache } = await import('./inventory.js')
       const jsonFlag = process.argv.includes('--json')
@@ -1611,6 +1623,8 @@ ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex categorize       Classify uncategorized memories
   rex consolidate      Merge similar memories (cosine clustering)
   rex recategorize     Re-classify session memories with AI
+  rex reindex          Re-embed all memories with current Ollama model
+  rex reindex --dry-run  Preview without re-embedding
   rex optimize         Analyze CLAUDE.md with local LLM
   rex optimize --apply Apply optimizations (with backup)
   rex memory-check     Memory integrity & health report
