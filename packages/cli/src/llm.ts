@@ -1,10 +1,11 @@
 /**
  * REX Unified LLM Router
  * Chain: Ollama (local) → free tier APIs → subscription
- * Uses free-tiers.ts for provider management via Vercel AI SDK.
+ * Routes through litellm.ts for usage tracking and cooldown management.
+ * Section 23 (action.md): all internal LLM calls MUST use this module.
  */
 
-import { callProvider, getRoutableProviders } from './free-tiers.js'
+import { callWithFallback } from './litellm.js'
 import { createLogger } from './logger.js'
 
 const log = createLogger('llm')
@@ -31,35 +32,17 @@ export async function detectModel(): Promise<string> {
 }
 
 /**
- * Unified LLM call — routing chain:
- * 1. Ollama local (zero cost, instant)
- * 2. Configured free tier APIs (Groq → Cerebras → Together → Mistral → OpenRouter → DeepSeek)
- * 3. Throws if all fail
- *
- * REX knows what you own. Routes to the cheapest capable option automatically.
+ * Unified LLM call — routes through litellm for full usage tracking.
+ * Chain: Ollama local → Groq → Cerebras → Together → Mistral → OpenRouter → DeepSeek
  */
 export async function llm(prompt: string, system?: string, model?: string): Promise<string> {
-  const providers = getRoutableProviders()
-
-  if (providers.length === 0) {
-    throw new Error('No LLM providers available: Ollama offline, no free tier keys configured')
+  try {
+    const result = await callWithFallback(prompt, system, { modelId: model })
+    log.debug(`llm: routed via ${result.provider} (${result.model})`)
+    return result.text
+  } catch (err) {
+    const msg = String(err)
+    log.warn(`llm: all providers failed — ${msg.slice(0, 100)}`)
+    throw new Error(`No LLM providers available: ${msg}`)
   }
-
-  for (const provider of providers) {
-    try {
-      const result = await callProvider(provider, prompt, system, model)
-      log.debug(`llm: routed via ${provider.name}`)
-      return result
-    } catch (err) {
-      const msg = String(err)
-      if (msg.startsWith('RATE_LIMIT:') || msg.startsWith('NO_KEY:')) {
-        log.debug(`llm: skip ${provider.name} — ${msg}`)
-        continue
-      }
-      // Connectivity errors: log warn, try next
-      log.warn(`llm: ${provider.name} failed — ${msg}`)
-    }
-  }
-
-  throw new Error('All LLM providers exhausted')
 }

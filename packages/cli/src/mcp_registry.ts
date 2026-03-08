@@ -488,24 +488,22 @@ async function discoverServer(args: string[], jsonMode: boolean) {
 }
 
 async function refreshMarketplace(jsonMode: boolean) {
-  // Fetch from awesome-mcp-servers GitHub README
-  const sources = [
-    'https://raw.githubusercontent.com/punkpeye/awesome-mcp-servers/main/README.md',
-    'https://raw.githubusercontent.com/wong2/awesome-mcp-servers/main/README.md',
-  ]
-
   const existingMarketplace = readMarketplace()
   const existingNames = new Set(existingMarketplace.map(e => e.name))
   let newEntries: MarketplaceEntry[] = [...existingMarketplace]
   let fetched = 0
 
-  for (const url of sources) {
+  // ── Source 1: awesome-mcp-servers GitHub READMEs ─────────────────
+  const markdownSources = [
+    'https://raw.githubusercontent.com/punkpeye/awesome-mcp-servers/main/README.md',
+    'https://raw.githubusercontent.com/wong2/awesome-mcp-servers/main/README.md',
+  ]
+  for (const url of markdownSources) {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
       if (!res.ok) continue
       const text = await res.text()
 
-      // Parse markdown for MCP server entries — look for lines with npm package links
       const npmRegex = /\[([^\]]+)\]\(https?:\/\/(?:www\.)?(?:npmjs\.com\/package\/|github\.com\/)([^\)]+)\)\s*[-–—]\s*(.+)/g
       let match
       while ((match = npmRegex.exec(text)) !== null) {
@@ -526,7 +524,6 @@ async function refreshMarketplace(jsonMode: boolean) {
           tags: ['community'],
           source: 'awesome-mcp-servers',
         }
-
         newEntries.push(entry)
         existingNames.add(name)
         fetched++
@@ -534,6 +531,39 @@ async function refreshMarketplace(jsonMode: boolean) {
     } catch {
       // Skip failed sources
     }
+  }
+
+  // ── Source 2: Smithery registry ────────────────────────────────
+  try {
+    const smitheryRes = await fetch(
+      'https://registry.smithery.ai/servers?q=&pageSize=50',
+      { signal: AbortSignal.timeout(10000), headers: { Accept: 'application/json' } }
+    )
+    if (smitheryRes.ok) {
+      const data = await smitheryRes.json() as { servers?: Array<{ qualifiedName: string; displayName: string; description: string; isDeployed?: boolean }> }
+      for (const srv of data.servers ?? []) {
+        const name = (srv.qualifiedName ?? srv.displayName ?? '')
+          .toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+        if (!name || name.length < 2 || existingNames.has(name)) continue
+        const desc = (srv.description ?? '').slice(0, 120)
+        const npmPkg = `@smithery/${name}`
+        const entry: MarketplaceEntry = {
+          name,
+          description: desc,
+          command: 'npx',
+          args: ['-y', npmPkg],
+          installCmd: `npx -y ${npmPkg}`,
+          type: 'stdio',
+          tags: ['smithery', srv.isDeployed ? 'verified' : 'community'],
+          source: 'smithery',
+        }
+        newEntries.push(entry)
+        existingNames.add(name)
+        fetched++
+      }
+    }
+  } catch {
+    // Smithery unavailable — skip silently
   }
 
   // Save updated marketplace
