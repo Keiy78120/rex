@@ -1176,6 +1176,59 @@ async function main() {
       break
     }
 
+    case 'debt': {
+      // List TODO / FIXME / HACK comments across the project (zero LLM)
+      const cwd = process.cwd()
+      const jsonFlag = process.argv.includes('--json')
+      const { execSync: debtExec } = await import('node:child_process')
+
+      interface DebtItem { file: string; line: number; kind: string; text: string; ageDays: number }
+      const items: DebtItem[] = []
+
+      try {
+        const grepOut = debtExec(
+          `git grep -n -E "(TODO|FIXME|HACK|XXX)[:()]?" -- "*.ts" "*.js" "*.dart" "*.py" "*.sh" 2>/dev/null || true`,
+          { cwd, encoding: 'utf-8', timeout: 10_000 }
+        )
+        for (const raw of grepOut.trim().split('\n').filter(Boolean)) {
+          const m = raw.match(/^(.+?):(\d+):(.*)$/)
+          if (!m) continue
+          const [, file, lineStr, text] = m
+          const kind = (/FIXME/i.test(text) ? 'FIXME' : /HACK/i.test(text) ? 'HACK' : /XXX/i.test(text) ? 'XXX' : 'TODO')
+          let ageDays = 0
+          try {
+            const logOut = debtExec(
+              `git log -1 --format="%ct" -- "${file}" 2>/dev/null`,
+              { cwd, encoding: 'utf-8', timeout: 3000 }
+            ).trim()
+            if (logOut) ageDays = Math.floor((Date.now() / 1000 - parseInt(logOut)) / 86400)
+          } catch {}
+          items.push({ file, line: parseInt(lineStr), kind, text: text.trim().slice(0, 120), ageDays })
+        }
+      } catch {}
+
+      if (jsonFlag) { console.log(JSON.stringify(items)); break }
+
+      const debtBold = '\x1b[1m', debtReset = '\x1b[0m', debtDim = '\x1b[2m'
+      const debtRed = '\x1b[31m', debtYellow = '\x1b[33m', debtCyan = '\x1b[36m'
+      console.log(`\n${debtBold}REX Tech Debt — ${items.length} item(s)${debtReset}`)
+      console.log('─'.repeat(72))
+      const byKind: Record<string, DebtItem[]> = { FIXME: [], HACK: [], TODO: [], XXX: [] }
+      for (const it of items) { byKind[it.kind]?.push(it) }
+      for (const [kind, list] of Object.entries(byKind)) {
+        if (!list.length) continue
+        const color = kind === 'FIXME' ? debtRed : kind === 'HACK' ? debtYellow : debtCyan
+        console.log(`\n${color}${debtBold}${kind} (${list.length})${debtReset}`)
+        for (const it of list.sort((a, b) => b.ageDays - a.ageDays)) {
+          const stale = it.ageDays > 7 ? `${debtRed}${it.ageDays}d old${debtReset}` : `${debtDim}${it.ageDays}d${debtReset}`
+          console.log(`  ${debtBold}${it.file}:${it.line}${debtReset}  ${stale}`)
+          console.log(`    ${debtDim}${it.text}${debtReset}`)
+        }
+      }
+      console.log(`\n${debtDim}Stale items (>7d) shown in red. Use --json for machine output.${debtReset}\n`)
+      break
+    }
+
     case 'logs': {
       const lines = process.argv.find(a => a.startsWith('--lines='))
       const n = lines ? parseInt(lines.split('=')[1]) : 50
@@ -1548,6 +1601,8 @@ ${COLORS.bold}Review:${COLORS.reset}
   rex review --full           Full review (+ lint + tests)
   rex review --ai             AI-assisted review (requires provider)
   rex review --json           JSON output
+  rex debt                    List TODO/FIXME/HACK with age (stale >7d in red)
+  rex debt --json             Machine-readable debt list
 
 ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex migrate          Migrate ~/.rex-memory/ to ~/.claude/rex/ hub
