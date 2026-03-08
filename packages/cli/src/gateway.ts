@@ -508,6 +508,10 @@ function advancedMenu() {
       { text: '🔑 Pool', callback_data: 'pool' },
       { text: '📊 Burn rate', callback_data: 'burn_rate' },
     ],
+    [
+      { text: '⚡ Setup', callback_data: 'quick_setup' },
+      { text: '🔍 Review', callback_data: 'run_review' },
+    ],
     [{ text: '◀️ Menu', callback_data: 'menu' }],
   ]
 }
@@ -1757,6 +1761,20 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
       break
     }
 
+    case 'quick_setup': {
+      await editMessage(token, chatId, messageId, '⚡ Running quick setup…', backMenu())
+      const out = truncate(strip(run('rex setup --quick', 30000)), 3000)
+      await editMessage(token, chatId, messageId, `⚡ *Quick Setup*\n\`\`\`\n${out}\n\`\`\``, advancedMenu())
+      break
+    }
+
+    case 'run_review': {
+      await editMessage(token, chatId, messageId, '🔍 Running code review…', backMenu())
+      const out = truncate(strip(run('rex review', 30000)), 3000)
+      await editMessage(token, chatId, messageId, `🔍 *Code Review*\n\`\`\`\n${out}\n\`\`\``, advancedMenu())
+      break
+    }
+
     case 'notifs': {
       const { text: t, buttons } = buildNotifsMessage(null, 0)
       await editMessage(token, chatId, messageId, t, buttons)
@@ -2251,6 +2269,22 @@ async function handleText(token: string, chatId: string, text: string, from: str
     } catch { msg = '⚠️ Could not detect intent' }
     await send(token, chatId, `🎯 *Project Intent*\n\`\`\`\n${msg.replace(/\x1b\[[0-9;]*m/g, '')}\n\`\`\``)
     logCommand(from, '/intent', 'shown')
+    return
+  }
+
+  if (cmd === '/setup') {
+    const loading = await send(token, chatId, '⚡ Running quick setup…')
+    const out = truncate(strip(run('rex setup --quick', 30000)), 3000)
+    await editMessage(token, chatId, loading.message_id, `⚡ *Quick Setup*\n\`\`\`\n${out}\n\`\`\``)
+    logCommand(from, '/setup', 'done')
+    return
+  }
+
+  if (cmd === '/review') {
+    const loading = await send(token, chatId, '🔍 Running code review…')
+    const out = truncate(strip(run('rex review', 30000)), 3000)
+    await editMessage(token, chatId, loading.message_id, `🔍 *Code Review*\n\`\`\`\n${out}\n\`\`\``)
+    logCommand(from, '/review', 'done')
     return
   }
 
