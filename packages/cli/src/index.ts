@@ -188,6 +188,12 @@ async function main() {
     }
 
     case 'setup': {
+      // rex setup --quick → zero-question auto-detection
+      if (process.argv.includes('--quick')) {
+        const { quickSetup } = await import('./quick-setup.js')
+        await quickSetup()
+        break
+      }
       const { setup } = await import('./setup.js')
       const nonInteractive = process.argv.includes('--yes') || process.argv.includes('--non-interactive')
       const skipTelegram = process.argv.includes('--skip-telegram')
@@ -1084,6 +1090,7 @@ ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
 
 ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex setup            Install Ollama + models + Telegram gateway (interactive)
+  rex setup --quick    Zero-question setup: auto-detect everything, write optimal config
   rex setup --yes      Non-interactive setup (auto-install deps, env-based Telegram)
   rex llm <prompt>     Query local LLM directly
   rex inventory       Scan local resources (CLIs, services, hardware, models)
