@@ -840,3 +840,177 @@ const client = new Anthropic()
 **node-mesh.ts dans le routing** : le router interroge node-mesh pour savoir quel nœud a Ollama actif en ce moment. Si le nœud local n'a pas Ollama, router fallback vers nœud distant ou free tier.
 
 **Audit** : `gateway.ts` est le premier candidat à auditer — certains appels LLM peuvent encore bypasser le router.
+
+
+---
+
+## Section 24 — Setup Wizard (onboarding = première démo)
+
+**Principe** : le setup IS la démo. L'user voit la puissance de REX avant même d'avoir tapé une commande.
+
+### Flow
+
+```
+rex setup
+  ↓
+Phase 1 — Discovery parallèle (~30s, scripts purs, 0 LLM)
+  · Comptes Claude (~/.claude-account-*)
+  · API keys (env, .env, ~/.zshrc, Bitwarden)
+  · Ollama + modèles disponibles
+  · Dev folders + repos Git
+  · GitHub auth (gh CLI)
+  · Tailscale nodes
+  · Hardware (CPU, RAM, GPU)
+  · MCPs déjà installés
+  · Sessions Claude existantes à ingérer
+  · Guards déjà présents
+  ↓
+Phase 2 — Organisation (APIs dispo, même payantes, une seule fois)
+  · Ingest sessions Claude existantes → mémoire sémantique
+  · Catégorisation des repos (intent detection)
+  · Setup mesh → rôle Commander/Specialist recommandé
+  · Write config.json optimal
+  · Install guards + hooks
+  · Configure MCPs selon clés disponibles
+  ↓
+Phase 3 — Le "wow moment"
+  ✓ 2 comptes Claude (pool actif)
+  ✓ 3 modèles Ollama (qwen, deepseek, nomic-embed)
+  ✓ 12 repos indexés en mémoire
+  ✓ 8 guards installés
+  ✓ 4 MCPs configurés
+  ✓ Commander : ce Mac / VPS
+  ✓ Fleet : 3 Specialists en ligne (Tailscale)
+  ✓ 15 sessions Claude ingérées
+  → rex est prêt. Lance : rex
+```
+
+### Fichier : `setup-wizard.ts`
+
+Discovery en `Promise.all()`. Organisation via `orchestrate()`. Résultat CLI ou Flutter UI.
+
+### Règle
+
+APIs payantes utilisées UNE SEULE FOIS au setup pour l'ingestion initiale.
+
+---
+
+## Section 25 — Fleet Architecture (terminologie militaire)
+
+**Renommer partout dans le code et l'UI** :
+
+| Ancien | Nouveau |
+|--------|---------|
+| Hub | Commander |
+| Node | Specialist |
+| Hub node | Fleet Commander |
+| Worker Claude Code | Code Specialist |
+| Worker Ollama | Inference Specialist |
+| Telegram gateway | Comms |
+| Task routing | Mission assignment |
+
+### Hiérarchie
+
+```
+Fleet Commander (VPS always-on)
+├── Comms (Telegram gateway)
+├── Code Specialist (Mac — Claude Code)
+├── Inference Specialist (Mac/GPU — Ollama)
+└── Background Specialist (RPi — tâches légères)
+```
+
+---
+
+## Section 26 — Orchestrateur Async (relay pattern)
+
+**Pas une cascade linéaire, pas un Promise.race naïf. Un relay race avec documentation.**
+
+### Chain staggerée
+
+```
+Script (0ms)        → tâche scriptable → fait, 0 token
+Ollama local (0ms)  → dispo + forces → fait, gratuit
+Free tier (+300ms)  → si Ollama absent/lent
+Subscription (+800ms) → si free tier épuisé
+Pay → jamais par défaut, alerte si atteint
+```
+
+### Self-aware specialists
+
+Chaque spécialiste connaît ses limites AVANT d'essayer :
+- Context window max
+- Forces / faiblesses par type de tâche
+- Latence moyenne, coût/token
+
+Si limits dépassées → `handoffNote` documentée + relais immédiat. Le Commander reçoit toujours un contexte propre.
+
+### Fichier : `orchestrator.ts` (poussé sur feat/litellm-phase2)
+
+Inclut `SPECIALIST_PROFILES`, `checkSpecialistLimits()`, `orchestrate()` avec stagger.
+
+---
+
+## Section 27 — Sécurité Fleet (MCPs, skills, repos)
+
+**Contexte** : CVE-2025-6514 mcp-remote RCE, supply chain npm documentés en 2025.
+
+### Règle : scan avant tout install
+
+```typescript
+// Dans mcp-discover.ts AVANT npx install :
+const result = await scan(mcpId, 'mcp')
+if (result.recommendation === 'block') throw new Error('SECURITY_BLOCK')
+if (result.recommendation === 'warn') await confirmWithUser()
+```
+
+### Scanners OSS à intégrer
+
+| Scanner | Source | Cible |
+|---------|--------|-------|
+| mcp-scan | invariantlabs-ai/mcp-scan | descriptions MCP |
+| skill-scanner | cisco-ai-defense/skill-scanner | skills agents |
+| VirusTotal API | virustotal.com | npm packages, URLs |
+| Injection regex | custom 30 patterns | scripts, prompts |
+| npm audit | npm CLI | dépendances |
+
+### Patterns bloqués
+
+- `curl ... | bash` (install non-contrôlé)
+- Exfiltration env vars (`$ANTHROPIC_API_KEY`, `process.env.*`)
+- Zero-width chars (instructions cachées)
+- `ignore previous instructions`, DAN mode
+- Accès `/etc/passwd`, `~/.ssh`
+
+### Cache : résultats 24h par hash. Fichier : `security-scanner.ts` (poussé sur feat/litellm-phase2)
+
+---
+
+## Section 28 — Lint Loop (script-first feedback)
+
+**Pattern validé en prod** (Factory.ai, DoorDash ZenML 2025).
+
+### Boucle
+
+```
+1. Script analyse (ESLint/TSC/Semgrep/custom)
+2. LLM reçoit rapport → correction minimale ciblée
+3. Script re-analyse
+4. Si diff → retour 2
+5. Si no diff → done (0 LLM si script suffit dès étape 1)
+```
+
+### Convergence
+
+Arrêt si : aucun diff | max 5 iterations | LLM dit "rien à corriger"
+
+### Fichier à créer : `lint-loop.ts`
+
+```typescript
+export async function lintLoop(opts: {
+  targetPath: string
+  analyzer: () => Promise<string>  // script qui retourne rapport
+  maxIterations?: number           // default: 5
+}): Promise<{ converged: boolean; iterations: number; finalReport: string }>
+```
+
+Utilise `orchestrate()` en interne pour les corrections LLM.

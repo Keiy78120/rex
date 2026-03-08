@@ -506,13 +506,28 @@ rex doctor --fix     # Auto-fix then health check
 | feat(daemon): hub crash auto-restart with Telegram notify after 3 failures | `daemon.ts` |
 | fix(daemon): escalating disk response — auto-prune memories + backups at < 2GB critical threshold | `daemon.ts` |
 
+### ✅ Terminé (session 2026-03-13 — MCP server + security scanner + lint loop)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| `rex-mcp-server.ts`: REX as MCP server — JSON-RPC 2.0 over stdio, 7 tools (rex_memory_search, rex_observe, rex_delegate, rex_sandbox_run, rex_budget, rex_nodes, rex_review) | `rex-mcp-server.ts` |
+| `rex mcp serve`: starts the MCP server (wired in mcp_registry.ts) | `mcp_registry.ts` |
+| `rex mcp register`: auto-writes mcpServers.rex entry to ~/.claude/settings.json | `mcp_registry.ts` |
+| `security-scanner.ts`: regex injection rules (16 patterns), mcp-scan OSS integration, 24h SHA-256 cache, block/warn/allow decisions | `security-scanner.ts` |
+| `mcp-discover.ts`: security scan injected BEFORE any MCP install (§27 compliance) | `mcp-discover.ts` |
+| `lint-loop.ts`: script-first iterative correction loop — tsc/eslint/secrets analyzers, orchestrate() for LLM corrections, converges on diff (§28) | `lint-loop.ts` |
+| `rex lint-loop <path> [--eslint\|--secrets] [--max=N]`: CLI command | `index.ts` |
+
 ### 🔄 En cours / A faire
 
-**Phase 2 DONE, Phase 3 ~85% DONE**:
+**Phase 2 DONE, Phase 3 ~90% DONE**:
 - Cross-platform Flutter (Windows/Linux) — Phase 3 later
 - VPS brain: hub API done ✅, sync done ✅, Tailscale mesh done ✅
 - Fleet routing with capacity: done ✅
 - Multi-account OAuth rotation (account-pool.ts) — wired, ready to activate
+- REX as MCP server: done ✅ (`rex mcp serve` + `rex mcp register`)
+- Security fleet (§27): scanner done ✅, MCP pre-install scan done ✅
+- Lint loop (§28): done ✅
 
 ---
 
