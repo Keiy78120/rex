@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createLogger, configureLogger } from './logger.js'
 import { DAEMON_LOG_PATH } from './paths.js'
+import { FREE_TIER_PROVIDERS, getApiKey, validateProvider, getProvidersSnapshot } from './free-tiers.js'
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -98,7 +99,18 @@ async function main() {
       }
       const report = await runAllChecks()
       console.log(formatReport(report))
+      // Memory integrity check
+      try {
+        const { showMemoryHealth } = await import('./memory-check.js')
+        showMemoryHealth()
+      } catch {}
       process.exit(report.status === 'broken' ? 1 : 0)
+      break
+    }
+
+    case 'memory-check': {
+      const { showMemoryHealth } = await import('./memory-check.js')
+      showMemoryHealth(process.argv.includes('--json'))
       break
     }
 
@@ -323,6 +335,19 @@ async function main() {
       break
     }
 
+    case 'inventory': {
+      const { showInventory, collectInventory, saveInventoryCache } = await import('./inventory.js')
+      const jsonFlag = process.argv.includes('--json')
+      const inv = await collectInventory()
+      await saveInventoryCache(inv)
+      if (jsonFlag) {
+        console.log(JSON.stringify(inv, null, 2))
+      } else {
+        await showInventory()
+      }
+      break
+    }
+
     case 'models': {
       const { showModelRouter } = await import('./router.js')
       await showModelRouter()
@@ -380,6 +405,543 @@ async function main() {
       break
     }
 
+    case 'hub': {
+      const { startHub } = await import('./hub.js')
+      const portArg = process.argv.find(a => a.startsWith('--port='))
+      const port = portArg ? parseInt(portArg.split('=')[1]) : undefined
+      await startHub(port)
+      break
+    }
+
+    case 'node': {
+      const sub = process.argv[3]
+      const { registerWithHub, showNodeStatus, getNodeStatus } = await import('./node.js')
+      const jsonFlag = process.argv.includes('--json')
+      switch (sub) {
+        case 'register': {
+          const hubUrl = process.argv[4] || undefined
+          const ok = await registerWithHub(hubUrl)
+          if (ok) console.log(`${COLORS.green}✓${COLORS.reset} Registered with hub`)
+          else console.log(`${COLORS.yellow}!${COLORS.reset} No hub found — running in solo mode`)
+          break
+        }
+        case 'status':
+        default:
+          if (jsonFlag) {
+            const status = await getNodeStatus()
+            console.log(JSON.stringify({ ...status, mode: status.hubConnected ? 'cluster' : 'solo' }))
+          } else {
+            await showNodeStatus()
+          }
+          break
+      }
+      break
+    }
+
+    case 'queue': {
+      const sub = process.argv[3]
+      const { getQueueStats, replayUnacked, getEventLog } = await import('./sync-queue.js')
+      const jsonFlag = process.argv.includes('--json')
+      switch (sub) {
+        case 'stats': {
+          const stats = getQueueStats()
+          if (jsonFlag) {
+            console.log(JSON.stringify({ total: stats.total, pending: stats.unacked, acked: stats.total - stats.unacked, byType: stats.byType }))
+          } else {
+            console.log(`\n${COLORS.bold}REX Queue Stats${COLORS.reset}`)
+            console.log(`  Total events: ${stats.total}`)
+            console.log(`  Unacked:      ${stats.unacked}`)
+            for (const [type, count] of Object.entries(stats.byType)) {
+              console.log(`  ${COLORS.dim}${type.padEnd(22)}${COLORS.reset} ${count}`)
+            }
+          }
+          break
+        }
+        case 'replay': {
+          console.log(`${COLORS.cyan}Replaying unacked events...${COLORS.reset}`)
+          const result = await replayUnacked()
+          console.log(`  Processed: ${result.processed}, Failed: ${result.failed}`)
+          break
+        }
+        case 'log': {
+          const linesArg = process.argv.find(a => a.startsWith('--lines='))
+          const n = linesArg ? parseInt(linesArg.split('=')[1]) : 20
+          const events = getEventLog(n)
+          console.log(`\n${COLORS.bold}Recent Events${COLORS.reset} (${events.length})\n`)
+          for (const e of events) {
+            const dot = e.acked ? `${COLORS.green}●${COLORS.reset}` : `${COLORS.yellow}○${COLORS.reset}`
+            const ts = e.timestamp.split('T')[1]?.slice(0, 8) || ''
+            console.log(`  ${dot} ${COLORS.dim}${ts}${COLORS.reset} ${e.type.padEnd(22)} ${COLORS.dim}${e.source}${COLORS.reset}`)
+          }
+          break
+        }
+        default:
+          console.log(`Usage: rex queue [stats|replay|log]`)
+      }
+      break
+    }
+
+    case 'journal': {
+      const sub = process.argv[3]
+      const { getJournalStats, replayUnacked } = await import('./event-journal.js')
+      const jsonFlag = process.argv.includes('--json')
+      if (sub === 'replay') {
+        console.log(`${COLORS.cyan}Replaying unacked journal events...${COLORS.reset}`)
+        const result = replayUnacked()
+        console.log(`  Replayed: ${result.replayed} / ${result.total}`)
+      } else {
+        const stats = getJournalStats()
+        if (jsonFlag) {
+          console.log(JSON.stringify(stats, null, 2))
+        } else {
+          console.log(`\n${COLORS.bold}REX Event Journal${COLORS.reset}`)
+          console.log(`  Total events: ${stats.total}`)
+          console.log(`  Unacked:      ${stats.unacked}`)
+          if (stats.oldest) console.log(`  Oldest:       ${COLORS.dim}${stats.oldest}${COLORS.reset}`)
+          if (stats.newest) console.log(`  Newest:       ${COLORS.dim}${stats.newest}${COLORS.reset}`)
+          if (Object.keys(stats.byType).length > 0) {
+            console.log(`\n  ${COLORS.bold}By Type${COLORS.reset}`)
+            for (const [type, count] of Object.entries(stats.byType)) {
+              console.log(`    ${type.padEnd(22)} ${count}`)
+            }
+          }
+          if (Object.keys(stats.bySource).length > 0) {
+            console.log(`\n  ${COLORS.bold}By Source${COLORS.reset}`)
+            for (const [source, count] of Object.entries(stats.bySource)) {
+              console.log(`    ${source.padEnd(22)} ${count}`)
+            }
+          }
+        }
+      }
+      break
+    }
+
+    case 'cache': {
+      const sub = process.argv[3]
+      const { cacheStats, cacheClean } = await import('./semantic-cache.js')
+      const jsonFlag = process.argv.includes('--json')
+      if (sub === 'clean') {
+        const removed = cacheClean()
+        console.log(`${COLORS.green}✓${COLORS.reset} Removed ${removed} expired cache entries`)
+      } else {
+        const stats = cacheStats()
+        if (jsonFlag) {
+          console.log(JSON.stringify(stats, null, 2))
+        } else {
+          console.log(`\n${COLORS.bold}REX Semantic Cache${COLORS.reset}`)
+          console.log(`  Entries:       ${stats.totalEntries}`)
+          console.log(`  Total hits:    ${stats.totalHits}`)
+          console.log(`  Tokens saved:  ${stats.totalTokensSaved}`)
+          console.log(`  Hit rate:      ${(stats.hitRate).toFixed(1)}x per entry`)
+          if (Object.keys(stats.byModel).length > 0) {
+            console.log(`\n  ${COLORS.bold}By Model${COLORS.reset}`)
+            for (const [model, count] of Object.entries(stats.byModel)) {
+              console.log(`    ${model.padEnd(22)} ${count}`)
+            }
+          }
+          if (Object.keys(stats.byTaskType).length > 0) {
+            console.log(`\n  ${COLORS.bold}By Task Type${COLORS.reset}`)
+            for (const [task, count] of Object.entries(stats.byTaskType)) {
+              console.log(`    ${task.padEnd(22)} ${count}`)
+            }
+          }
+        }
+      }
+      break
+    }
+
+    case 'providers': {
+      const { createDefaultRegistry, showProviders } = await import('./providers.js')
+      const jsonFlag = process.argv.includes('--json')
+      const registry = createDefaultRegistry()
+      await registry.checkAll({ silent: jsonFlag })
+      if (jsonFlag) {
+        console.log(JSON.stringify(registry.listAll(), null, 2))
+      } else {
+        await showProviders()
+      }
+      break
+    }
+
+    case 'budget': {
+      const { showBudget, getBudgetSummary } = await import('./budget.js')
+      const jsonFlag = process.argv.includes('--json')
+      if (jsonFlag) {
+        console.log(JSON.stringify(getBudgetSummary(), null, 2))
+      } else {
+        showBudget()
+      }
+      break
+    }
+
+    case 'runbooks': {
+      const sub = process.argv[3]
+      const { showRunbooks, saveRunbook, deleteRunbook, listRunbooks } = await import('./observer.js')
+      const jsonFlag = process.argv.includes('--json')
+      if (jsonFlag && sub !== 'add' && sub !== 'delete') {
+        console.log(JSON.stringify({ runbooks: listRunbooks() }))
+        break
+      }
+      switch (sub) {
+        case 'add': {
+          const name = process.argv[4]
+          const triggerArg = process.argv.find(a => a.startsWith('--trigger='))
+          const stepsArg = process.argv.find(a => a.startsWith('--steps='))
+          if (!name || !triggerArg || !stepsArg) {
+            console.log('Usage: rex runbooks add <name> --trigger="..." --steps="step1,step2,step3"')
+            break
+          }
+          const trigger = triggerArg.split('=').slice(1).join('=')
+          const steps = stepsArg.split('=').slice(1).join('=').split(',')
+          const id = saveRunbook(name, trigger, steps)
+          console.log(`${COLORS.green}✓${COLORS.reset} Runbook #${id} saved: ${name}`)
+          break
+        }
+        case 'delete': {
+          const id = parseInt(process.argv[4])
+          if (!id) { console.log('Usage: rex runbooks delete <id>'); break }
+          const ok = deleteRunbook(id)
+          console.log(ok ? `${COLORS.green}✓${COLORS.reset} Runbook #${id} deleted` : `${COLORS.red}✗${COLORS.reset} Runbook #${id} not found`)
+          break
+        }
+        default:
+          showRunbooks()
+      }
+      break
+    }
+
+    case 'orchestrate': {
+      const providerArg = process.argv.find(a => a.startsWith('--provider='))
+      const promptArgs = process.argv.slice(3).filter(a => !a.startsWith('--'))
+      const prompt = promptArgs.join(' ')
+      if (!prompt) {
+        console.log('Usage: rex orchestrate <prompt> [--provider=ollama]')
+        break
+      }
+      const { orchestrate } = await import('./orchestrator.js')
+      try {
+        const result = await orchestrate(prompt, {
+          preferProvider: providerArg ? providerArg.split('=')[1] : undefined,
+        })
+        console.log(result.response)
+        console.log(`\n${COLORS.dim}[${result.provider}${result.fallbackUsed ? ' (fallback)' : ''} — ${result.durationMs}ms]${COLORS.reset}`)
+      } catch (e: any) {
+        console.log(`${COLORS.red}✗${COLORS.reset} ${e.message}`)
+      }
+      break
+    }
+
+    case 'reflect': {
+      const logPath = process.argv[3]
+      const { reflectOnSession, showReflection, suggestRunbooks } = await import('./reflector.js')
+      const jsonFlag = process.argv.includes('--json')
+      if (logPath) {
+        const result = await reflectOnSession(logPath)
+        if (jsonFlag) {
+          console.log(JSON.stringify(result, null, 2))
+        } else {
+          showReflection(result)
+        }
+      } else {
+        // Suggest runbooks for current context
+        const cwd = process.cwd()
+        const suggestions = suggestRunbooks(cwd)
+        if (jsonFlag) {
+          console.log(JSON.stringify({ suggestions }))
+        } else if (suggestions.length > 0) {
+          console.log(`\n${COLORS.bold}Suggested Runbooks${COLORS.reset} for ${COLORS.dim}${cwd}${COLORS.reset}\n`)
+          for (const r of suggestions) {
+            console.log(`  ${COLORS.cyan}#${r.id}${COLORS.reset} ${r.name}`)
+            console.log(`  ${COLORS.dim}trigger: ${r.trigger}${COLORS.reset}\n`)
+          }
+        } else {
+          console.log(`No runbook suggestions for current context.\nUsage: rex reflect <session-log-path>`)
+        }
+      }
+      break
+    }
+
+    case 'observe': {
+      const type = process.argv[3]
+      const content = process.argv.slice(4).join(' ')
+      if (!type || !content) {
+        console.log('Usage: rex observe <type> <content>')
+        console.log('Types: decision, blocker, solution, error, pattern, habit')
+        break
+      }
+      const validTypes = ['decision', 'blocker', 'solution', 'error', 'pattern', 'habit']
+      if (!validTypes.includes(type)) {
+        console.log(`Invalid type "${type}". Valid: ${validTypes.join(', ')}`)
+        break
+      }
+      const { addObservation } = await import('./observer.js')
+      const id = addObservation('manual', process.cwd(), type as any, content)
+      console.log(id > 0 ? `${COLORS.green}\u2713${COLORS.reset} Observation #${id} recorded (${type})` : `${COLORS.red}\u2717${COLORS.reset} Failed to record observation`)
+      break
+    }
+
+    case 'observations': {
+      const { showObservations, getObservationStats } = await import('./observer.js')
+      const jsonFlag = process.argv.includes('--json')
+      const typeArg = process.argv.find(a => a.startsWith('--type='))
+      const projectArg = process.argv.find(a => a.startsWith('--project='))
+      const opts: any = {}
+      if (typeArg) opts.type = typeArg.split('=')[1]
+      if (projectArg) opts.project = projectArg.split('=')[1]
+      if (jsonFlag) {
+        const { getObservations } = await import('./observer.js')
+        const stats = getObservationStats()
+        const obs = getObservations(opts)
+        console.log(JSON.stringify({ observations: obs, stats }, null, 2))
+      } else {
+        showObservations(opts)
+      }
+      break
+    }
+
+    case 'habits': {
+      const { showHabits, recordHabit, getHabits } = await import('./observer.js')
+      const jsonFlag = process.argv.includes('--json')
+      const sub = process.argv[3]
+      if (sub === 'add') {
+        const pattern = process.argv.slice(4).join(' ')
+        if (!pattern) { console.log('Usage: rex habits add <pattern>'); break }
+        const id = recordHabit(pattern)
+        console.log(id > 0 ? `${COLORS.green}\u2713${COLORS.reset} Habit recorded (id=${id})` : `${COLORS.red}\u2717${COLORS.reset} Failed`)
+      } else if (jsonFlag) {
+        const minArg = process.argv.find(a => a.startsWith('--min='))
+        const min = minArg ? parseInt(minArg.split('=')[1]) : 1
+        console.log(JSON.stringify({ habits: getHabits(min) }, null, 2))
+      } else {
+        const minArg = process.argv.find(a => a.startsWith('--min='))
+        const min = minArg ? parseInt(minArg.split('=')[1]) : 1
+        showHabits(min)
+      }
+      break
+    }
+
+    case 'facts': {
+      const { showFacts, addFact, getFacts, factStats } = await import('./observer.js')
+      const jsonFlag = process.argv.includes('--json')
+      const sub = process.argv[3]
+      if (sub === 'add') {
+        const category = process.argv[4]
+        const content = process.argv.slice(5).join(' ')
+        if (!category || !content) { console.log('Usage: rex facts add <category> <content>'); break }
+        const sourceArg = process.argv.find(a => a.startsWith('--source='))
+        const source = sourceArg ? sourceArg.split('=').slice(1).join('=') : ''
+        const id = addFact(category, content, source)
+        console.log(id > 0 ? `${COLORS.green}\u2713${COLORS.reset} Fact #${id} stored (${category})` : `${COLORS.red}\u2717${COLORS.reset} Failed`)
+      } else if (jsonFlag) {
+        const category = sub && sub !== '--json' ? sub : undefined
+        const stats = factStats()
+        const facts = getFacts(category)
+        console.log(JSON.stringify({ facts, stats }, null, 2))
+      } else {
+        const category = sub || undefined
+        showFacts(category)
+      }
+      break
+    }
+
+    case 'archive': {
+      const { archiveOld, showArchiveResult, promotePatterns, getPromotedRules } = await import('./reflector.js')
+      const jsonFlag = process.argv.includes('--json')
+      const sub = process.argv[3]
+      if (sub === 'promote') {
+        const minArg = process.argv.find(a => a.startsWith('--min='))
+        const min = minArg ? parseInt(minArg.split('=')[1]) : 3
+        const promoted = promotePatterns(min)
+        if (jsonFlag) {
+          console.log(JSON.stringify({ promoted, existing: getPromotedRules() }, null, 2))
+        } else if (promoted.length > 0) {
+          console.log(`\n${COLORS.bold}Promoted Patterns${COLORS.reset}\n`)
+          for (const p of promoted) {
+            console.log(`  ${COLORS.green}\u2713${COLORS.reset} [${p.occurrences}x] ${p.pattern.slice(0, 70)}`)
+          }
+          console.log(`\n  ${promoted.length} new rule candidate${promoted.length === 1 ? '' : 's'}`)
+        } else {
+          console.log(`No new patterns to promote (min ${min} occurrences).`)
+          const existing = getPromotedRules()
+          if (existing.length > 0) {
+            console.log(`\n${COLORS.bold}Existing Promoted Rules${COLORS.reset}\n`)
+            for (const r of existing) {
+              const dot = r.status === 'promoted' ? `${COLORS.green}\u25cf${COLORS.reset}` : r.status === 'rejected' ? `${COLORS.red}\u25cb${COLORS.reset}` : `${COLORS.yellow}\u25cb${COLORS.reset}`
+              console.log(`  ${dot} #${r.id} [${r.occurrences}x] ${r.pattern.slice(0, 60)} — ${r.status}`)
+            }
+          }
+        }
+      } else {
+        const result = archiveOld()
+        if (jsonFlag) {
+          console.log(JSON.stringify(result, null, 2))
+        } else {
+          showArchiveResult(result)
+        }
+      }
+      break
+    }
+
+    case 'sync': {
+      const sub = process.argv[3]
+      const { syncPush, syncPull, syncBidirectional, showSyncStatus, getSyncStatusData } = await import('./sync.js')
+      const jsonFlag = process.argv.includes('--json')
+      if (jsonFlag && sub !== 'push' && sub !== 'pull') {
+        console.log(JSON.stringify(getSyncStatusData()))
+        break
+      }
+      switch (sub) {
+        case 'push': {
+          const r = await syncPush()
+          console.log(`${COLORS.green}✓${COLORS.reset} Pushed ${r.pushed} events${r.failed ? `, ${r.failed} failed` : ''}`)
+          break
+        }
+        case 'pull': {
+          const r = await syncPull()
+          console.log(`${COLORS.green}✓${COLORS.reset} Pulled ${r.pulled} events`)
+          break
+        }
+        case 'status':
+          await showSyncStatus()
+          break
+        default: {
+          const r = await syncBidirectional()
+          console.log(`${COLORS.green}✓${COLORS.reset} Sync: pushed ${r.pushed}, pulled ${r.pulled}${r.failed ? `, ${r.failed} failed` : ''}`)
+        }
+      }
+      break
+    }
+
+    case 'backup': {
+      const sub = process.argv[3]
+      const { backupNow, listBackups, restoreBackup, rotateBackups } = await import('./backup.js')
+      switch (sub) {
+        case 'list': {
+          const backups = listBackups()
+          if (backups.length === 0) {
+            console.log(`${COLORS.dim}No backups found.${COLORS.reset}`)
+          } else {
+            console.log(`\n${COLORS.bold}REX Backups${COLORS.reset}\n`)
+            for (const b of backups) {
+              console.log(`  ${COLORS.cyan}${b.filename}${COLORS.reset}  ${COLORS.dim}${b.sizeHuman}${COLORS.reset}`)
+            }
+            console.log()
+          }
+          break
+        }
+        case 'restore': {
+          const path = process.argv[4]
+          if (!path) { console.log('Usage: rex backup restore <path> --confirm'); break }
+          const confirm = process.argv.includes('--confirm')
+          const ok = restoreBackup(path, confirm)
+          if (ok) console.log(`${COLORS.green}✓${COLORS.reset} Backup restored`)
+          else if (!confirm) console.log(`${COLORS.yellow}!${COLORS.reset} Add --confirm to proceed with restore`)
+          else console.log(`${COLORS.red}✗${COLORS.reset} Restore failed`)
+          break
+        }
+        default: {
+          console.log(`${COLORS.cyan}Creating backup...${COLORS.reset}`)
+          const path = backupNow()
+          if (path) {
+            console.log(`${COLORS.green}✓${COLORS.reset} Backup saved: ${path}`)
+            const removed = rotateBackups(7)
+            if (removed > 0) console.log(`${COLORS.dim}Rotated ${removed} old backups${COLORS.reset}`)
+          } else {
+            console.log(`${COLORS.red}✗${COLORS.reset} Backup failed`)
+          }
+        }
+      }
+      break
+    }
+
+    case 'workflow': {
+      const sub = process.argv[3]
+      switch (sub) {
+        case 'feature': {
+          const name = process.argv.slice(4).join(' ')
+          if (!name) { console.log('Usage: rex workflow feature <name>'); break }
+          const { startFeature } = await import('./workflow.js')
+          startFeature(name)
+          break
+        }
+        case 'bugfix': {
+          const desc = process.argv.slice(4).join(' ')
+          if (!desc) { console.log('Usage: rex workflow bugfix <description>'); break }
+          const { startBugfix } = await import('./workflow.js')
+          startBugfix(desc)
+          break
+        }
+        case 'pr': {
+          const { workflowPR } = await import('./workflow.js')
+          workflowPR()
+          break
+        }
+        default:
+          console.log(`Usage: rex workflow [feature|bugfix|pr]`)
+      }
+      break
+    }
+
+    case 'guard': {
+      const sub = process.argv[3]
+      const { listGuards, enableGuard, disableGuard, getGuardLogs } = await import('./guard-manager.js')
+      switch (sub) {
+        case 'enable': {
+          const name = process.argv[4]
+          if (!name) { console.log('Usage: rex guard enable <name>'); break }
+          const ok = enableGuard(name)
+          console.log(ok ? `${COLORS.green}✓${COLORS.reset} Guard enabled: ${name}` : `${COLORS.red}✗${COLORS.reset} Guard not found: ${name}`)
+          break
+        }
+        case 'disable': {
+          const name = process.argv[4]
+          if (!name) { console.log('Usage: rex guard disable <name>'); break }
+          const ok = disableGuard(name)
+          console.log(ok ? `${COLORS.green}✓${COLORS.reset} Guard disabled: ${name}` : `${COLORS.red}✗${COLORS.reset} Guard not found: ${name}`)
+          break
+        }
+        case 'logs': {
+          const name = process.argv[4] || undefined
+          const logs = getGuardLogs(name)
+          if (logs.length === 0) {
+            console.log(`${COLORS.dim}No guard log entries found${name ? ` for ${name}` : ''}.${COLORS.reset}`)
+          } else {
+            console.log(`\n${COLORS.bold}Guard Logs${COLORS.reset}${name ? ` (${name})` : ''}\n`)
+            for (const line of logs) console.log(`  ${line}`)
+            console.log('')
+          }
+          break
+        }
+        case 'list':
+        default: {
+          const guards = listGuards()
+          if (guards.length === 0) {
+            console.log(`${COLORS.dim}No guards found in ~/.claude/rex-guards/${COLORS.reset}`)
+          } else {
+            console.log(`\n${COLORS.bold}REX Guards${COLORS.reset}\n`)
+            for (const g of guards) {
+              const dot = g.enabled ? `${COLORS.green}●${COLORS.reset}` : `${COLORS.dim}○${COLORS.reset}`
+              console.log(`  ${dot} ${COLORS.bold}${g.name.padEnd(24)}${COLORS.reset} ${COLORS.dim}${g.hook.padEnd(30)}${COLORS.reset} ${g.description}`)
+            }
+            console.log('')
+          }
+          break
+        }
+      }
+      break
+    }
+
+    case 'review': {
+      const { runReview, printReviewResults } = await import('./review.js')
+      const jsonFlag = process.argv.includes('--json')
+      const mode = process.argv.includes('--ai') ? 'ai' as const
+        : process.argv.includes('--full') ? 'full' as const
+        : 'quick' as const
+      const results = runReview(mode)
+      printReviewResults(results, jsonFlag)
+      break
+    }
+
     case 'logs': {
       const lines = process.argv.find(a => a.startsWith('--lines='))
       const n = lines ? parseInt(lines.split('=')[1]) : 50
@@ -406,6 +968,53 @@ async function main() {
       console.log('rex-claude v6.0.0')
       break
 
+    case 'free-tiers': {
+      const testMode = process.argv.includes('--test')
+      const jsonMode = process.argv.includes('--json')
+
+      if (jsonMode) {
+        console.log(JSON.stringify(getProvidersSnapshot()))
+        break
+      }
+
+      const line = '─'.repeat(54)
+      console.log(`\n${COLORS.bold}REX Free Tiers${COLORS.reset}  ${COLORS.dim}(Vercel AI SDK)${COLORS.reset}`)
+      console.log(line)
+
+      let configured = 0
+
+      for (const p of FREE_TIER_PROVIDERS) {
+        const hasKey = p.name === 'Ollama' ? true : !!getApiKey(p.envKey)
+        if (hasKey) configured++
+        const dot = hasKey ? `${COLORS.green}●${COLORS.reset}` : `${COLORS.dim}○${COLORS.reset}`
+        const keyStatus = p.name === 'Ollama'
+          ? `${COLORS.green}local${COLORS.reset}`
+          : hasKey
+            ? `${COLORS.green}configured${COLORS.reset}`
+            : `${COLORS.dim}set ${p.envKey}${COLORS.reset}`
+
+        if (testMode && hasKey) {
+          process.stdout.write(`  ${dot}  ${p.name.padEnd(14)} validating...`)
+          const valid = await validateProvider(p)
+          const validStr = valid ? `${COLORS.green}✓ valid${COLORS.reset}` : `${COLORS.red}✗ failed${COLORS.reset}`
+          console.log(`\r  ${dot}  ${p.name.padEnd(14)} ${validStr.padEnd(20)} ${COLORS.dim}${p.rpmLimit} RPM · ${p.defaultModel}${COLORS.reset}`)
+        } else {
+          console.log(`  ${dot}  ${p.name.padEnd(14)} ${keyStatus.padEnd(25)} ${COLORS.dim}${p.rpmLimit} RPM · ${p.defaultModel}${COLORS.reset}`)
+        }
+      }
+
+      console.log(`\n${line}`)
+      console.log(`  ${configured}/${FREE_TIER_PROVIDERS.length} providers available`)
+
+      if (configured <= 1) {
+        console.log(`\n  ${COLORS.yellow}!${COLORS.reset} Add API keys to ${COLORS.dim}~/.claude/settings.json${COLORS.reset} under ${COLORS.dim}"env"${COLORS.reset}:`)
+        console.log(`  ${COLORS.dim}GROQ_API_KEY, CEREBRAS_API_KEY, TOGETHER_API_KEY, MISTRAL_API_KEY${COLORS.reset}`)
+        console.log(`  ${COLORS.dim}OPENROUTER_API_KEY, DEEPSEEK_API_KEY${COLORS.reset}`)
+      }
+      console.log()
+      break
+    }
+
     case 'help':
     default:
       console.log(`
@@ -421,6 +1030,18 @@ ${COLORS.bold}Commands:${COLORS.reset}
   rex startup         Install LaunchAgent (auto-start on login)
   rex startup-remove  Remove LaunchAgent
 
+${COLORS.bold}Guards:${COLORS.reset}
+  rex guard list              List all guards with status
+  rex guard enable <name>     Enable a guard
+  rex guard disable <name>    Disable a guard
+  rex guard logs [name]       Show guard trigger logs
+
+${COLORS.bold}Review:${COLORS.reset}
+  rex review                  Quick review (TypeScript + secrets)
+  rex review --full           Full review (+ lint + tests)
+  rex review --ai             AI-assisted review (requires provider)
+  rex review --json           JSON output
+
 ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex migrate          Migrate ~/.rex-memory/ to ~/.claude/rex/ hub
   rex ingest           Sync session history to vector DB
@@ -430,19 +1051,67 @@ ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex recategorize     Re-classify session memories with AI
   rex optimize         Analyze CLAUDE.md with local LLM
   rex optimize --apply Apply optimizations (with backup)
+  rex memory-check     Memory integrity & health report
+  rex memory-check --json  Output as JSON
   rex prune            Cleanup old/duplicate memories
   rex prune --stats    Show memory database stats
   rex self-review      Extract lessons, detect error patterns
   rex promote-rule N   Promote rule candidate to ~/.claude/rules/
+  rex reflect <log>    Extract success patterns from session log
+  rex reflect          Suggest runbooks for current context
+  rex observe <t> <c>  Record observation (decision/blocker/solution/error/pattern/habit)
+  rex observations     List observations (--type=, --project=, --json)
+  rex habits           Show detected habits (--min=N, --json)
+  rex habits add <p>   Record a habit pattern
+  rex facts [category] Show stored facts (--json)
+  rex facts add <c> <t> Store a fact (--source=)
+  rex archive          Run forgetting curve (compress/archive old observations)
+  rex archive promote  Promote recurring patterns to rules (--min=N)
 
 ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex setup            Install Ollama + models + Telegram gateway (interactive)
   rex setup --yes      Non-interactive setup (auto-install deps, env-based Telegram)
   rex llm <prompt>     Query local LLM directly
+  rex inventory       Scan local resources (CLIs, services, hardware, models)
   rex models           Show task-aware model routing table
   rex preload [path]   Show pre-loaded context for a path
   rex context [path]   Analyze project, recommend MCP/skills
   rex projects         Scan and index all dev projects
+
+${COLORS.bold}Providers & Budget:${COLORS.reset}
+  rex providers        Show available providers (owned-first order)
+  rex budget           Show usage tracking and costs
+  rex orchestrate <p>  Run prompt through best provider
+  rex runbooks         List saved workflow runbooks
+  rex runbooks add     Save a new runbook
+
+${COLORS.bold}Event Journal & Cache:${COLORS.reset}
+  rex journal          Show event journal stats (--json)
+  rex journal replay   Replay unacked journal events
+  rex cache            Show semantic cache stats (--json)
+  rex cache clean      Remove expired cache entries
+
+${COLORS.bold}Hub & Network:${COLORS.reset}
+  rex hub              Start REX hub API server (port 7420)
+  rex hub --port=N     Start on custom port
+  rex node status      Show node identity and hub connection
+  rex node register    Register this node with hub
+  rex sync             Bidirectional sync with hub
+  rex sync push/pull   One-way sync
+  rex sync status      Show sync state
+  rex queue stats      Show event queue statistics
+  rex queue replay     Replay unacked events
+  rex queue log        Show recent events (--lines=N)
+
+${COLORS.bold}Backup & Recovery:${COLORS.reset}
+  rex backup           Create full backup (SQLite DBs + config)
+  rex backup list      List available backups
+  rex backup restore   Restore from backup (requires --confirm)
+
+${COLORS.bold}Workflow:${COLORS.reset}
+  rex workflow feature <name>   Start feature branch + FEATURE.md
+  rex workflow bugfix <desc>    Start bugfix branch + BUG.md
+  rex workflow pr               Push + create PR via gh
 
 ${COLORS.bold}Background:${COLORS.reset}
   rex daemon           Start persistent background daemon
