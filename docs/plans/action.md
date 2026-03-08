@@ -629,3 +629,83 @@ Regles :
 Si tu touches du runtime, produis une verification concrete.
 Si tu touches seulement la doc, dis explicitement que build/tests n'ont pas ete relances.
 ```
+
+---
+
+## 20. PRINCIPE FONDAMENTAL — Real-Time Adaptive Loading (2026-03-08)
+
+**Tout dans REX doit être dynamique et chargé en fonction du contexte.**
+
+REX n'est PAS un bundle statique qui s'initialise une fois au démarrage.
+REX est un **système adaptatif** : il détecte l'intention, charge ce qui est pertinent, décharge ce qui ne l'est pas.
+
+### Règle absolue
+
+```
+intent → context profile → guards/MCPs/skills actifs pour CETTE session
+```
+
+Chaque session REX a un profil dynamique. Rien n'est chargé par défaut sauf le minimum vital.
+
+### Profils par intent (examples)
+
+| Intent détecté | Guards actifs | MCPs chargés | Skills actifs |
+|----------------|---------------|--------------|---------------|
+| `feature` (code Flutter/TS) | ui-checklist, test-protect, completion | filesystem, playwright | ui-craft, test-strategy |
+| `bug-fix` | error-pattern, completion, dangerous-cmd | github, sqlite | debug-assist, fix-issue |
+| `infra` / `devops` | dangerous-cmd (max strict), scope | filesystem, github | deploy-checklist, k8s |
+| `docs` | scope (light) | filesystem | code-explainer |
+| `explore` | scope (light) | github, brave-search | research, context-loader |
+| `discussion` / no project | aucun guard | memory uniquement | — |
+| `refactor` | test-protect, scope, completion | filesystem | perf, refactor-engine |
+
+### Ce qu'il faut implémenter
+
+**`context-loader.ts`** (nouveau fichier à créer) :
+```typescript
+// Entrée : ProjectIntent (depuis project-intent.ts)
+// Sortie : ContextProfile { guards: string[], mcps: string[], skills: string[], routingHints: string[] }
+
+export interface ContextProfile {
+  intent: ProjectIntent
+  guards: string[]       // guard filenames to activate
+  mcps: string[]         // MCP server IDs to load (from mcp-discover catalog)
+  skills: string[]       // skill IDs to inject in preload
+  routingHints: string[] // model routing hints for this context
+  reason: string
+}
+
+export function buildContextProfile(intent: ProjectIntent): ContextProfile
+export function applyContextProfile(profile: ContextProfile): Promise<void>
+// applyContextProfile :
+//   - active les hooks guards via guard-manager.ts
+//   - enregistre les MCPs pertinents via mcp-discover.ts
+//   - injecte les skills dans preload.ts
+//   - met à jour router.ts hints
+```
+
+**`preload.ts`** doit appeler `buildContextProfile()` en SessionStart :
+```typescript
+// Avant d'injecter le contexte mémoire → détecter l'intent → charger le profil → injecter
+const intent = await detectIntent()
+const profile = buildContextProfile(intent)
+await applyContextProfile(profile)
+```
+
+**`daemon.ts`** doit re-évaluer le profil à chaque nouvelle session (pas uniquement au boot).
+
+### Invariants
+
+1. **Minimum vital toujours actif** : dangerous-cmd-guard (bloqueur hardcoded), event-journal, memory search
+2. **Profil recalculé** à chaque SessionStart (pas cached entre sessions)
+3. **Désactivation propre** : quand un guard/MCP est retiré du profil, il est déregistré proprement
+4. **Fallback** : si intent inconnu → profil `explore` (guards légers, mémoire + search)
+5. **Override user possible** : `rex profile --force feature` force un profil sans rédétection
+
+### Bénéfice direct
+
+- Sessions discussion → zéro overhead guards/MCPs lourds
+- Sessions code → guards UI/test activés automatiquement
+- Sessions VPS/infra → dangerous-cmd en mode strict automatiquement
+- Moins de context window gaspillé en preload inutile
+- MCP servers non-pertinents ne sont pas démarrés (RAM/perf)
