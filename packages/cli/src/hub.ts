@@ -1,10 +1,10 @@
 import { createServer, get as httpGet, IncomingMessage, ServerResponse, Server } from 'node:http'
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { homedir } from 'node:os'
-import { REX_DIR, PENDING_DIR, ensureRexDirs } from './paths.js'
+import { REX_DIR, PENDING_DIR, MEMORY_DB_PATH, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
 import { getInventoryCache } from './inventory.js'
 import { getEventLog, appendEvent, getUnacked, ackEvent, getQueueStats } from './sync-queue.js'
@@ -370,6 +370,51 @@ addRoute('GET', '/api/v1/memory/pending', (_req, res) => {
   } catch (err) {
     log.error(`Failed to read pending dir: ${err}`)
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to read pending directory')
+  }
+})
+
+// Memory stats: total, pending, by category
+addRoute('GET', '/api/v1/memory', (_req, res) => {
+  try {
+    const pendingFiles = existsSync(PENDING_DIR) ? readdirSync(PENDING_DIR) : []
+    let total = 0
+    const byCategory: Record<string, number> = {}
+    if (existsSync(MEMORY_DB_PATH)) {
+      try {
+        // Read-only sync — no dynamic import needed, use spawn to avoid ESM issues
+        const out = execFileSync('sqlite3', [MEMORY_DB_PATH, '-json',
+          'SELECT category, COUNT(*) as c FROM memories GROUP BY category;'
+        ], { encoding: 'utf-8', timeout: 3000 })
+        const rows = JSON.parse(out) as Array<{ category: string; c: number }>
+        for (const r of rows) { byCategory[r.category] = r.c; total += r.c }
+      } catch { /* sqlite3 CLI unavailable, return pending only */ }
+    }
+    sendJson(res, 200, { total, pendingCount: pendingFiles.length, byCategory })
+  } catch (err: any) {
+    sendError(res, 500, 'INTERNAL_ERROR', err.message?.slice(0, 100) ?? 'Memory stats failed')
+  }
+})
+
+// Events list with limit (alias for /api/events, supports /api/v1/events?limit=N)
+addRoute('GET', '/api/v1/events', (req, res) => {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '20', 10), 100)
+  const offset = parseInt(url.searchParams.get('offset') ?? '0', 10)
+  try {
+    const events = getEventLog(limit, offset)
+    sendJson(res, 200, { events, total: events.length })
+  } catch (err: any) {
+    sendError(res, 500, 'INTERNAL_ERROR', err.message?.slice(0, 100) ?? 'Events failed')
+  }
+})
+
+// Queue stats
+addRoute('GET', '/api/v1/queue/stats', (_req, res) => {
+  try {
+    const stats = getQueueStats()
+    sendJson(res, 200, stats)
+  } catch (err: any) {
+    sendError(res, 500, 'INTERNAL_ERROR', err.message?.slice(0, 100) ?? 'Queue stats failed')
   }
 })
 
