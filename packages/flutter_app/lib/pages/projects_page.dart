@@ -249,7 +249,7 @@ class _ProjectCardState extends State<_ProjectCard> {
   Widget build(BuildContext context) {
     final name = widget.project['name'] as String? ?? '';
     final path = widget.project['path'] as String? ?? '';
-    final stack = (widget.project['stack'] as List?)?.cast<String>() ?? [];
+    final stack = (widget.project['stack'] as List?)?.whereType<String>().toList() ?? [];
     final status = widget.project['status'] as String? ?? 'unknown';
     final lastActive = widget.project['lastActive'] as String? ?? '';
     final memCount = widget.project['memoryCount'] as int? ?? 0;
@@ -339,8 +339,29 @@ class _ProjectCardState extends State<_ProjectCard> {
                   ),
                 ] else
                   const Spacer(),
-                if (lastActive.isNotEmpty)
+                if (lastActive.isNotEmpty) ...[
                   Text(_relativeDate(lastActive), style: TextStyle(fontSize: 10, color: context.rex.textTertiary)),
+                  const SizedBox(width: 10),
+                ],
+                GestureDetector(
+                  onTap: () => context.read<RexService>().launchProject(path),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: context.rex.accent.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: context.rex.accent.withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(CupertinoIcons.bolt_fill, size: 10, color: context.rex.accent),
+                        const SizedBox(width: 3),
+                        Text('Open', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: context.rex.accent)),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ],

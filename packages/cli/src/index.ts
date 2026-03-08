@@ -1114,6 +1114,13 @@ async function main() {
       console.log('rex-claude v6.0.0')
       break
 
+    case 'launch': {
+      const { launchRex } = await import('./rex-launcher.js')
+      const pathArg = process.argv.find(a => a.startsWith('--path='))?.split('=')[1]
+      await launchRex(pathArg ?? process.cwd())
+      break
+    }
+
     case 'kill': {
       const { killRex } = await import('./rex-launcher.js')
       killRex()

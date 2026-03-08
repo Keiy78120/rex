@@ -2227,6 +2227,16 @@ $transcript
     notifyListeners();
   }
 
+  /// Open a project directory in Claude Code via `rex launch --path=<path>`.
+  /// Fire-and-forget — we don't await the Claude process.
+  Future<void> launchProject(String projectPath) async {
+    try {
+      await _runRexArgs(['launch', '--path=$projectPath'], timeout: 5);
+    } catch (_) {
+      // launch spawns Claude detached, so exit code / timeout is expected
+    }
+  }
+
   // ── Review ─────────────────────────────────────────────────────────
 
   List<Map<String, dynamic>> _reviewResults = [];
