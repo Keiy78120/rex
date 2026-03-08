@@ -741,10 +741,10 @@ export async function getHubStatus(): Promise<{
   uptime?: number
 }> {
   const port = parseInt(process.env.REX_HUB_PORT ?? String(DEFAULT_PORT), 10)
-  try {
-    const res = await new Promise<{ statusCode: number; data: string }>((resolve, reject) => {
+  function httpFetch(path: string): Promise<{ statusCode: number; data: string }> {
+    return new Promise((resolve, reject) => {
       const req = httpGet(
-        { host: 'localhost', port, path: '/api/health', timeout: 3000 },
+        { host: 'localhost', port, path, timeout: 3000 },
         (r: IncomingMessage) => {
           let data = ''
           r.on('data', (c: Buffer) => { data += c.toString() })
@@ -754,20 +754,27 @@ export async function getHubStatus(): Promise<{
       req.on('error', reject)
       req.on('timeout', () => { req.destroy(); reject(new Error('timeout')) })
     })
-    if (res.statusCode === 200) {
+  }
+
+  try {
+    const [healthRes, nodesRes] = await Promise.all([
+      httpFetch('/api/health'),
+      httpFetch('/api/nodes'),
+    ])
+    if (healthRes.statusCode === 200) {
+      const body = JSON.parse(healthRes.data) as Record<string, unknown>
+      const d = (body.data as Record<string, unknown> | null) ?? body
+      let nodeList: NodeInfo[] = []
       try {
-        const body = JSON.parse(res.data) as Record<string, unknown>
-        // Unwrap standard envelope if present
-        const d = (body.data as Record<string, unknown> | null) ?? body
-        return {
-          running: true,
-          port,
-          nodesCount: (d.nodeCount as number) ?? 0,
-          nodes: [],
-          uptime: d.uptime as number | undefined,
-        }
-      } catch {
-        return { running: true, port, nodesCount: 0, nodes: [] }
+        const nb = JSON.parse(nodesRes.data) as Record<string, unknown>
+        nodeList = ((nb.data as NodeInfo[] | null) ?? []) as NodeInfo[]
+      } catch {}
+      return {
+        running: true,
+        port,
+        nodesCount: (d.nodeCount as number) ?? nodeList.length,
+        nodes: nodeList,
+        uptime: d.uptime as number | undefined,
       }
     }
   } catch {
