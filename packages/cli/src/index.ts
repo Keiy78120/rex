@@ -1870,6 +1870,9 @@ ${COLORS.bold}MCP Registry:${COLORS.reset}
   rex mcp search <query>       Search MCP marketplace cache
   rex mcp install <name>       Install MCP server from marketplace
   rex mcp sync-claude          Sync enabled stdio servers to ~/.claude/settings.json
+  rex mcp auto                 Recommend MCP servers for the current project stack
+  rex mcp scan                 Security scan via mcp-scan (tool poisoning, prompt injection)
+  rex mcp refresh-marketplace  Refresh cache from awesome-mcp-servers + Smithery
 
 ${COLORS.bold}Voice & Calls:${COLORS.reset}
   rex call status             Current call detection status (Hammerspoon)

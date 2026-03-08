@@ -675,6 +675,108 @@ async function installFromMarketplace(args: string[]) {
   console.log(JSON.stringify({ ok: true, server: newEntry }, null, 2))
 }
 
+// MCP_MAP: stack key → recommended MCP servers (§15.3 REX Master Plan)
+const MCP_MAP: Record<string, Array<{ name: string; reason: string }>> = {
+  'next':       [{ name: 'context7', reason: 'versioned docs for React/Next.js' }, { name: 'playwright', reason: 'browser testing for Next.js apps' }, { name: 'sentry', reason: 'error tracking' }],
+  'react':      [{ name: 'context7', reason: 'versioned React docs' }, { name: 'playwright', reason: 'browser testing' }],
+  'drizzle':    [{ name: 'postgres', reason: 'Drizzle → PostgreSQL access' }, { name: 'sqlite', reason: 'Drizzle → SQLite access' }],
+  'prisma':     [{ name: 'postgres', reason: 'Prisma → PostgreSQL access' }],
+  'vitest':     [],
+  'playwright': [{ name: 'playwright', reason: 'direct Playwright MCP integration' }],
+  'tailwind':   [{ name: 'context7', reason: 'Tailwind docs' }],
+  'express':    [{ name: 'context7', reason: 'Express docs' }, { name: 'sentry', reason: 'API error tracking' }],
+  'fastify':    [{ name: 'context7', reason: 'Fastify docs' }, { name: 'sentry', reason: 'API error tracking' }],
+  'flutter':    [{ name: 'context7', reason: 'Flutter/Dart docs' }, { name: 'figma', reason: 'Flutter design integration' }],
+  'python':     [{ name: 'context7', reason: 'Python library docs' }],
+  'go':         [{ name: 'context7', reason: 'Go standard library docs' }],
+}
+
+// Always recommended regardless of stack
+const ALWAYS_MCP: Array<{ name: string; reason: string }> = [
+  { name: 'github', reason: 'Git workflow — PRs, issues, actions' },
+]
+
+async function autoRecommend(cwd: string, jsonMode: boolean) {
+  const { detectStack } = await import('./project-init.js')
+  const stack = detectStack(cwd)
+
+  const seen = new Set<string>()
+  const recommendations: Array<{ name: string; reason: string }> = []
+
+  for (const always of ALWAYS_MCP) {
+    if (!seen.has(always.name)) { seen.add(always.name); recommendations.push(always) }
+  }
+
+  for (const key of stack.keys) {
+    for (const rec of MCP_MAP[key] ?? []) {
+      if (!seen.has(rec.name)) { seen.add(rec.name); recommendations.push(rec) }
+    }
+  }
+
+  if (jsonMode) {
+    console.log(JSON.stringify({ stack: stack.name, recommendations }, null, 2))
+    return
+  }
+
+  console.log(`\n\x1b[1mREX MCP Auto\x1b[0m  \x1b[2mstack: ${stack.name}\x1b[0m\n`)
+  console.log('  Recommended MCP servers for this project:\n')
+
+  const registry = readRegistry()
+  for (const rec of recommendations) {
+    const installed = registry.servers.find(s => s.name === rec.name)
+    const dot = installed?.enabled ? '\x1b[32m●\x1b[0m' : installed ? '\x1b[33m●\x1b[0m' : '\x1b[2m○\x1b[0m'
+    const status = installed?.enabled ? '\x1b[2m(active)\x1b[0m' : installed ? '\x1b[2m(disabled)\x1b[0m' : '\x1b[2m(not installed)\x1b[0m'
+    console.log(`  ${dot}  ${rec.name.padEnd(22)} ${status}`)
+    console.log(`          \x1b[2m${rec.reason}\x1b[0m`)
+    if (!installed) console.log(`          \x1b[2mrex mcp install ${rec.name}\x1b[0m`)
+    console.log()
+  }
+
+  if (recommendations.length === 0) {
+    console.log('  No specific recommendations for this stack.')
+    console.log('  Run: rex mcp search <query>  to browse the marketplace\n')
+  }
+}
+
+async function runScan(jsonMode: boolean) {
+  // Check if mcp-scan is available (Invariant Labs tool)
+  let hasScan = false
+  try {
+    execSync('mcp-scan --version 2>/dev/null', { stdio: 'ignore', timeout: 3000 })
+    hasScan = true
+  } catch {}
+
+  if (!hasScan) {
+    // Try uvx (if uv is installed)
+    try {
+      execSync('uvx --version 2>/dev/null', { stdio: 'ignore', timeout: 3000 })
+      // uvx can run mcp-scan without install
+      console.log('Running mcp-scan via uvx...\n')
+      execSync('uvx mcp-scan@latest', { stdio: 'inherit', timeout: 120_000 })
+      return
+    } catch {}
+
+    if (jsonMode) {
+      console.log(JSON.stringify({ ok: false, error: 'mcp-scan not installed', install: 'pip install mcp-scan  or  uvx mcp-scan@latest' }))
+    } else {
+      console.log('\x1b[33m! mcp-scan not installed\x1b[0m')
+      console.log('  Install: pip install mcp-scan')
+      console.log('  Or run directly: uvx mcp-scan@latest')
+      console.log()
+      console.log('  mcp-scan checks for tool poisoning, prompt injection, and rug-pull risks.')
+      console.log('  GitHub: https://github.com/invariantlabs-ai/mcp-scan')
+    }
+    return
+  }
+
+  console.log('Running mcp-scan...\n')
+  try {
+    execSync('mcp-scan', { stdio: 'inherit', timeout: 120_000 })
+  } catch {
+    // mcp-scan exits non-zero if issues found — that's expected
+  }
+}
+
 function showExport() {
   const registry = readRegistry()
   const enabledStdio = registry.servers.filter((s) => s.enabled && s.type === 'stdio' && s.command)
@@ -767,7 +869,16 @@ export async function mcpRegistry(args: string[]) {
       }
       return
     }
+    case 'auto': {
+      const cwd = rest.find(a => a.startsWith('--path='))?.split('=')[1] ?? process.cwd()
+      await autoRecommend(cwd, jsonMode)
+      return
+    }
+    case 'scan': {
+      await runScan(jsonMode)
+      return
+    }
     default:
-      console.log('Usage: rex mcp <list|add|add-url|remove|enable|disable|check|sync-claude|import-claude|export|discover|search|install|refresh-marketplace> ...')
+      console.log('Usage: rex mcp <list|add|add-url|remove|enable|disable|check|sync-claude|import-claude|export|discover|search|install|refresh-marketplace|auto|scan> ...')
   }
 }
