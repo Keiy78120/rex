@@ -383,6 +383,7 @@ export async function daemon(): Promise<void> {
   let lastFullBackup = Date.now()
   let lastNodeRegister = 0  // register immediately on start
   let lastSessionGuard = 0  // check immediately
+  let lastCurious = Date.now() - 23 * 60 * 60 * 1000  // run ~1h after daemon start
 
   // Run maintenance immediately on start
   await maintenanceCycle()
@@ -445,6 +446,20 @@ export async function daemon(): Promise<void> {
     if (now - lastPurge >= 24 * 60 * 60 * 1000) {
       purgeQueue()
       lastPurge = now
+    }
+
+    // Curious discovery every 24h
+    if (now - lastCurious >= 24 * 60 * 60 * 1000) {
+      try {
+        const { runCurious } = await import('./curious.js')
+        const result = await runCurious({ silent: true })
+        if (result.newCount > 0) {
+          log.info(`Curious: ${result.newCount} new discoveries`)
+        }
+      } catch (e: any) {
+        log.debug(`Curious cycle skipped: ${e.message?.slice(0, 80)}`)
+      }
+      lastCurious = now
     }
 
     // Node registration every 60s (advertise capabilities to hub)

@@ -512,6 +512,9 @@ function advancedMenu() {
       { text: '⚡ Setup', callback_data: 'quick_setup' },
       { text: '🔍 Review', callback_data: 'run_review' },
     ],
+    [
+      { text: '🔭 Curious', callback_data: 'curious_check' },
+    ],
     [{ text: '◀️ Menu', callback_data: 'menu' }],
   ]
 }
@@ -1775,6 +1778,28 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
       break
     }
 
+    case 'curious_check': {
+      await editMessage(token, chatId, messageId, '🔭 Checking discoveries…', backMenu())
+      try {
+        const { runCurious } = await import('./curious.js')
+        const result = await runCurious({ silent: true })
+        const newOnes = result.discoveries.filter(d => d.isNew).slice(0, 6)
+        if (newOnes.length === 0) {
+          await editMessage(token, chatId, messageId, '🔭 *Curious*\n\nNothing new since last check.', advancedMenu())
+        } else {
+          const lines = newOnes.map(d => {
+            const icon = d.type === 'model' ? '🤖' : d.type === 'mcp' ? '🔌' : d.type === 'repo' ? '📦' : '📰'
+            return `${icon} *${d.title.slice(0, 50)}*\n   ${d.detail.slice(0, 70)}`
+          })
+          const msg = `🔭 *${result.newCount} new discoveries*\n\n${lines.join('\n\n')}`
+          await editMessage(token, chatId, messageId, msg, advancedMenu())
+        }
+      } catch (e: any) {
+        await editMessage(token, chatId, messageId, `⚠️ Discovery failed: ${e.message?.slice(0, 100)}`, advancedMenu())
+      }
+      break
+    }
+
     case 'notifs': {
       const { text: t, buttons } = buildNotifsMessage(null, 0)
       await editMessage(token, chatId, messageId, t, buttons)
@@ -2269,6 +2294,29 @@ async function handleText(token: string, chatId: string, text: string, from: str
     } catch { msg = '⚠️ Could not detect intent' }
     await send(token, chatId, `🎯 *Project Intent*\n\`\`\`\n${msg.replace(/\x1b\[[0-9;]*m/g, '')}\n\`\`\``)
     logCommand(from, '/intent', 'shown')
+    return
+  }
+
+  if (cmd === '/curious') {
+    const loading = await send(token, chatId, '🔭 Checking for new models, MCPs, and news…')
+    try {
+      const { runCurious } = await import('./curious.js')
+      const result = await runCurious({ silent: true })
+      const newOnes = result.discoveries.filter(d => d.isNew).slice(0, 8)
+      if (newOnes.length === 0) {
+        await editMessage(token, chatId, loading.message_id, '🔭 *REX Curious*\n\nNothing new today.')
+      } else {
+        const lines = newOnes.map(d => {
+          const icon = d.type === 'model' ? '🤖' : d.type === 'mcp' ? '🔌' : d.type === 'repo' ? '📦' : '📰'
+          return `${icon} *${d.title.slice(0, 60)}*\n   ${d.detail.slice(0, 80)}`
+        })
+        const msg = `🔭 *${result.newCount} new discoveries*\n\n${lines.join('\n\n')}`
+        await editMessage(token, chatId, loading.message_id, msg)
+      }
+    } catch (e: any) {
+      await editMessage(token, chatId, loading.message_id, `⚠️ Curious check failed: ${e.message?.slice(0, 100)}`)
+    }
+    logCommand(from, '/curious', 'shown')
     return
   }
 

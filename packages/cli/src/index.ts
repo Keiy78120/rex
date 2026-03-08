@@ -782,6 +782,19 @@ async function main() {
       break
     }
 
+    case 'curious': {
+      // rex curious [--json] [--silent]
+      const jsonFlag = process.argv.includes('--json')
+      const { runCurious, printDiscoveries } = await import('./curious.js')
+      const result = await runCurious({ silent: jsonFlag })
+      if (jsonFlag) {
+        console.log(JSON.stringify(result, null, 2))
+      } else {
+        printDiscoveries(result)
+      }
+      break
+    }
+
     case 'observe': {
       const type = process.argv[3]
       const content = process.argv.slice(4).join(' ')
@@ -1427,6 +1440,7 @@ ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex memory-check --json  Output as JSON
   rex prune            Cleanup old/duplicate memories
   rex prune --stats    Show memory database stats
+  rex curious          Discover new models, MCPs, and AI news (--json)
   rex self-review      Extract lessons, detect error patterns
   rex promote-rule N   Promote rule candidate to ~/.claude/rules/
   rex reflect <log>    Extract success patterns from session log
