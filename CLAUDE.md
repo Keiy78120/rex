@@ -498,6 +498,9 @@ rex doctor --fix     # Auto-fix then health check
 | fix(sync): self-sync loop prevented (isLocalHub guard) | `sync.ts` |
 | docs(readme): REX repositionné comme superlayer au-dessus des LLMs | `README.md` |
 | Gateway spooled replay: chatId in spooled event, notify on hub recovery, /replay command | `gateway.ts` |
+| refactor(llm): all internal LLM calls route through litellm.ts for unified tracking (Section 23) | `llm.ts` |
+| feat(mcp): Smithery registry added as second marketplace source | `mcp_registry.ts` |
+| feat(daemon): stuck-ingest auto-healing — pending count tracked across 3 cycles, Telegram alert if stuck | `daemon.ts` |
 
 ### 🔄 En cours / A faire
 

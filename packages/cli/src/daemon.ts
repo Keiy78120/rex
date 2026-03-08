@@ -164,6 +164,21 @@ async function measureOllamaLatencyMs(): Promise<number> {
   }
 }
 
+// ─── Stuck-ingest detection state ────────────────────────
+const STUCK_WINDOW = 3                  // cycles with no progress = stuck
+const ingestHistory: number[] = []      // recent pending counts
+let lastStuckAlertAt = 0               // throttle: at most once per hour
+
+function trackAndDetectStuck(currentPending: number): boolean {
+  ingestHistory.push(currentPending)
+  if (ingestHistory.length > STUCK_WINDOW + 1) ingestHistory.shift()
+  if (ingestHistory.length < STUCK_WINDOW) return false
+  // Stuck if every count in the window is >= the first count (not decreasing)
+  const baseline = ingestHistory[0]
+  if (baseline === 0) return false
+  return ingestHistory.every(c => c >= baseline)
+}
+
 // ─── Ingest Cycle (adaptive, every 30 min) ────────────────
 async function ingestCycle(): Promise<void> {
   const pending = countPending()
@@ -187,6 +202,7 @@ async function ingestCycle(): Promise<void> {
     await sendTelegramNotify(`⚠️ REX: Ingest queue critical — ${pending} pending chunks, embed-only mode`)
     runCmd('rex ingest --max=200', 300_000)
     log.info('Ingest cycle done (urgency mode)')
+    trackAndDetectStuck(countPending())  // track after processing
     return
   }
 
@@ -195,6 +211,7 @@ async function ingestCycle(): Promise<void> {
     log.warn(`Pending queue large (${pending}) — embed-only, deferring categorize`)
     runCmd('rex ingest --max=100', 240_000)
     log.info('Ingest cycle done (backlog mode, categorize deferred)')
+    trackAndDetectStuck(countPending())  // track after processing
     return
   }
 
@@ -203,6 +220,7 @@ async function ingestCycle(): Promise<void> {
     log.info(`Ollama slow (${latencyMs}ms) — embed-only mode, skipping categorize`)
     runCmd('rex ingest')
     log.info('Ingest cycle done (slow-ollama mode)')
+    trackAndDetectStuck(countPending())
     return
   }
 
@@ -211,6 +229,20 @@ async function ingestCycle(): Promise<void> {
   runCmd('rex categorize --batch=100', 180_000)
   runCmd('rex recategorize --batch=20', 180_000)
   log.info('Ingest cycle done')
+
+  // Stuck detection: if pending count hasn't improved after STUCK_WINDOW cycles, alert
+  const afterPending = countPending()
+  const isStuck = trackAndDetectStuck(afterPending)
+  if (isStuck) {
+    const now = Date.now()
+    if (now - lastStuckAlertAt > 60 * 60 * 1000) {  // alert at most once per hour
+      lastStuckAlertAt = now
+      log.warn(`Ingest stuck: pending count stable at ~${afterPending} for ${STUCK_WINDOW} cycles`)
+      await sendTelegramNotify(
+        `⚠️ REX: Ingest appears stuck — ${afterPending} pending chunks not decreasing after ${STUCK_WINDOW} cycles.\nOllama latency: ${latencyMs}ms\nRun /replay or restart the daemon if this persists.`
+      )
+    }
+  }
 }
 
 // ─── Full Backup (daily) ──────────────────────────────────
