@@ -757,12 +757,14 @@ export async function getHubStatus(): Promise<{
     if (res.statusCode === 200) {
       try {
         const body = JSON.parse(res.data) as Record<string, unknown>
+        // Unwrap standard envelope if present
+        const d = (body.data as Record<string, unknown> | null) ?? body
         return {
           running: true,
           port,
-          nodesCount: (body.nodeCount as number) ?? 0,
+          nodesCount: (d.nodeCount as number) ?? 0,
           nodes: [],
-          uptime: body.uptime as number | undefined,
+          uptime: d.uptime as number | undefined,
         }
       } catch {
         return { running: true, port, nodesCount: 0, nodes: [] }
