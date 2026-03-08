@@ -193,6 +193,18 @@ class RexService extends ChangeNotifier {
   bool whisperModelExists = false;
   String lastTranscript = '';
 
+  // Network & Hub
+  Map<String, dynamic>? nodeStatus;
+  Map<String, dynamic>? hubStatus;
+  Map<String, dynamic>? syncStatus;
+  Map<String, dynamic>? queueStats;
+
+  // Providers & Budget
+  List<Map<String, dynamic>> providers = [];
+  Map<String, dynamic>? inventoryData;
+  Map<String, dynamic>? budgetSummary;
+  List<Map<String, dynamic>> runbooks = [];
+
   // Agents & MCP
   List<String> callEvents = [];
   List<AgentInfo> agents = [];
@@ -254,7 +266,27 @@ class RexService extends ChangeNotifier {
   }
 
   String _stripAnsi(String text) {
-    return text.replaceAll(RegExp(r'\x1b\[[0-9;]*m'), '');
+    return text.replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), '');
+  }
+
+  /// Extract JSON from mixed output (log lines + JSON).
+  /// Finds the first '[' or '{' that starts valid JSON.
+  String _extractJson(String text) {
+    final trimmed = text.trim();
+    // Already starts with JSON
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) return trimmed;
+    // Find first JSON array or object start
+    for (final ch in ['[', '{']) {
+      final idx = trimmed.indexOf(ch);
+      if (idx > 0) {
+        final candidate = trimmed.substring(idx);
+        try {
+          jsonDecode(candidate);
+          return candidate;
+        } catch (_) {}
+      }
+    }
+    return trimmed;
   }
 
   Future<Map<String, dynamic>?> _runRexJson(
@@ -263,7 +295,7 @@ class RexService extends ChangeNotifier {
   }) async {
     final out = (await _runRexArgs(args, timeout: timeout)).trim();
     try {
-      final parsed = jsonDecode(out);
+      final parsed = jsonDecode(_extractJson(out));
       if (parsed is Map<String, dynamic>) return parsed;
       return null;
     } catch (_) {
@@ -1119,6 +1151,23 @@ $transcript
               .whereType<Map>()
               .map((raw) => McpServerInfo.fromJson(raw.cast<String, dynamic>()))
               .toList();
+          // Auto-import from Claude settings if registry is empty
+          if (mcpServers.isEmpty) {
+            await _runRexArgs(['mcp', 'import-claude'], timeout: 15);
+            final retry = await _runRexArgs(['mcp', 'list', '--json'], timeout: 20);
+            try {
+              final retryParsed = jsonDecode(retry);
+              if (retryParsed is Map<String, dynamic>) {
+                final retryList = retryParsed['servers'];
+                if (retryList is List) {
+                  mcpServers = retryList
+                      .whereType<Map>()
+                      .map((raw) => McpServerInfo.fromJson(raw.cast<String, dynamic>()))
+                      .toList();
+                }
+              }
+            } catch (_) {}
+          }
           notifyListeners();
           return;
         }
@@ -1206,8 +1255,11 @@ $transcript
   Future<String> syncMcpClaude() async {
     isLoading = true;
     notifyListeners();
+    // Bidirectional: import from Claude first, then push REX → Claude
+    await _runRexArgs(['mcp', 'import-claude'], timeout: 15);
     final output = await _runRexArgs(['mcp', 'sync-claude'], timeout: 30);
     lastOutput = output;
+    await loadMcpServers();
     isLoading = false;
     notifyListeners();
     return output;
@@ -1655,6 +1707,45 @@ $transcript
     unawaited(_syncCallAutomationWatcher());
   }
 
+  // --- Provider API Keys ---
+
+  static const _providerApiKeys = {
+    'ANTHROPIC_API_KEY': 'Anthropic (Claude API)',
+    'OPENAI_API_KEY': 'OpenAI',
+    'GROQ_API_KEY': 'Groq (free tier)',
+    'TOGETHER_API_KEY': 'Together AI (free tier)',
+    'CEREBRAS_API_KEY': 'Cerebras (free tier)',
+    'MISTRAL_API_KEY': 'Mistral (free tier)',
+    'HF_TOKEN': 'HuggingFace (Inference API)',
+    'COHERE_API_KEY': 'Cohere (free tier)',
+    'GOOGLE_API_KEY': 'Google AI (Gemini)',
+  };
+
+  Map<String, String> get providerApiKeyLabels => _providerApiKeys;
+
+  String getProviderApiKey(String envKey) {
+    final env = _claudeSettings['env'] as Map<String, dynamic>?;
+    return (env?[envKey] as String?) ?? '';
+  }
+
+  void setProviderApiKey(String envKey, String value) {
+    _setEnvKey(envKey, value);
+    // Reload providers after key change
+    loadProviders();
+  }
+
+  bool isProviderKeySet(String envKey) {
+    return getProviderApiKey(envKey).isNotEmpty;
+  }
+
+  Future<void> refreshMarketplace() async {
+    isLoading = true;
+    notifyListeners();
+    await _runRexArgs(['mcp', 'refresh-marketplace'], timeout: 30);
+    isLoading = false;
+    notifyListeners();
+  }
+
   // --- Gateway ---
 
   Process? _gatewayProcess;
@@ -1789,6 +1880,142 @@ $transcript
       notifyListeners();
       return 'Error: $e';
     }
+  }
+
+  // --- Network & Hub ---
+
+  Future<void> loadNetworkStatus() async {
+    await Future.wait([
+      _loadNodeStatus(),
+      _loadHubStatus(),
+      _loadSyncStatus(),
+      _loadQueueStats(),
+    ]);
+    notifyListeners();
+  }
+
+  Future<void> _loadNodeStatus() async {
+    final out = await _runRexArgs(['node', 'status', '--json'], timeout: 10);
+    try {
+      final parsed = jsonDecode(out.trim());
+      if (parsed is Map<String, dynamic>) nodeStatus = parsed;
+    } catch (_) {
+      // Fallback: parse text output
+      nodeStatus ??= {'nodeId': 'unknown', 'mode': 'solo', 'hubConnected': false};
+    }
+  }
+
+  Future<void> _loadHubStatus() async {
+    final out = await _runRexArgs(['hub', '--json'], timeout: 10);
+    try {
+      final parsed = jsonDecode(out.trim());
+      if (parsed is Map<String, dynamic>) hubStatus = parsed;
+    } catch (_) {}
+  }
+
+  Future<void> _loadSyncStatus() async {
+    final out = await _runRexArgs(['sync', '--json'], timeout: 10);
+    try {
+      final parsed = jsonDecode(out.trim());
+      if (parsed is Map<String, dynamic>) syncStatus = parsed;
+    } catch (_) {}
+  }
+
+  Future<void> _loadQueueStats() async {
+    final out = await _runRexArgs(['queue', 'stats', '--json'], timeout: 10);
+    try {
+      final parsed = jsonDecode(out.trim());
+      if (parsed is Map<String, dynamic>) queueStats = parsed;
+    } catch (_) {}
+  }
+
+  Future<void> startHub() async {
+    await _runRexArgs(['hub', 'start'], timeout: 10);
+    await _loadHubStatus();
+    notifyListeners();
+  }
+
+  Future<void> stopHub() async {
+    await _runRexArgs(['hub', 'stop'], timeout: 10);
+    hubStatus = null;
+    notifyListeners();
+  }
+
+  Future<void> syncNow() async {
+    await _runRexArgs(['sync'], timeout: 30);
+    await _loadSyncStatus();
+    await _loadQueueStats();
+    notifyListeners();
+  }
+
+  // --- Providers & Budget ---
+
+  Future<List<Map<String, dynamic>>> getFreeTiers() async {
+    final output = await _runRexArgs(['free-tiers', '--json']);
+    final json = _extractJson(output);
+    if (json == null) return [];
+    try {
+      final parsed = jsonDecode(json) as List<dynamic>;
+      return parsed.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<void> loadProviders() async {
+    final out = await _runRexArgs(['providers', '--json'], timeout: 10);
+    try {
+      final parsed = jsonDecode(_extractJson(out));
+      List? raw;
+      if (parsed is List) {
+        raw = parsed;
+      } else if (parsed is Map && parsed['providers'] is List) {
+        raw = parsed['providers'] as List;
+      }
+      if (raw != null) {
+        providers = raw
+            .whereType<Map<String, dynamic>>()
+            .toList();
+      }
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> loadInventory() async {
+    final out = await _runRexArgs(['inventory', '--json'], timeout: 30);
+    try {
+      final parsed = jsonDecode(_extractJson(out));
+      if (parsed is Map<String, dynamic>) inventoryData = parsed;
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> loadBudget() async {
+    final out = await _runRexArgs(['budget', '--json'], timeout: 10);
+    try {
+      final parsed = jsonDecode(_extractJson(out));
+      if (parsed is Map<String, dynamic>) budgetSummary = parsed;
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<void> loadRunbooks() async {
+    final out = await _runRexArgs(['runbooks', '--json'], timeout: 10);
+    try {
+      final parsed = jsonDecode(_extractJson(out));
+      List? raw;
+      if (parsed is List) {
+        raw = parsed;
+      } else if (parsed is Map && parsed['runbooks'] is List) {
+        raw = parsed['runbooks'] as List;
+      }
+      if (raw != null) {
+        runbooks = raw
+            .whereType<Map<String, dynamic>>()
+            .toList();
+      }
+    } catch (_) {}
+    notifyListeners();
   }
 
   @override
