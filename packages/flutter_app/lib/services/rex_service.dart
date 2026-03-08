@@ -167,6 +167,7 @@ class RexService extends ChangeNotifier {
   Process? _recordingProcess;
   String? _recordingFile;
   Timer? _callStateTimer;
+  Timer? _burnRateTimer;
   bool _callAutoRecording = false;
   bool callStateActive = false;
   String callStateApp = '';
@@ -733,6 +734,13 @@ $transcript
 
     isLoading = false;
     notifyListeners();
+
+    // Periodic burn rate + session guard refresh (every 5 min)
+    _burnRateTimer?.cancel();
+    _burnRateTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+      await loadBurnRate();
+      await checkSessionGuard();
+    });
   }
 
   // --- Doctor ---
@@ -1733,6 +1741,8 @@ $transcript
     'TOGETHER_API_KEY': 'Together AI (free tier)',
     'CEREBRAS_API_KEY': 'Cerebras (free tier)',
     'MISTRAL_API_KEY': 'Mistral (free tier)',
+    'OPENROUTER_API_KEY': 'OpenRouter (free models)',
+    'DEEPSEEK_API_KEY': 'DeepSeek (free tier)',
     'HF_TOKEN': 'HuggingFace (Inference API)',
     'COHERE_API_KEY': 'Cohere (free tier)',
     'GOOGLE_API_KEY': 'Google AI (Gemini)',
@@ -2475,6 +2485,7 @@ $transcript
   void dispose() {
     _recordingTimer?.cancel();
     _callStateTimer?.cancel();
+    _burnRateTimer?.cancel();
     _gatewayProcess?.kill();
     super.dispose();
   }
