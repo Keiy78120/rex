@@ -860,3 +860,57 @@ const fileB = await read(b)
 const result = await callLLM(query)  // sans cache
 ```
 
+
+---
+
+## 23. REX UTILISE REX — Self-hosting obligatoire
+
+**REX n'appelle pas les APIs externes directement. REX passe par son propre router.**
+
+Quand REX a besoin d'un LLM pour une tâche interne (categorize, summarize, lint, self-improve…) :
+
+```
+REX internal task
+       ↓
+orchestrator.ts → router.ts → free-tiers.ts
+       ↓
+1. semantic-cache.ts    → cache hit ? → done, 0 tokens
+2. Ollama local         → nomic-embed / qwen / deepseek local ? → gratuit
+3. Free tier            → Groq / Together / Cerebras / Gemini free
+4. Abonnement Claude    → si vraiment nécessaire
+5. Pay-per-use          → jamais par défaut
+```
+
+### Conséquences concrètes
+
+- `self-improve.ts` → Haiku via router (pas Claude Max direct)
+- `categorize.ts` → Ollama local qwen via router
+- `guard-ast.ts` → pur script TS, zéro LLM
+- `config-lint.ts` → pur script TS, zéro LLM
+- `preload.ts` → embed via Ollama nomic-embed-text (déjà fait)
+- `gateway.ts` réponses simples → Ollama qwen via router
+- `gateway.ts` réponses complexes/code → Sonnet via router si nécessaire
+
+### node-mesh.ts + router.ts = resource discovery dynamique
+
+Au moment d'un appel interne REX :
+1. `node-mesh.ts` → quel node a Ollama allumé en ce moment ?
+2. `router.ts` → quel modèle local est dispo pour ce type de tâche ?
+3. `free-tiers.ts` → sinon quel free tier a encore du quota ?
+4. `budget.ts` → sinon quel abonnement a du quota ?
+5. Pay → jamais sans alerte
+
+### Règle d'implémentation
+
+Tout appel LLM interne à REX DOIT passer par `orchestrator.ts` :
+
+```typescript
+// ✅ BON
+import { orchestrate } from './orchestrator.js'
+const result = await orchestrate({ task: 'categorize', prompt, capability: 'text' })
+
+// ❌ INTERDIT dans le code REX interne
+import Anthropic from '@anthropic-ai/sdk'
+const res = await anthropic.messages.create(...)  // bypass du router
+```
+
