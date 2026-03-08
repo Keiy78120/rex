@@ -19,7 +19,10 @@ class _HealthPageState extends State<HealthPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<RexService>().loadBackgroundProcesses();
+      final rex = context.read<RexService>();
+      rex.loadBackgroundProcesses();
+      rex.loadBurnRate();
+      rex.checkSessionGuard();
     });
   }
 
@@ -32,8 +35,11 @@ class _HealthPageState extends State<HealthPage> {
           icon: CupertinoIcons.refresh,
           label: 'Refresh',
           onPressed: () {
-            context.read<RexService>().runDoctor();
-            context.read<RexService>().loadBackgroundProcesses();
+            final rex = context.read<RexService>();
+            rex.runDoctor();
+            rex.loadBackgroundProcesses();
+            rex.loadBurnRate();
+            rex.checkSessionGuard();
           },
         ),
       ],
@@ -112,6 +118,15 @@ class _HealthPageState extends State<HealthPage> {
                   ],
                 ),
                 const SizedBox(height: 20),
+                // Token budget
+                if (rex.burnRate.isNotEmpty || rex.sessionGuard.isNotEmpty) ...[
+                  _TokenBudgetSection(
+                    burnRate: rex.burnRate,
+                    sessionGuard: rex.sessionGuard,
+                    onClearSignal: () => rex.clearCompactSignal(),
+                  ),
+                  const SizedBox(height: 20),
+                ],
                 // Background processes
                 if (rex.backgroundProcesses.isNotEmpty) ...[
                   RexSection(title: 'Background Processes', icon: CupertinoIcons.gear_alt),
@@ -341,6 +356,152 @@ class _StatMini extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _TokenBudgetSection extends StatelessWidget {
+  final Map<String, dynamic> burnRate;
+  final Map<String, dynamic> sessionGuard;
+  final VoidCallback onClearSignal;
+
+  const _TokenBudgetSection({
+    required this.burnRate,
+    required this.sessionGuard,
+    required this.onClearSignal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.rex;
+    final shouldCompact = sessionGuard['compactNeeded'] == true;
+    final contextPct = (burnRate['contextPercent'] as num?)?.toDouble() ?? 0;
+    final guardMsg = sessionGuard['signal'] as String? ?? '';
+
+    final dailyPct = (burnRate['dailyPercent'] as num?)?.toDouble() ?? 0;
+    final dailyTokens = (burnRate['dailyTotal'] as num?)?.toInt() ?? 0;
+    final dailyLimit = (burnRate['dailyLimit'] as num?)?.toInt() ?? 0;
+    final tokensPerHour = (burnRate['burnRatePerHour'] as num?)?.toInt() ?? 0;
+
+    Color _barColor(double pct) {
+      if (pct >= 90) return c.error;
+      if (pct >= 70) return c.warning;
+      return c.success;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RexSection(title: 'Token Budget', icon: CupertinoIcons.bolt_circle),
+        // Compact alert banner
+        if (shouldCompact)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: c.error.withAlpha(25),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: c.error.withAlpha(80)),
+            ),
+            child: Row(
+              children: [
+                Icon(CupertinoIcons.exclamationmark_triangle_fill, size: 16, color: c.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    guardMsg.isNotEmpty ? guardMsg : 'Context near limit — compact recommended',
+                    style: TextStyle(fontSize: 12, color: c.text),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                RexButton(
+                  label: 'Dismiss',
+                  variant: RexButtonVariant.secondary,
+                  small: true,
+                  onPressed: onClearSignal,
+                ),
+              ],
+            ),
+          ),
+        RexCard(
+          child: Column(
+            children: [
+              // Context window
+              if (contextPct > 0) ...[
+                Row(
+                  children: [
+                    Text('Context', style: TextStyle(fontSize: 12, color: c.textSecondary)),
+                    const Spacer(),
+                    Text(
+                      '${contextPct.round()}%',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _barColor(contextPct),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                RexProgressBar(
+                  value: (contextPct / 100).clamp(0.0, 1.0),
+                  color: _barColor(contextPct),
+                  height: 6,
+                ),
+                const SizedBox(height: 14),
+              ],
+              // Daily usage
+              if (dailyLimit > 0) ...[
+                Row(
+                  children: [
+                    Text('Daily tokens', style: TextStyle(fontSize: 12, color: c.textSecondary)),
+                    const Spacer(),
+                    Text(
+                      '${_fmt(dailyTokens)} / ${_fmt(dailyLimit)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _barColor(dailyPct),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                RexProgressBar(
+                  value: (dailyPct / 100).clamp(0.0, 1.0),
+                  color: _barColor(dailyPct),
+                  height: 6,
+                ),
+                if (tokensPerHour > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(CupertinoIcons.flame, size: 12, color: c.textTertiary),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${_fmt(tokensPerHour)} tok/h',
+                        style: TextStyle(fontSize: 11, color: c.textTertiary),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+              // Fallback: no data yet
+              if (contextPct == 0 && dailyLimit == 0)
+                Text(
+                  'No token data — run a session to see usage',
+                  style: TextStyle(fontSize: 12, color: c.textSecondary),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(0)}k';
+    return '$n';
   }
 }
 
