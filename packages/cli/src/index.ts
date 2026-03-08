@@ -364,12 +364,39 @@ async function main() {
     }
 
     case 'models': {
-      const { showModelRouter, getRouterSnapshot } = await import('./router.js')
-      if (process.argv.includes('--json')) {
-        const snap = await getRouterSnapshot()
-        console.log(JSON.stringify(snap, null, 2))
+      const catalogFlag = process.argv.includes('--catalog')
+      if (catalogFlag) {
+        const { FREE_MODELS, getModelsSummary } = await import('./free-models.js')
+        const jsonFlag = process.argv.includes('--json')
+        if (jsonFlag) {
+          console.log(JSON.stringify(FREE_MODELS, null, 2))
+        } else {
+          const summary = getModelsSummary()
+          const BOLD = '\x1b[1m', RESET = '\x1b[0m', DIM = '\x1b[2m'
+          const GREEN = '\x1b[32m', CYAN = '\x1b[36m', YELLOW = '\x1b[33m'
+          console.log(`\n${BOLD}REX Free Model Catalog${RESET}`)
+          console.log(DIM + '─'.repeat(72) + RESET)
+          let lastProvider = ''
+          for (const m of summary) {
+            if (m.provider !== lastProvider) {
+              console.log(`\n  ${CYAN}${m.provider}${RESET}`)
+              lastProvider = m.provider
+            }
+            const tierColor = m.tier === 'local' ? GREEN : m.tier === 'free-tier' ? YELLOW : DIM
+            const rpm = m.rpm === '∞' ? `${GREEN}∞${RESET}` : `${m.rpm} rpm`
+            const cost = m.costPerMToken > 0 ? `$${m.costPerMToken}/M` : `${GREEN}free${RESET}`
+            console.log(`    ${tierColor}●${RESET} ${m.model.padEnd(35)} ${DIM}ctx:${(m.context/1000).toFixed(0)}k${RESET}  ${rpm.padEnd(12)}  ${cost}`)
+          }
+          console.log()
+        }
       } else {
-        await showModelRouter()
+        const { showModelRouter, getRouterSnapshot } = await import('./router.js')
+        if (process.argv.includes('--json')) {
+          const snap = await getRouterSnapshot()
+          console.log(JSON.stringify(snap, null, 2))
+        } else {
+          await showModelRouter()
+        }
       }
       break
     }
@@ -434,11 +461,38 @@ async function main() {
       const sub = process.argv[3]
       const jsonFlag = process.argv.includes('--json')
       if (sub === 'token' || process.argv.includes('--generate-token')) {
-        const { generateHubToken } = await import('./hub.js')
-        const token = generateHubToken()
+        // Show existing token from settings or generate a new one
+        const { join: joinPath } = await import('node:path')
+        const { homedir: homedirFn } = await import('node:os')
+        const { existsSync: existsFn, readFileSync: readFn, writeFileSync: writeFn } = await import('node:fs')
+        const settingsPath = joinPath(homedirFn(), '.claude', 'settings.json')
+        const regenerate = process.argv.includes('--generate-token') || process.argv.includes('--new')
+
+        let token: string | null = process.env.REX_HUB_TOKEN ?? null
+        if (!token && existsFn(settingsPath)) {
+          try {
+            const s = JSON.parse(readFn(settingsPath, 'utf-8'))
+            token = s.env?.REX_HUB_TOKEN ?? null
+          } catch {}
+        }
+
+        if (!token || regenerate) {
+          const { generateHubToken } = await import('./hub.js')
+          token = generateHubToken()
+          let settings: Record<string, unknown> = {}
+          if (existsFn(settingsPath)) {
+            try { settings = JSON.parse(readFn(settingsPath, 'utf-8')) } catch {}
+          }
+          const env = (settings.env ?? {}) as Record<string, string>
+          env.REX_HUB_TOKEN = token
+          settings.env = env
+          writeFn(settingsPath, JSON.stringify(settings, null, 2) + '\n')
+          console.log(`\n  ${COLORS.green}✓${COLORS.reset} Generated new hub token and saved to settings.json`)
+        } else {
+          console.log(`\n  ${COLORS.dim}(existing token)${COLORS.reset}`)
+        }
         console.log(`\n  Hub token: ${COLORS.green}${token}${COLORS.reset}`)
-        console.log(`\n  Add to ~/.claude/settings.json env:`)
-        console.log(`  ${COLORS.dim}"REX_HUB_TOKEN": "${token}"${COLORS.reset}\n`)
+        console.log(`  ${COLORS.dim}Use --new to regenerate${COLORS.reset}\n`)
         break
       }
       if (sub === 'status' || (jsonFlag && sub !== 'start' && sub !== 'stop')) {
@@ -1219,6 +1273,58 @@ async function main() {
       break
     }
 
+    case 'llm-usage': {
+      const { getUsageStats, getProviderUsageSummary, resetUsage } = await import('./litellm.js')
+      const jsonFlag = process.argv.includes('--json')
+      const resetFlag = process.argv.includes('--reset')
+
+      if (resetFlag) {
+        resetUsage()
+        if (!jsonFlag) console.log(`${COLORS.green}✓${COLORS.reset} LLM usage stats reset`)
+        break
+      }
+
+      const stats = getUsageStats()
+      if (jsonFlag) {
+        console.log(JSON.stringify(stats, null, 2))
+        break
+      }
+
+      const summary = getProviderUsageSummary()
+      const { DIM, BOLD, RESET, GREEN, YELLOW, CYAN, RED } = {
+        DIM: '\x1b[2m', BOLD: '\x1b[1m', RESET: '\x1b[0m',
+        GREEN: '\x1b[32m', YELLOW: '\x1b[33m', CYAN: '\x1b[36m', RED: '\x1b[31m',
+      }
+      console.log(`\n${BOLD}REX LLM Usage${RESET}`)
+      console.log(DIM + '─'.repeat(60) + RESET)
+      console.log(`  Total requests: ${CYAN}${stats.totalRequests}${RESET}  Errors: ${stats.totalErrors > 0 ? RED : DIM}${stats.totalErrors}${RESET}`)
+      console.log(`  Since: ${DIM}${stats.lastResetAt}${RESET}`)
+
+      if (summary.length > 0) {
+        console.log(`\n  ${BOLD}By Provider${RESET}`)
+        for (const u of summary) {
+          const dot = u.errors === 0 ? `${GREEN}●${RESET}` : u.errors > u.requests / 2 ? `${RED}●${RESET}` : `${YELLOW}●${RESET}`
+          console.log(`  ${dot} ${u.provider.padEnd(16)} ${CYAN}${u.requests}${RESET} req  ${DIM}~${Math.round(u.estimatedTokens / 1000)}k tokens${RESET}  ${u.rateLimits > 0 ? `${YELLOW}${u.rateLimits} RL${RESET}` : ''}`)
+        }
+      } else {
+        console.log(`\n  ${DIM}No LLM calls recorded yet${RESET}`)
+      }
+
+      const cooldowns = stats.cooldowns
+      if (cooldowns.length > 0) {
+        console.log(`\n  ${YELLOW}Active cooldowns:${RESET}`)
+        for (const c of cooldowns) {
+          console.log(`    ${c.provider}: ${DIM}until ${c.cooldownUntil} (${c.reason})${RESET}`)
+        }
+      }
+
+      if (stats.queueLength > 0) {
+        console.log(`\n  ${YELLOW}Queued requests: ${stats.queueLength}${RESET}`)
+      }
+      console.log()
+      break
+    }
+
     case 'intent': {
       const { detectIntent, printIntent } = await import('./project-intent.js')
       const targetPath = process.argv[3] ?? process.cwd()
@@ -1474,7 +1580,7 @@ ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex setup --yes      Non-interactive setup (auto-install deps, env-based Telegram)
   rex llm <prompt>     Query local LLM directly
   rex inventory       Scan local resources (CLIs, services, hardware, models)
-  rex models           Show task-aware model routing table
+  rex models           Show task-aware model routing table (--catalog for full list)
   rex preload [path]   Show pre-loaded context for a path
   rex context [path]   Analyze project, recommend MCP/skills
   rex projects         Scan and index all dev projects
@@ -1498,6 +1604,7 @@ ${COLORS.bold}Account Pool:${COLORS.reset}
 ${COLORS.bold}Providers & Budget:${COLORS.reset}
   rex providers        Show available providers (owned-first order)
   rex budget           Show usage tracking and costs
+  rex llm-usage        Show per-provider LLM call stats (--reset to clear)
   rex orchestrate <p>  Run prompt through best provider
   rex runbooks         List saved workflow runbooks
   rex runbooks add     Save a new runbook

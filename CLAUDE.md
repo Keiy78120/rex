@@ -482,6 +482,22 @@ rex doctor --fix     # Auto-fix then health check
 | Gateway: `/monitor` command + `📊 Monitor` button + `case 'dev_monitor':` callback | `packages/cli/src/gateway.ts` |
 | living-rex-vision.md: Monitor vie dev → ✅ | `docs/plans/living-rex-vision.md` |
 
+### ✅ Terminé (session 2026-03-08 cont. — LiteLLM + free catalog + hub security)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| `free-models.ts`: catalogue complet (Ollama, Groq, Cerebras, Together, Mistral, OpenRouter, DeepSeek, Anthropic) avec RPM/TPM/daily quotas | `free-models.ts` |
+| `rex models --catalog`: affichage rich du catalogue avec tiers, limites, coût | `index.ts` |
+| `litellm.ts`: proxy LLM avec usage tracking, cooldown retry-after, queue sur exhaustion | `litellm.ts` |
+| Hub `/api/chat`: endpoint unifié LLM via auto-fallback (OpenAI-compatible format) | `hub.ts` |
+| Hub `/api/v1/llm/usage`: stats d'utilisation par provider | `hub.ts` |
+| `rex llm-usage`: commande CLI pour stats par provider (--reset) | `index.ts` |
+| Hub token auto-persist: génère + sauvegarde REX_HUB_TOKEN dans settings.json au 1er démarrage | `hub.ts` |
+| `rex hub token`: affiche token existant ou en génère un (--new pour régénérer) | `index.ts` |
+| Auth: dashboard `/` et `/api/health` publics, toutes autres routes protégées | `hub.ts` |
+| fix(sync): self-sync loop prevented (isLocalHub guard) | `sync.ts` |
+| docs(readme): REX repositionné comme superlayer au-dessus des LLMs | `README.md` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 IN PROGRESS**:
@@ -514,31 +530,33 @@ REX = **hub centralisateur** de toutes les ressources disponibles pour un dev so
 
 CLI, Gateway Telegram, Memory, Flutter app, Doctor, Daemon, Agents, MCP registry, Provider detection, Budget tracking, Event journal, Semantic cache, Backup/restore, Git workflow, Guard manager, Review pipeline, Observer/Reflector, Sync degraded mode, Install profiles, Orchestrator base, Resource inventory, Backend runner.
 
-### Phase 2 — Integration & Marketplace (✅ 95% DONE)
+### Phase 2 — Integration & Marketplace (✅ DONE)
 
 | Tache | Status | Detail |
 |-------|--------|--------|
 | **MCP Marketplace hub** | ✅ DONE | mcp_registry.ts + marketplace cache (20 serveurs), search/install CLI |
-| **LiteLLM integration** | ✅ DONE | litellm-config.ts — génère litellm_config.yaml depuis providers détectés |
+| **LiteLLM integration** | ✅ DONE | litellm.ts — proxy unifié avec usage tracking, cooldowns retry-after, request queue |
 | **Providers API key config** | ✅ DONE | providers_page.dart + settings Advanced + callWithAutoFallback() |
-| **Free model catalog** | ✅ DONE | free-tiers.ts — Groq, Cerebras, Together, HF, Mistral, Cohere, OpenRouter + RPM |
-| **Auto-provider rotation** | ✅ DONE | callWithAutoFallback() — rotation auto sur 429, skip providers rate-limités |
+| **Free model catalog** | ✅ DONE | free-models.ts — catalogue complet avec RPM/TPM/daily quotas par modèle |
+| **Auto-provider rotation** | ✅ DONE | litellm.ts callWithFallback() — cooldown retry-after, queue sur exhaustion |
 | **Context adaptive loading** | ✅ DONE | context-loader.ts + rex-launcher.ts — intent → guards/MCPs/skills à la volée |
 | **Node mesh fabric** | ✅ DONE | node-mesh.ts — capability detection zero LLM, hub registration, routeTask() |
 | **Setup wizard** | ✅ DONE | setup-wizard.ts — parallel discovery, wow moment, first-run detection |
-| **Review UI** | ✅ DONE | review_page.dart — Quick/Full, result rows, status chips |
-| **Proactive session management** | 🔄 PARTIAL | auto-compact 75% configuré, session continuity via recovery-state.json |
+| **Hub `/api/chat`** | ✅ DONE | Endpoint LLM unifié OpenAI-compatible + `/api/v1/llm/usage` stats |
+| **Hub token security** | ✅ DONE | Auto-génère + persiste REX_HUB_TOKEN au 1er démarrage, dashboard public |
+| **Proactive session management** | ✅ DONE | auto-compact 75%, recovery-state.json, rex-launcher.ts |
 
-### Phase 3 — Hub & Multi-node (FUTUR)
+### Phase 3 — Hub & Multi-node (🔄 IN PROGRESS)
 
 | Tache | Priorite | Detail |
 |-------|----------|--------|
-| **Expose Hub API** | HAUTE | GET/POST routes: /health, /nodes, /tasks, /events, /memory/pending + JWT auth. VPS = hub prefere si dispo |
-| **Brain VPS + sync durable** | HAUTE | Event journal append-only, zero-loss guarantee, queue + ack |
-| **Tailscale mesh auto** | HAUTE | Auto-join nodes, status check, fallback routes, WOL si node offline |
-| **Tunnels + fallback** | HAUTE | Tailscale direct/relay, SSH fallback, RustDesk option |
-| **Cross-platform desktop** | MOYENNE | Flutter for Windows + Linux (after macOS stable) |
-| **System tray cross-platform** | MOYENNE | Native tray for Windows/Linux (macOS ✅) |
+| **Hub API** | ✅ DONE | /health, /nodes, /tasks, /events, /chat, /memory, /monitor + auth token auto |
+| **Sync durable** | ✅ DONE | Event journal append-only, sync-queue.ts, self-sync loop fixed |
+| **Node mesh** | ✅ DONE | node-mesh.ts, hub registration, heartbeat, routeTask() |
+| **Brain VPS** | 🔄 PARTIAL | Daemon + hub run on any machine; VPS deployment via systemd documented |
+| **Tailscale mesh auto** | 🔜 NEXT | Auto-join nodes, tailscale status check wired in node-mesh.ts |
+| **Tunnels + fallback** | FUTURE | SSH fallback, RustDesk option |
+| **Cross-platform desktop** | FUTURE | Flutter for Windows + Linux (after macOS stable) |
 
 ### Phase 4 — Advanced (LATER)
 

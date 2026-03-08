@@ -36,12 +36,40 @@ export function generateHubToken(): string {
   return randomBytes(32).toString('hex')
 }
 
-const HUB_TOKEN = loadHubToken()
+/**
+ * Persist a generated hub token to ~/.claude/settings.json.
+ * Called once on first hub start if no token is configured.
+ */
+function persistHubToken(token: string): void {
+  const settingsPath = join(homedir(), '.claude', 'settings.json')
+  try {
+    let settings: Record<string, unknown> = {}
+    if (existsSync(settingsPath)) {
+      settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+    }
+    const env = (settings.env ?? {}) as Record<string, string>
+    env.REX_HUB_TOKEN = token
+    settings.env = env
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n')
+    log.info('Auto-generated REX_HUB_TOKEN and saved to ~/.claude/settings.json')
+  } catch (err) {
+    log.warn(`Could not persist hub token: ${err}`)
+  }
+}
+
+function resolveHubToken(): string {
+  const existing = loadHubToken()
+  if (existing) return existing
+  // No token configured — generate and persist one automatically
+  const generated = generateHubToken()
+  persistHubToken(generated)
+  return generated
+}
+
+const HUB_TOKEN = resolveHubToken()
 const CORS_ORIGIN = process.env.REX_HUB_CORS_ORIGIN ?? 'http://localhost:7420'
 
-if (!HUB_TOKEN) {
-  log.warn('REX_HUB_TOKEN not set — hub is open (set REX_HUB_TOKEN to secure)')
-}
+log.info(`Hub token active (${HUB_TOKEN.slice(0, 8)}…)`)
 
 // ── Node registry ──────────────────────────────────────
 
@@ -428,6 +456,63 @@ addRoute('GET', '/api/v1/monitor', async (_req, res) => {
   }
 })
 
+// ── LLM proxy — /api/chat ──────────────────────────────
+
+addRoute('POST', '/api/chat', async (req, res) => {
+  try {
+    const body = await parseBody(req) as {
+      prompt?: string
+      messages?: Array<{ role: string; content: string }>
+      system?: string
+      model?: string
+      stream?: boolean
+    }
+
+    // Support both prompt and messages format
+    const prompt = body.prompt ??
+      body.messages?.find(m => m.role === 'user')?.content ??
+      ''
+    const system = body.system ??
+      body.messages?.find(m => m.role === 'system')?.content
+
+    if (!prompt.trim()) {
+      sendError(res, 400, 'BAD_REQUEST', 'prompt or messages[].role=user required')
+      return
+    }
+
+    const { callWithFallback } = await import('./litellm.js')
+    const result = await callWithFallback(prompt, system, {
+      modelId: body.model,
+      queueOnExhaustion: true,
+    })
+
+    sendJson(res, 200, {
+      id: `chatcmpl-${Date.now()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: result.model,
+      provider: result.provider,
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content: result.text },
+        finish_reason: 'stop',
+      }],
+      usage: { estimated_tokens: result.estimatedTokens },
+    })
+  } catch (err: any) {
+    sendError(res, 500, 'LLM_ERROR', err.message?.slice(0, 200) ?? 'LLM call failed')
+  }
+})
+
+addRoute('GET', '/api/v1/llm/usage', async (_req, res) => {
+  try {
+    const { getUsageStats } = await import('./litellm.js')
+    sendJson(res, 200, getUsageStats())
+  } catch (err: any) {
+    sendError(res, 500, 'INTERNAL_ERROR', err.message?.slice(0, 100) ?? 'Usage stats failed')
+  }
+})
+
 // ── Web Dashboard ──────────────────────────────────────
 
 function buildDashboardHtml(): string {
@@ -677,8 +762,9 @@ export async function startHub(port?: number): Promise<void> {
       return
     }
 
-    // Auth middleware — skip for /api/health (always public)
-    if (HUB_TOKEN && urlPath !== '/api/health') {
+    // Auth middleware — skip for /api/health and / dashboard (always public)
+    const isPublicRoute = urlPath === '/api/health' || urlPath === '/' || urlPath === '/dashboard'
+    if (!isPublicRoute) {
       const auth = req.headers.authorization
       if (!auth || auth !== `Bearer ${HUB_TOKEN}`) {
         log.warn(`Unauthorized ${method} ${urlPath} from ${req.socket.remoteAddress}`)
