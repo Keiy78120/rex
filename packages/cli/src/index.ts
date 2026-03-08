@@ -156,8 +156,11 @@ async function main() {
           console.log(`Run from the REX monorepo or install @rex/memory separately.`)
           process.exit(1)
         }
+        // Forward --max=N flag as REX_MAX_EMBED_PER_RUN env var
+        const maxArg = process.argv.find(a => a.startsWith('--max='))
+        const maxEnv = maxArg ? { REX_MAX_EMBED_PER_RUN: maxArg.split('=')[1] } : {}
         console.log(`${COLORS.cyan}Ingesting sessions...${COLORS.reset}`)
-        execSync('npx tsx src/ingest.ts', { cwd: memDir, stdio: 'inherit' })
+        execSync('npx tsx src/ingest.ts', { cwd: memDir, stdio: 'inherit', env: { ...process.env, ...maxEnv } })
       } catch {
         process.exit(1)
       }
