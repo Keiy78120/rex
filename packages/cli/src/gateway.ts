@@ -500,7 +500,14 @@ function advancedMenu() {
       { text: '🧪 Audit', callback_data: 'audit' },
       { text: '📝 Logs', callback_data: 'logs' },
     ],
-    [{ text: '🎛 Modèles', callback_data: 'models_menu' }],
+    [
+      { text: '🎛 Modèles', callback_data: 'models_menu' },
+      { text: '🆓 Free tiers', callback_data: 'free_tiers' },
+    ],
+    [
+      { text: '🔑 Pool', callback_data: 'pool' },
+      { text: '📊 Burn rate', callback_data: 'burn_rate' },
+    ],
     [{ text: '◀️ Menu', callback_data: 'menu' }],
   ]
 }
@@ -1723,6 +1730,33 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
       break
     }
 
+    case 'free_tiers': {
+      const out = truncate(strip(run('rex free-tiers', 10000)), 3200)
+      await editMessage(token, chatId, messageId,
+        `🆓 *Free Tiers*\n\`\`\`\n${out}\n\`\`\``,
+        advancedMenu()
+      )
+      break
+    }
+
+    case 'pool': {
+      const out = truncate(strip(run('rex pool', 8000)), 3200)
+      await editMessage(token, chatId, messageId,
+        `🔑 *Account Pool*\n\`\`\`\n${out}\n\`\`\``,
+        advancedMenu()
+      )
+      break
+    }
+
+    case 'burn_rate': {
+      const out = truncate(strip(run('rex burn-rate', 8000)), 3200)
+      await editMessage(token, chatId, messageId,
+        `📊 *Burn Rate*\n\`\`\`\n${out}\n\`\`\``,
+        advancedMenu()
+      )
+      break
+    }
+
     case 'notifs': {
       const { text: t, buttons } = buildNotifsMessage(null, 0)
       await editMessage(token, chatId, messageId, t, buttons)
@@ -2172,6 +2206,51 @@ async function handleText(token: string, chatId: string, text: string, from: str
     const out = await analyzeUpload(upload, task, runMode)
     await send(token, chatId, truncate(out, 3200), filesMenu())
     logCommand(from, `/file_analyze ${runMode}`, out.slice(0, 120))
+    return
+  }
+
+  if (cmd === '/pool' || cmd === '/accounts') {
+    const { printPool } = await import('./account-pool.js')
+    const { execSync } = await import('node:child_process')
+    let msg = ''
+    try {
+      msg = execSync('rex pool', { encoding: 'utf-8', timeout: 8000 }).trim()
+    } catch { msg = '⚠️ Could not load account pool' }
+    await send(token, chatId, `🔑 *Account Pool*\n\`\`\`\n${msg.replace(/\x1b\[[0-9;]*m/g, '')}\n\`\`\``)
+    logCommand(from, '/pool', 'shown')
+    return
+  }
+
+  if (cmd === '/burn' || cmd === '/burn_rate') {
+    const { execSync } = await import('node:child_process')
+    let msg = ''
+    try {
+      msg = execSync('rex burn-rate', { encoding: 'utf-8', timeout: 8000 }).trim()
+    } catch { msg = '⚠️ Could not load burn rate' }
+    await send(token, chatId, `📊 *Token Burn Rate*\n\`\`\`\n${msg.replace(/\x1b\[[0-9;]*m/g, '')}\n\`\`\``)
+    logCommand(from, '/burn', 'shown')
+    return
+  }
+
+  if (cmd === '/free' || cmd === '/tiers') {
+    const { execSync } = await import('node:child_process')
+    let msg = ''
+    try {
+      msg = execSync('rex free-tiers', { encoding: 'utf-8', timeout: 8000 }).trim()
+    } catch { msg = '⚠️ Could not load free tiers' }
+    await send(token, chatId, `🆓 *Free Tiers*\n\`\`\`\n${msg.replace(/\x1b\[[0-9;]*m/g, '')}\n\`\`\``)
+    logCommand(from, '/free', 'shown')
+    return
+  }
+
+  if (cmd === '/intent') {
+    const { execSync } = await import('node:child_process')
+    let msg = ''
+    try {
+      msg = execSync('rex intent', { encoding: 'utf-8', timeout: 8000 }).trim()
+    } catch { msg = '⚠️ Could not detect intent' }
+    await send(token, chatId, `🎯 *Project Intent*\n\`\`\`\n${msg.replace(/\x1b\[[0-9;]*m/g, '')}\n\`\`\``)
+    logCommand(from, '/intent', 'shown')
     return
   }
 

@@ -415,12 +415,24 @@ rex doctor --fix     # Auto-fix then health check
 | **RexService**: loadObservations, loadHabits, loadFacts, loadBackups, loadGitStatus, loadProjects + action methods | `rex_service.dart` |
 | CLI build ✅ (pnpm build — zero errors) | — |
 
+### ✅ Terminé (session 2026-03-11 — debug pass + gateway + daemon adaptive)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **Flutter debug pass**: fix 5 Dart errors (catch syntax, LinearProgressIndicator→RexProgressBar, doc_zipper icon) | `token_page.dart`, `workflow_page.dart` |
+| **Daemon: adaptive ingestCycle()**: measures Ollama latency → urgency/backlog/slow-ollama/normal modes | `daemon.ts` |
+| **Gateway: `/pool`, `/burn`, `/free`, `/intent` Telegram commands** | `gateway.ts` |
+| **Gateway: Advanced menu expanded**: Free tiers + Pool + Burn rate buttons | `gateway.ts` |
+| **Gateway: callback handlers** for `free_tiers`, `pool`, `burn_rate` | `gateway.ts` |
+| **living-rex-vision.md**: mark adaptive scripts, multi-account, MCP marketplace as ✅ | `docs/plans/living-rex-vision.md` |
+| Flutter build ✅ (clean) | — |
+| CLI build ✅ (pnpm build — zero errors) | — |
+
 ### 🔄 En cours / A faire
 
-**AUDIT v7 (Phase 2 ~98% DONE)** Remaining:
-- Cross-platform Flutter (Windows/Linux) — Phase 3
-- Debug pass on all 19 pages (deferred)
-- MCP one-click from marketplace to installed (UI flow)
+**Phase 2 DONE, Phase 3 IN PROGRESS**:
+- Cross-platform Flutter (Windows/Linux) — Phase 3 later
+- Hub API: full routes done, VPS brain + Tailscale mesh partial
 
 ---
 
