@@ -256,6 +256,36 @@ async function maintenanceCycle(): Promise<void> {
     log.debug(`Journal purge skipped: ${e.message}`)
   }
 
+  // Auto-prune duplicate memories (direct SQL — prune.ts uses legacy path)
+  try {
+    const { checkMemoryHealth } = await import('./memory-check.js')
+    const mh = checkMemoryHealth()
+    if (mh.duplicates.count > 0) {
+      const Database = (await import('better-sqlite3')).default
+      const db = new Database(MEMORY_DB_PATH)
+      db.pragma('journal_mode = WAL')
+      const dupes = db.prepare(`
+        SELECT id FROM memories WHERE id NOT IN (
+          SELECT MIN(id) FROM memories GROUP BY content
+        )
+      `).all() as Array<{ id: number }>
+      if (dupes.length > 0) {
+        const deleteVec = db.prepare('DELETE FROM memory_vec WHERE rowid = ?')
+        const deleteMem = db.prepare('DELETE FROM memories WHERE id = ?')
+        db.transaction(() => {
+          for (const row of dupes) {
+            try { deleteVec.run(row.id) } catch {}
+            deleteMem.run(row.id)
+          }
+        })()
+        log.info(`Auto-pruned ${dupes.length} duplicate memories`)
+      }
+      db.close()
+    }
+  } catch (e: any) {
+    log.debug(`Duplicate prune skipped: ${e.message?.slice(0, 80)}`)
+  }
+
   log.info('Maintenance cycle done')
 }
 

@@ -1,6 +1,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { MEMORY_DB_PATH, LEGACY_DB_PATH } from './paths.js'
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -12,7 +13,8 @@ const COLORS = {
   cyan: '\x1b[36m',
 }
 
-const DB_PATH = join(homedir(), '.rex-memory', 'db', 'rex.sqlite')
+// Use current path, fall back to legacy if migration hasn't run yet
+const DB_PATH = existsSync(MEMORY_DB_PATH) ? MEMORY_DB_PATH : LEGACY_DB_PATH
 const MAX_AGE_DAYS = 180 // 6 months
 const MAX_DB_SIZE_MB = 50
 
