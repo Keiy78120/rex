@@ -76,6 +76,13 @@ async function main() {
   switch (command) {
     case 'doctor': {
       const fixMode = process.argv.includes('--fix')
+      if (process.argv.includes('--lint-config')) {
+        const { runConfigLint, printLintResult } = await import('./config-lint.js')
+        const result = runConfigLint(process.cwd())
+        printLintResult(result)
+        process.exit(result.passed ? 0 : 1)
+        break
+      }
       if (fixMode) {
         log.info('Doctor --fix started')
         console.log(`\n${COLORS.bold}REX Doctor — Auto-fix mode${COLORS.reset}\n`)
@@ -121,6 +128,10 @@ async function main() {
       const total = allResults.length
       const dot = report.status === 'healthy' ? `${COLORS.green}●${COLORS.reset}` : report.status === 'degraded' ? `${COLORS.yellow}●${COLORS.reset}` : `${COLORS.red}○${COLORS.reset}`
       console.log(`REX ${dot} ${report.status.toUpperCase()} — ${passed}/${total} checks passed`)
+      try {
+        const { printBurnRateDashboard } = await import('./burn-rate.js')
+        printBurnRateDashboard()
+      } catch {}
       break
     }
 
@@ -963,6 +974,17 @@ async function main() {
           }
           break
         }
+        case 'analyze': {
+          const cmd = process.argv.slice(4).join(' ')
+          if (!cmd) { console.log('Usage: rex guard analyze <command>'); break }
+          const { analyzeCommand } = await import('./guard-ast.js')
+          const result = analyzeCommand(cmd)
+          const lc = result.level === 'block' ? COLORS.red : result.level === 'warn' ? COLORS.yellow : COLORS.green
+          console.log(`\n${lc}${result.level.toUpperCase()}${COLORS.reset} — ${result.reason}`)
+          console.log(`  Command: ${COLORS.dim}${result.command}${COLORS.reset}`)
+          if (result.subcommands.length > 1) console.log(`  Subcommands: ${result.subcommands.join(' | ')}`)
+          break
+        }
         case 'list':
         default: {
           const guards = listGuards()
@@ -979,6 +1001,13 @@ async function main() {
           break
         }
       }
+      break
+    }
+
+    case 'guard-ast': {
+      // PreToolUse hook entry point — reads CLAUDE_TOOL_INPUT env, outputs hook JSON
+      const { runGuardCli } = await import('./guard-ast.js')
+      runGuardCli()
       break
     }
 
@@ -1117,6 +1146,9 @@ ${COLORS.bold}Guards:${COLORS.reset}
   rex guard enable <name>     Enable a guard
   rex guard disable <name>    Disable a guard
   rex guard logs [name]       Show guard trigger logs
+  rex guard analyze <cmd>     Analyze command safety (AST-level)
+  rex guard-ast               Hook entry point (reads CLAUDE_TOOL_INPUT)
+  rex doctor --lint-config    Lint CLAUDE.md, hooks, and MCP configs
 
 ${COLORS.bold}Review:${COLORS.reset}
   rex review                  Quick review (TypeScript + secrets)

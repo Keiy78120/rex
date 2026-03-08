@@ -696,17 +696,47 @@ export async function mcpRegistry(args: string[]) {
       showExport()
       return
     case 'discover':
-      await discoverServer(rest, jsonMode)
+      if (rest.length === 0) {
+        // No args → show curated catalog from mcp-discover.ts
+        const { printCatalog } = await import('./mcp-discover.js')
+        printCatalog()
+      } else {
+        // Args → discover tools exposed by a registered server
+        await discoverServer(rest, jsonMode)
+      }
       return
     case 'refresh-marketplace':
       await refreshMarketplace(jsonMode)
       return
-    case 'search':
-      searchMarketplace(rest, jsonMode)
+    case 'search': {
+      const query = rest.filter(a => !a.startsWith('--')).join(' ')
+      if (!query) { console.log('Usage: rex mcp search <query>'); return }
+      // Try curated catalog first
+      const { searchCatalog, printCatalog: printCat } = await import('./mcp-discover.js')
+      const catalogResults = searchCatalog(query)
+      if (catalogResults.length > 0) {
+        printCat(catalogResults)
+      } else {
+        searchMarketplace(rest, jsonMode)
+      }
       return
-    case 'install':
-      await installFromMarketplace(rest)
+    }
+    case 'install': {
+      const name = rest.filter(a => !a.startsWith('--'))[0]
+      if (!name) { console.log('Usage: rex mcp install <name>'); return }
+      // Try curated catalog first
+      const { installServer } = await import('./mcp-discover.js')
+      const result = await installServer(name)
+      if (result.ok) {
+        console.log(`\x1b[32m✓\x1b[0m Installed: ${name}  (registered in ~/.claude/settings.json)`)
+      } else if (result.error?.includes('not found')) {
+        // Fall back to marketplace
+        await installFromMarketplace(rest)
+      } else {
+        console.log(`\x1b[31m✗\x1b[0m ${result.error}`)
+      }
       return
+    }
     default:
       console.log('Usage: rex mcp <list|add|add-url|remove|enable|disable|check|sync-claude|import-claude|export|discover|search|install|refresh-marketplace> ...')
   }
