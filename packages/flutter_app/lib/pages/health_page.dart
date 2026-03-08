@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
-    show CircularProgressIndicator, AlwaysStoppedAnimation;
+    show CircularProgressIndicator, AlwaysStoppedAnimation, LinearProgressIndicator;
 import 'package:provider/provider.dart';
 import '../services/rex_service.dart';
 import '../theme.dart';
@@ -23,6 +23,7 @@ class _HealthPageState extends State<HealthPage> {
       rex.loadBackgroundProcesses();
       rex.loadBurnRate();
       rex.checkSessionGuard();
+      rex.loadDevMonitor();
     });
   }
 
@@ -40,6 +41,7 @@ class _HealthPageState extends State<HealthPage> {
             rex.loadBackgroundProcesses();
             rex.loadBurnRate();
             rex.checkSessionGuard();
+            rex.loadDevMonitor();
           },
         ),
       ],
@@ -185,6 +187,11 @@ class _HealthPageState extends State<HealthPage> {
                   (group) => _CheckGroupCard(group: group),
                 ),
                 const SizedBox(height: 8),
+                // Dev Activity
+                if (rex.devMonitor.isNotEmpty || rex.isLoadingDevMonitor) ...[
+                  _DevActivitySection(monitor: rex.devMonitor, loading: rex.isLoadingDevMonitor),
+                  const SizedBox(height: 8),
+                ],
                 // Quick actions
                 RexSection(title: 'Quick Actions', icon: CupertinoIcons.bolt),
                 Row(
@@ -621,6 +628,145 @@ class _CheckResultRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Dev Activity ──────────────────────────────────────────────────────────────
+
+class _DevActivitySection extends StatelessWidget {
+  final Map<String, dynamic> monitor;
+  final bool loading;
+
+  const _DevActivitySection({required this.monitor, required this.loading});
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && monitor.isEmpty) {
+      return Column(
+        children: [
+          RexSection(title: 'Dev Activity (24h)', icon: CupertinoIcons.chart_bar_alt_fill),
+          const RexCard(child: Center(child: Padding(
+            padding: EdgeInsets.all(12),
+            child: CupertinoActivityIndicator(),
+          ))),
+        ],
+      );
+    }
+
+    final commits = monitor['totalCommits'] as int? ?? 0;
+    final sessions = monitor['sessionCount'] as int? ?? 0;
+    final pending = monitor['pendingMemories'] as int? ?? 0;
+    final topProjects = (monitor['topProjects'] as List<dynamic>?)?.cast<String>() ?? [];
+    final commitsList = (monitor['commits'] as List<dynamic>?)
+        ?.whereType<Map<String, dynamic>>()
+        .take(5)
+        .toList() ?? [];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RexSection(title: 'Dev Activity (24h)', icon: CupertinoIcons.chart_bar_alt_fill),
+        RexCard(
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: _ActivityStat(label: 'Sessions', value: '$sessions', icon: CupertinoIcons.bolt_fill)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _ActivityStat(label: 'Commits', value: '$commits', icon: CupertinoIcons.arrow_branch)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _ActivityStat(label: 'Pending', value: '$pending', icon: CupertinoIcons.tray_arrow_down)),
+                ],
+              ),
+              if (commitsList.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(height: 0.5, color: context.rex.separator),
+                const SizedBox(height: 8),
+                ...commitsList.map((c) {
+                  final count = c['count'] as int? ?? 0;
+                  final repo = c['repo'] as String? ?? '?';
+                  final msg = (c['lastMessage'] as String? ?? '').replaceAll('\n', ' ');
+                  final barWidth = (count.clamp(0, 10) / 10.0);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 60,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: LinearProgressIndicator(
+                              value: barWidth,
+                              backgroundColor: context.rex.separator,
+                              valueColor: AlwaysStoppedAnimation(context.rex.accent),
+                              minHeight: 5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                repo,
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.rex.text),
+                              ),
+                              Text(
+                                msg.length > 55 ? '${msg.substring(0, 55)}…' : msg,
+                                style: TextStyle(fontSize: 11, color: context.rex.textTertiary),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '$count',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: context.rex.accent),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ] else if (!loading) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'No commits in the last 24h.',
+                  style: TextStyle(fontSize: 12, color: context.rex.textTertiary),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActivityStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+
+  const _ActivityStat({required this.label, required this.value, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, size: 16, color: context.rex.accent),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.rex.text),
+        ),
+        Text(
+          label,
+          style: TextStyle(fontSize: 10, color: context.rex.textTertiary),
+        ),
+      ],
     );
   }
 }

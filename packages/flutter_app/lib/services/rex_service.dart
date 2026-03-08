@@ -2537,6 +2537,28 @@ $transcript
 
   // ── End Token ────────────────────────────────────────────────────────────
 
+  // ── Dev Monitor ──────────────────────────────────────────────────────────
+
+  Map<String, dynamic> _devMonitor = {};
+  bool _isLoadingDevMonitor = false;
+
+  Map<String, dynamic> get devMonitor => _devMonitor;
+  bool get isLoadingDevMonitor => _isLoadingDevMonitor;
+
+  Future<void> loadDevMonitor() async {
+    _isLoadingDevMonitor = true;
+    notifyListeners();
+    try {
+      final result = await _runRexArgs(['monitor', '--json']);
+      final parsed = jsonDecode(_extractJson(result));
+      if (parsed is Map<String, dynamic>) {
+        _devMonitor = parsed;
+      }
+    } catch (_) {}
+    _isLoadingDevMonitor = false;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _recordingTimer?.cancel();
