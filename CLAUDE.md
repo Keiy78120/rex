@@ -355,14 +355,28 @@ rex doctor --fix     # Auto-fix then health check
 | **Architecture decision** : Claude Code = seul orchestrateur user-facing, Codex = background worker | `CLAUDE.md` |
 | **Living REX manifesto** + Setup wizard 5 étapes | `docs/plans/living-rex-vision.md`, `docs/plans/2026-03-09-rex-setup-wizard.md` |
 
+### ✅ Terminé (session 2026-03-09 — hub + registry + recommendations)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| Secure Hub: REX_HUB_TOKEN auth middleware, CORS hardening, v6.3.0 | `hub.ts` |
+| Hub: GET /api/v1/nodes/health — aggregated healthy/stale/offline status | `hub.ts` |
+| Hub: rex hub token — generate cryptographically secure 64-char token | `hub.ts`, `index.ts` |
+| Governed Tool Registry: 14 tools, 9 capabilities, cli>mcp>api tier order | `tool-registry.ts` |
+| Tool Registry: getToolForCapability(), syncAvailability(), enable/disable | `tool-registry.ts` |
+| Tool Registry: CLI rex tools / check / enable / disable | `index.ts` |
+| Inventory: detectProviders() includes all free tier (Groq, Cerebras, Together…) | `inventory.ts` |
+| Inventory: generateRecommendations() — 7 rule-based, ordered by priority | `inventory.ts` |
+| Inventory: rankResources() PROVIDER_COST map for accurate cost classification | `inventory.ts` |
+| LiteLLM Config Generator: Ollama + free tier → litellm_config.yaml | `litellm-config.ts` |
+| Auto-provider rotation: callWithAutoFallback() — tries all, skips rate-limited | `free-tiers.ts` |
+| PR #7: feat/hub-registry-recommendations | GitHub |
+
 ### 🔄 En cours / A faire
 
-**AUDIT v7 (2026-03-09)** : 85% DONE. Remaining:
-- Hub API (Phase 3) — REST routes /health /nodes /tasks /events
-- LiteLLM proxy integration (auto-rotation when free tier hits rate limit)
-- Free model catalog (RPM/TPM limits DB)
+**AUDIT v7 (2026-03-09)** : 90% DONE. Remaining:
+- MCP one-click marketplace install (guard-ast, config-lint, burn-rate, mcp-discover wiring)
 - Cross-platform Flutter (Windows/Linux)
-- MCP one-click marketplace install
 - Setup wizard Flutter pages (P3)
 
 ---
