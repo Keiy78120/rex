@@ -444,6 +444,17 @@ rex doctor --fix     # Auto-fix then health check
 | Adaptive daemon ingest (latency probe + urgency/backlog/slow/normal modes) | `daemon.ts` |
 | Gateway: /pool, /burn, /free, /intent commands + Advanced menu buttons + callbacks | `gateway.ts` |
 
+### ✅ Terminé (session 2026-03-12 — cast fixes + model router)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| Memory health stats in memory page (pending embeds, duplicates, orphans) | `memory_page.dart`, `rex_service.dart` |
+| Fix all unsafe `.cast<>()` → `.whereType<>().toList()` across all pages + service | `providers_page.dart`, `observer_page.dart`, `token_page.dart`, `projects_page.dart`, `workflow_page.dart`, `mcp_page.dart`, `rex_service.dart` |
+| `rex models --json` support via `getRouterSnapshot()` | `index.ts`, `router.ts` |
+| Model Router section in providers page (shows task→model mapping) | `providers_page.dart` |
+| `loadModelRouter()` added to RexService | `rex_service.dart` |
+| Providers page loads model router on init | `providers_page.dart` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 IN PROGRESS**:
