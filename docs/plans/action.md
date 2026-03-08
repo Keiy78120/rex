@@ -914,3 +914,63 @@ import Anthropic from '@anthropic-ai/sdk'
 const res = await anthropic.messages.create(...)  // bypass du router
 ```
 
+
+---
+
+## 24. SETUP WIZARD — Le moment "wow"
+
+**Le setup EST la première démo de REX. Scanne tout, organise tout, montre la puissance.**
+
+### Flow setup
+
+1. **`rex setup`** (ou `npx rex-claude setup`)
+   - Phase 1: Discovery parallèle (30s, scripts purs)
+     · Comptes Claude (~/.claude-account-*)
+     · API keys (env, .env files, Bitwarden)
+     · Ollama + modèles
+     · Dev folders + repos Git
+     · GitHub auth
+     · Tailscale nodes
+     · Hardware specs
+     · MCPs déjà installés
+     · Sessions Claude existantes
+     · Guards déjà présents
+
+   - Phase 2: Organisation (utilise les APIs dispo, même payantes, une seule fois)
+     · Ingest des sessions Claude existantes → mémoire sémantique
+     · Catégorisation des repos (intent detection)
+     · Setup mesh: hub node recommendation
+     · Write config.json optimal
+     · Installation guards + hooks
+     · Configuration MCPs selon API keys disponibles
+
+   - Phase 3: Wizard (CLI ou Flutter UI)
+     · Affiche tout ce qui a été trouvé
+     · Confirme les choix
+     · Lance rex doctor
+
+2. **Résultat affiché — le "wow moment"**
+   ✓ 2 comptes Claude détectés (pool actif)
+   ✓ 3 modèles Ollama (qwen, deepseek, nomic-embed)
+   ✓ 12 repos indexés en mémoire
+   ✓ 8 guards installés
+   ✓ 4 MCPs configurés (github, filesystem, brave-search, context7)
+   ✓ Hub : ce Mac (ou VPS si connecté)
+   ✓ Fleet : 3 nodes en ligne via Tailscale
+   ✓ Sessions déjà ingérées : 15 sessions Claude
+   → rex est prêt. Lance ton prochain projet avec : rex
+
+### Implémentation
+
+- `setup-wizard.ts` → discovery parallèle + configuration + affichage
+- CLI : `rex setup` / `--dry-run` / `--quick` / `--fleet`
+- Flutter UI optionnelle (fichier à ajouter plus tard)
+- Le setup utilise les APIs pay/free une seule fois pour créer le fond de mémoire initial
+
+### Notes
+
+- Le setup ne bloque pas si des composants sont manquants → suggestions d'installation
+- Si REX est déjà configuré → propose `rex update` pour rescan/reconfigurer
+- Fleet setup : scan des nodes Tailscale et configuration du hub centralisé
+- Les API keys (Anthropic, OpenAI) sont utilisées UNE SEULE FOIS au setup pour l'ingestion initiale
+
