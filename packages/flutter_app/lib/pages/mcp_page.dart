@@ -350,7 +350,7 @@ class _MarketplaceRow extends StatelessWidget {
     final c = context.rex;
     final name = entry['name'] as String? ?? '';
     final desc = entry['description'] as String? ?? '';
-    final tags = (entry['tags'] as List?)?.cast<String>() ?? [];
+    final tags = (entry['tags'] as List?)?.whereType<String>().toList() ?? [];
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),

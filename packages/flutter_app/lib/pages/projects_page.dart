@@ -91,7 +91,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
   List<String> _allStacks(List<Map<String, dynamic>> projects) {
     final Set<String> stacks = {};
     for (final p in projects) {
-      final stack = (p['stack'] as List?)?.cast<String>() ?? [];
+      final stack = (p['stack'] as List?)?.whereType<String>().toList() ?? [];
       stacks.addAll(stack);
     }
     return stacks.toList()..sort();
@@ -109,7 +109,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
     }
     if (_stackFilter != 'all') {
       result = result.where((p) {
-        final stack = (p['stack'] as List?)?.cast<String>() ?? [];
+        final stack = (p['stack'] as List?)?.whereType<String>().toList() ?? [];
         return stack.contains(_stackFilter);
       }).toList();
     }

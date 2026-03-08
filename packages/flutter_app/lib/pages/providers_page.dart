@@ -253,7 +253,7 @@ class _ProviderRow extends StatelessWidget {
     final c = context.rex;
     final name = provider['name'] ?? 'Unknown';
     final configured = provider['status'] == 'available';
-    final caps = (provider['capabilities'] as List?)?.cast<String>() ?? [];
+    final caps = (provider['capabilities'] as List?)?.whereType<String>().toList() ?? [];
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -660,9 +660,9 @@ class _InventorySection extends StatelessWidget {
     }
     final c = context.rex;
     final hw = data!['hardware'] as Map<String, dynamic>? ?? {};
-    final clis = (data!['clis'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final clis = (data!['clis'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? [];
     final services =
-        (data!['services'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        (data!['services'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? [];
     final models = data!['models'] as Map<String, dynamic>? ?? {};
     final genModels = (models['generation'] as List?) ?? [];
     final embedModels = (models['embedding'] as List?) ?? [];

@@ -42,7 +42,7 @@ class _TokenPageState extends State<TokenPage> {
             final br = rex.burnRate;
             final sg = rex.sessionGuard;
             final signal = sg['signal'] as Map<String, dynamic>?;
-            final alerted = (sg['alerted'] as List?)?.cast<String>() ?? [];
+            final alerted = (sg['alerted'] as List?)?.whereType<String>().toList() ?? [];
 
             if (br.isEmpty && sg.isEmpty) {
               return Center(

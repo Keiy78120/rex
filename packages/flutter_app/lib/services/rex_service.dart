@@ -1298,7 +1298,7 @@ $transcript
     try {
       final decoded = jsonDecode(output);
       if (decoded is List) {
-        marketplaceResults = decoded.cast<Map<String, dynamic>>();
+        marketplaceResults = decoded.whereType<Map<String, dynamic>>().toList();
       }
     } catch (_) {
       marketplaceResults = [];
@@ -1474,7 +1474,7 @@ $transcript
       final raw = _stripAnsi(result.stdout as String).trim();
       if (raw.isEmpty) return [];
       final decoded = json.decode(raw);
-      if (decoded is List) return decoded.cast<Map<String, dynamic>>();
+      if (decoded is List) return decoded.whereType<Map<String, dynamic>>().toList();
       return [];
     } catch (_) {
       return [];

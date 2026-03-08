@@ -140,8 +140,8 @@ class _GitSectionState extends State<_GitSection> {
     final modified = widget.status['modified'] as int? ?? 0;
     final added = widget.status['added'] as int? ?? 0;
     final deleted = widget.status['deleted'] as int? ?? 0;
-    final files = (widget.status['files'] as List?)?.cast<String>() ?? [];
-    final commits = (widget.status['recentCommits'] as List?)?.cast<String>() ?? [];
+    final files = (widget.status['files'] as List?)?.whereType<String>().toList() ?? [];
+    final commits = (widget.status['recentCommits'] as List?)?.whereType<String>().toList() ?? [];
     final cwd = widget.status['cwd'] as String? ?? '';
 
     final isMain = branch == 'main' || branch == 'master';

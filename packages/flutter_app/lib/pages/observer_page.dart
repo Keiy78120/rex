@@ -330,7 +330,7 @@ class _RunbookCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = runbook['name'] as String? ?? 'Untitled';
     final trigger = runbook['trigger'] as String? ?? '';
-    final steps = (runbook['steps'] as List?)?.cast<String>() ?? [];
+    final steps = (runbook['steps'] as List?)?.whereType<String>().toList() ?? [];
     final uses = runbook['successCount'] as int? ?? 0;
     final source = runbook['source'] as String? ?? 'manual';
     final id = runbook['id'] as int? ?? 0;
