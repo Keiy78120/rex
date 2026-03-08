@@ -1143,6 +1143,28 @@ async function main() {
       break
     }
 
+    case 'ask': {
+      // rex ask "<prompt>" [--task=<type>] [--skip-cache] [--json]
+      const prompt = process.argv.slice(3).filter(a => !a.startsWith('--')).join(' ')
+      if (!prompt) {
+        console.error('Usage: rex ask "<prompt>" [--task=code|classify|general] [--skip-cache] [--json]')
+        process.exit(1)
+      }
+      const taskArg = process.argv.find(a => a.startsWith('--task='))
+      const taskType = taskArg ? taskArg.split('=')[1] : 'general'
+      const skipCache = process.argv.includes('--skip-cache')
+      const jsonOut = process.argv.includes('--json')
+      const { runPrompt } = await import('./backend-runner.js')
+      const result = await runPrompt(prompt, { taskType, skipCache })
+      if (jsonOut) {
+        console.log(JSON.stringify(result, null, 2))
+      } else {
+        console.log(result.response)
+        console.error(`\n[${result.source} · ${result.latencyMs}ms]`)
+      }
+      break
+    }
+
     case undefined: {
       // First run? Run the wizard so the user gets the "wow moment" before launching
       const { isFirstRun, setupWizard } = await import('./setup-wizard.js')

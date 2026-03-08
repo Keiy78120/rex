@@ -2051,6 +2051,32 @@ $transcript
 
   // ── End Review ──────────────────────────────────────────────────────
 
+  // ── Sandbox (prompt playground) ──────────────────────────────────────
+
+  Future<Map<String, dynamic>> runAsk({
+    required String prompt,
+    String taskType = 'general',
+    bool skipCache = false,
+  }) async {
+    final args = [
+      'ask',
+      prompt,
+      '--task=$taskType',
+      '--json',
+      if (skipCache) '--skip-cache',
+    ];
+    try {
+      final output = await _runRexArgs(args, timeout: 60);
+      final json = _extractJson(output);
+      if (json.isNotEmpty) {
+        return jsonDecode(json) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return {'response': '(error running prompt)', 'source': 'error', 'latencyMs': 0};
+  }
+
+  // ── End Sandbox ────────────────────────────────────────────────────────
+
   @override
   void dispose() {
     _recordingTimer?.cancel();
