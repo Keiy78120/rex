@@ -1,9 +1,10 @@
-import { homedir } from 'node:os'
+import { homedir, hostname as getHostname } from 'node:os'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { join, basename, extname } from 'node:path'
 import { execSync, execFileSync } from 'node:child_process'
 import { appendEvent, getQueueStats } from './sync-queue.js'
 import { discoverHub } from './node.js'
+import { routeTask } from './node-mesh.js'
 
 // --- PID lockfile (single instance guard) ---
 
@@ -2408,6 +2409,18 @@ export async function gateway() {
 
         if (msg.text) {
           console.log(`${COLORS.cyan}@${from}${COLORS.reset}: ${msg.text}`)
+
+          // Mesh routing: check if a remote node is better suited for LLM tasks
+          // (e.g. a GPU node or a node with larger Ollama models)
+          // Falls back to local handling if no better node is found or routing fails.
+          try {
+            const bestNode = await routeTask('llm')
+            if (bestNode && bestNode.hostname !== getHostname()) {
+              // Remote node available — surface it in logs (actual forwarding is future work)
+              console.log(`  [mesh] Best LLM node: ${bestNode.hostname} (${bestNode.ip}) — handling locally (forwarding TBD)`)
+            }
+          } catch {}
+
           await handleText(token, chatId, msg.text, from)
         }
       }
