@@ -398,6 +398,15 @@ export async function daemon(): Promise<void> {
   log.info(`LLM routing chain: ${routable.map(p => p.name).join(' → ')}`)
   journalAppend('daemon_action', 'daemon', { action: 'started' })
 
+  // Start embedded hub (auto port 7420, non-blocking)
+  try {
+    const { startHub } = await import('./hub.js')
+    startHub().catch((e: any) => log.debug(`Hub start skipped: ${e.message?.slice(0, 80)}`))
+    log.info('Hub started on port 7420')
+  } catch (e: any) {
+    log.debug(`Hub unavailable: ${e.message?.slice(0, 80)}`)
+  }
+
   // Initial health check
   await healthCheck()
 
