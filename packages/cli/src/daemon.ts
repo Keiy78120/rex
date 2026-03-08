@@ -2,7 +2,7 @@
 import { existsSync, readFileSync, writeFileSync, readdirSync, unlinkSync, copyFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
-import { homedir } from 'node:os'
+import { homedir, cpus, loadavg } from 'node:os'
 import { MEMORY_DB_PATH, PENDING_DIR, BACKUPS_DIR, DAEMON_LOG_PATH, ensureRexDirs } from './paths.js'
 import { loadConfig } from './config.js'
 import { createLogger, rotateLog } from './logger.js'
@@ -68,6 +68,13 @@ function pruneBackups(retainDays: number = 7): void {
       }
     } catch {}
   }
+}
+
+/** Returns CPU load as a percentage (0-100) using 1-min load average / core count */
+function cpuLoadPercent(): number {
+  const cores = cpus().length || 1
+  const load1min = loadavg()[0]
+  return Math.min(100, Math.round((load1min / cores) * 100))
 }
 
 function countPending(): number {
@@ -184,8 +191,15 @@ async function ingestCycle(): Promise<void> {
   const pending = countPending()
   const latencyMs = await measureOllamaLatencyMs()
   const ollamaUp = latencyMs < 15_000
+  const cpu = cpuLoadPercent()
 
-  log.info(`Ingest cycle start — pending=${pending}, ollama=${ollamaUp ? `${latencyMs}ms` : 'down'}`)
+  log.info(`Ingest cycle start — pending=${pending}, ollama=${ollamaUp ? `${latencyMs}ms` : 'down'}, cpu=${cpu}%`)
+
+  // CPU throttle: skip heavy ops if system is overloaded
+  if (cpu >= 80) {
+    log.warn(`CPU load high (${cpu}%) — skipping ingest cycle to preserve system resources`)
+    return
+  }
 
   // Always ingest (save to pending/ is instant, no Ollama needed)
   runCmd('rex ingest')
@@ -564,13 +578,15 @@ export async function daemon(): Promise<void> {
       }
     }
 
-    // Smart alerts: disk space + memory backlog (once per day)
+    // Smart alerts: disk space + memory backlog + CPU (once per day)
     if (lastAlertDate !== todayStr) {
       const diskFree = checkDiskSpace()
       const pending = countPending()
+      const cpu = cpuLoadPercent()
       const alerts: string[] = []
       if (diskFree < 5) alerts.push(`⚠️ Disk low: ${diskFree}GB free`)
       if (pending > 100) alerts.push(`📥 Memory backlog: ${pending} chunks pending embed`)
+      if (cpu >= 80) alerts.push(`🔥 CPU high: ${cpu}% load — daemon throttling active`)
       if (alerts.length > 0) {
         await sendTelegramNotify(alerts.join('\n'))
         log.warn(`Smart alerts sent: ${alerts.join(' | ')}`)
