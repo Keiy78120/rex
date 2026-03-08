@@ -476,6 +476,11 @@ rex doctor --fix     # Auto-fix then health check
 | RexService: `loadCurious()`, `runCuriousCheck()`, discoveries state | `packages/flutter_app/lib/services/rex_service.dart` |
 | Sidebar: Curious item (scope icon) wired in sidebar + IndexedStack (20 pages total) | `main.dart`, `rex_sidebar.dart` |
 | living-rex-vision.md: Curieux/proactif → ✅ | `docs/plans/living-rex-vision.md` |
+| Fix memory-check.ts: sqlite-vec extension not loaded → embeddingCount was 0 | `packages/cli/src/memory-check.ts` |
+| `dev-monitor.ts`: DevStatusReport, git activity (depth 3, 40 repos), session count, pending memory | `packages/cli/src/dev-monitor.ts` |
+| `rex monitor [--json]` CLI command | `packages/cli/src/index.ts` |
+| Gateway: `/monitor` command + `📊 Monitor` button + `case 'dev_monitor':` callback | `packages/cli/src/gateway.ts` |
+| living-rex-vision.md: Monitor vie dev → ✅ | `docs/plans/living-rex-vision.md` |
 
 ### 🔄 En cours / A faire
 

@@ -433,7 +433,7 @@ Il est curieux : il cherche activement de nouvelles solutions.
 | Ingest adaptatif | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Setup wizard zero-config | ❌ | ❌ | ❌ | ❌ | 🔄 |
 | Tunnels sécurisés auto | ❌ | ❌ | ❌ | ❌ | 🔄 |
-| Monitor vie dev | ❌ | ❌ | ❌ | ❌ | 🔄 |
+| Monitor vie dev | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Fine-tuning modèle | ❌ | ❌ | ❌ | ❌ | 🔄 |
 | Curieux / proactif | ❌ | ❌ | ❌ | ❌ | ✅ |
 
