@@ -455,6 +455,15 @@ rex doctor --fix     # Auto-fix then health check
 | `loadModelRouter()` added to RexService | `rex_service.dart` |
 | Providers page loads model router on init | `providers_page.dart` |
 
+### ✅ Terminé (session 2026-03-12 — embedding fix + orchestrator wiring)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| Sidebar footer: burn rate display (Ctx%, Daily%, ⚡ /h, version) | `widgets/rex_sidebar.dart` |
+| RexService: periodic burn-rate refresh timer (5min) + OpenRouter/DeepSeek API keys | `rex_service.dart` |
+| Orchestrator: free-tier APIs (Groq/Cerebras/Together/Mistral/OpenRouter/DeepSeek) wired into FALLBACK_ORDER | `orchestrator.ts` |
+| Fix memory-check: load sqlite-vec extension → embedding count now 5523/5523 (100%) | `memory-check.ts` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 IN PROGRESS**:
