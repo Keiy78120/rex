@@ -501,13 +501,18 @@ rex doctor --fix     # Auto-fix then health check
 | refactor(llm): all internal LLM calls route through litellm.ts for unified tracking (Section 23) | `llm.ts` |
 | feat(mcp): Smithery registry added as second marketplace source | `mcp_registry.ts` |
 | feat(daemon): stuck-ingest auto-healing — pending count tracked across 3 cycles, Telegram alert if stuck | `daemon.ts` |
+| feat(mesh): Tailscale peer auto-discovery — probes port 7420 on all online peers for zero-config hub joining | `node-mesh.ts` |
+| feat(mesh): fleet capacity enrichment — NodeCapacity (cpuCores, ramGb, ollamaModels) + weighted score | `node-mesh.ts` |
+| feat(daemon): hub crash auto-restart with Telegram notify after 3 failures | `daemon.ts` |
+| fix(daemon): escalating disk response — auto-prune memories + backups at < 2GB critical threshold | `daemon.ts` |
 
 ### 🔄 En cours / A faire
 
-**Phase 2 DONE, Phase 3 IN PROGRESS**:
+**Phase 2 DONE, Phase 3 ~85% DONE**:
 - Cross-platform Flutter (Windows/Linux) — Phase 3 later
-- Hub API: full routes done, VPS brain + Tailscale mesh partial
-- Tailscale auto-join: Phase 3 — detect + guide + health in node-mesh.ts
+- VPS brain: hub API done ✅, sync done ✅, Tailscale mesh done ✅
+- Fleet routing with capacity: done ✅
+- Multi-account OAuth rotation (account-pool.ts) — wired, ready to activate
 
 ---
 
