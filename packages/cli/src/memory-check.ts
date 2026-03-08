@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { MEMORY_DB_PATH, PENDING_DIR } from './paths.js'
 import { createLogger } from './logger.js'
 import Database from 'better-sqlite3'
+import * as sqliteVec from 'sqlite-vec'
 
 const log = createLogger('memory-check')
 
@@ -65,6 +66,7 @@ export function checkMemoryHealth(): MemoryHealthResult {
 
   try {
     db = new Database(MEMORY_DB_PATH, { readonly: true })
+    sqliteVec.load(db)
   } catch (e: any) {
     result.dbIntegrity = { ok: false, message: e.message?.slice(0, 200) || 'Failed to open' }
     return result
