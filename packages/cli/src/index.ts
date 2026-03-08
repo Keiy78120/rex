@@ -68,7 +68,7 @@ function formatReport(report: HealthReport): string {
 }
 
 async function main() {
-  const command = process.argv[2] ?? 'help'
+  const command = process.argv[2]
   const verbose = process.argv.includes('--verbose')
   if (verbose) configureLogger({ level: 'debug' })
   const log = createLogger('cli')
@@ -497,6 +497,13 @@ async function main() {
           }
           break
       }
+      break
+    }
+
+    case 'mesh':
+    case 'nodes': {
+      const { printMeshStatus } = await import('./node-mesh.js')
+      await printMeshStatus()
       break
     }
 
@@ -1048,6 +1055,18 @@ async function main() {
       console.log('rex-claude v6.0.0')
       break
 
+    case 'kill': {
+      const { killRex } = await import('./rex-launcher.js')
+      killRex()
+      break
+    }
+
+    case 'relaunch': {
+      const { relaunchRex } = await import('./rex-launcher.js')
+      await relaunchRex(process.cwd())
+      break
+    }
+
     case 'free-tiers': {
       const testMode = process.argv.includes('--test')
       const jsonMode = process.argv.includes('--json')
@@ -1126,10 +1145,22 @@ async function main() {
       break
     }
 
+    case undefined: {
+      // `rex` with no subcommand → launch Claude with intent-driven profile
+      const { launchRex } = await import('./rex-launcher.js')
+      await launchRex(process.cwd())
+      break
+    }
+
     case 'help':
     default:
       console.log(`
 ${COLORS.bold}REX${COLORS.reset} — Claude Code sous steroides
+
+${COLORS.bold}Launch:${COLORS.reset}
+  rex                 Launch Claude Code with intent-driven profile (default)
+  rex kill            SIGTERM the active Claude session
+  rex relaunch        Kill + restart with fresh intent profile
 
 ${COLORS.bold}Commands:${COLORS.reset}
   rex install         One-command setup (init + setup + audit)
@@ -1228,6 +1259,8 @@ ${COLORS.bold}Hub & Network:${COLORS.reset}
   rex hub              Start REX hub API server (port 7420)
   rex hub token        Generate a secure REX_HUB_TOKEN
   rex hub --port=N     Start on custom port
+  rex mesh             Show all mesh nodes + capabilities (alias: rex nodes)
+  rex nodes            Alias for rex mesh
   rex node status      Show node identity and hub connection
   rex node register    Register this node with hub
   rex sync             Bidirectional sync with hub
