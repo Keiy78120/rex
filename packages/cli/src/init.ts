@@ -1,3 +1,4 @@
+/** @module OPTIMIZE — setup wizard, guards install, project init, CI/review config */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, chmodSync, unlinkSync, readdirSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
