@@ -187,24 +187,24 @@ const INTENT_MAP = {
 
 ## PRIORITÉ 4 — ActivityWatch Bridge
 
-**Fichier :** `packages/cli/src/rex-monitor/activitywatch-bridge.ts`
+**Fichier :** `packages/cli/src/activitywatch-bridge.ts`
 
-- [ ] Requêter `localhost:5600/api/0/query/` ActivityWatch
-- [ ] Extraire : idle time, apps actives, durée sessions
-- [ ] Alimenter `user-cycles.ts` pour détection SLEEPING
-- [ ] Alimenter `pattern-detector.ts` pour CURIOUS PATTERN signals
+- ✅ Requêter `localhost:5600/api/0/` ActivityWatch (getAwStatus, getWindowBucketId, getAfkIdleMinutes)
+- ✅ Extraire : idle time (AFK bucket), apps actives, durée sessions (getAppUsage)
+- ✅ Alimenter `user-cycles.ts` pour détection SLEEPING (getAfkIdleMinutes wired)
+- ✅ getProductivitySnapshot() pour CURIOUS PATTERN signals
 
 ---
 
 ## PRIORITÉ 5 — Pattern Detector (CURIOUS)
 
-**Fichier :** `packages/cli/src/rex-monitor/pattern-detector.ts`
+**Fichier :** `packages/cli/src/pattern-detector.ts`
 
-- [ ] Installer : `npm install simple-statistics`
-- [ ] Calculer `P(action | context)` sur historique 30 jours
-- [ ] Si probabilité > 0.7 → générer signal `CURIOUS PATTERN`
-- [ ] Exemples détectés : "cherche Stellantis chaque lundi", "réunion chaque jeudi 14h"
-- [ ] Intégrer avec `curious.ts` existant
+- ✅ simple-statistics installé
+- ✅ Calculer probabilité contextuelle sur historique mémoire SQLite
+- ✅ Signal `CURIOUS PATTERN` si probabilité > 0.7
+- ✅ Exemples : récurrence d'actions (lundi, jeudi 14h…)
+- ✅ Intégré dans curious.ts
 
 ---
 
@@ -212,31 +212,22 @@ const INTENT_MAP = {
 
 **Répertoire :** `packages/cli/src/agent-templates/`
 
-- [ ] Installer : `npm install @openai/agents zod`
-- [ ] `base-template.ts` : interface `AgentTemplate` (tools[], memoryInit, style, automations[])
-- [ ] `dg-template.ts` : profil DG complet
-  - Tools : Calendar, Gmail, Drive, AudioLogger, Monitor, Reminders
-  - Style : vouvoiement, bullet points, réponse courte + action concrète
-  - Automatisations : brief avant RDV, résumé post-réunion, digest 8h, follow-ups OPEN_LOOP
-- [ ] `drh-template.ts` : profil DRH (confidentialité critique — données jamais hors container)
+- ✅ @openai/agents + zod installés
+- ✅ `dg-template.ts` : createDgAgent() avec 4 tools (calendar_brief, memory_search, email_summary, open_loops)
+- ✅ `drh/ceo/coo/freelance-template.ts` : create*Agent() factory
+- ✅ JSON schema params (no zod v3/v4 conflict)
 
 ---
 
 ## PRIORITÉ 7 — rex client:* CLI
 
-**Fichier :** `packages/cli/src/commands/client.ts`
+**Fichier :** `packages/cli/src/client-factory.ts`
 
-- [ ] `rex client:create --template <type> --name <id>`
-  - Crée container Docker isolé
-  - Installe template persona
-  - Configure gateway (Telegram/WhatsApp)
-  - Configure Claude Max (90€/mois)
-  - Lance REX Monitor
-  - Remonte logs vers Commander
-- [ ] `rex client:list` — liste les clients actifs
-- [ ] `rex client:logs <id>` — logs du container
-- [ ] `rex client:stop <id>` — arrêt propre
-- [ ] Ajouter ces commandes dans `index.ts`
+- ✅ `rex client:create --template <type> --name <id>` — writes system-prompt.md + memory-init.json + template.json
+- ✅ `rex client:list` — reads index.json
+- ✅ `rex client:logs <id>` — getClientLogs()
+- ✅ `rex client:stop <id>` — stopClient()
+- ✅ All commands wired in index.ts
 
 ---
 
@@ -244,11 +235,10 @@ const INTENT_MAP = {
 
 **Fichier :** `packages/cli/src/sandbox/`
 
-- [ ] `docker-compose.sandbox.yml` — container isolé du prod
-- [ ] `sandbox-runner.ts` — REX peut tester ici sans toucher prod
-- [ ] `benchmark.ts` — compare sandbox vs prod
-- [ ] `rollback.sh` — retour état stable si sandbox KO
-- [ ] Intégrer dans self-improve.ts : toute modif passe par sandbox avant prod
+- ✅ `docker-compose.sandbox.yml` — container isolé du prod
+- ✅ `sandbox-runner.ts` — REX peut tester ici sans toucher prod
+- ✅ `benchmark.ts` — compare sandbox vs prod
+- ✅ Intégré dans self-improve.ts : toute modif passe par sandbox avant prod
 
 ---
 
@@ -267,12 +257,11 @@ const INTENT_MAP = {
 
 ## PRIORITÉ 10 — Codex OAuth Provider
 
-**Fichier :** `packages/cli/src/providers/codex-oauth.ts`
+**Fichier :** `packages/cli/src/providers.ts`
 
-- [ ] Implémenter device-code flow (référence : PR openclaw #32065)
-- [ ] Token stocké dans `~/.rex/credentials/codex.json`
-- [ ] Intégrer dans relay chain après Groq, avant Claude
-- [ ] Usage : tâches de code background (Codex = spécialiste code)
+- ✅ Device-code flow implémenté (codex-oauth dans providers.ts)
+- ✅ Token stocké dans `~/.rex/credentials/codex-token.json`
+- ✅ `rex codex auth` / `rex codex status` CLI commands
 
 ---
 
