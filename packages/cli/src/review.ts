@@ -148,11 +148,61 @@ function checkTests(): StepResult {
   })
 }
 
-export function runReview(mode: 'quick' | 'full' | 'ai'): StepResult[] {
+async function checkAI(): Promise<StepResult> {
+  const name = 'AI code review'
+  try {
+    let diff = ''
+    try {
+      diff = execSync('git diff --cached 2>/dev/null', { stdio: 'pipe' }).toString().trim()
+      if (!diff) diff = execSync('git diff HEAD~1 HEAD 2>/dev/null', { stdio: 'pipe' }).toString().trim()
+    } catch { /* not a git repo */ }
+
+    if (!diff) {
+      return { name, status: 'skip', message: 'No staged changes or recent commits to review' }
+    }
+
+    const truncatedDiff = diff.length > 8000 ? diff.slice(0, 8000) + '\n... (truncated)' : diff
+
+    const prompt = `You are a code reviewer. Review this git diff and identify: bugs, security issues, missing error handling, and code quality issues.
+
+Return ONLY a JSON object: {"issues": [{"severity": "error"|"warning"|"info", "message": "short description"}], "summary": "one sentence"}
+
+Diff:
+\`\`\`
+${truncatedDiff}
+\`\`\``
+
+    const { callWithAutoFallback } = await import('./free-tiers.js')
+    const { text } = await callWithAutoFallback(prompt, 'You are a concise code reviewer. Return only valid JSON.')
+
+    let parsed: { issues: Array<{ severity: string; message: string }>; summary: string }
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { issues: [], summary: text.slice(0, 100) }
+    } catch {
+      return { name, status: 'warn', message: text.slice(0, 120) }
+    }
+
+    const errors = (parsed.issues || []).filter(i => i.severity === 'error')
+    const warnings = (parsed.issues || []).filter(i => i.severity === 'warning')
+
+    if (errors.length > 0) {
+      return { name, status: 'fail', message: `${errors.length} error${errors.length > 1 ? 's' : ''}: ${errors[0].message}` }
+    }
+    if (warnings.length > 0) {
+      return { name, status: 'warn', message: `${warnings.length} warning${warnings.length > 1 ? 's' : ''}: ${warnings[0].message}` }
+    }
+    return { name, status: 'ok', message: parsed.summary || 'No issues found' }
+  } catch (e: any) {
+    return { name, status: 'fail', message: e.message?.slice(0, 120) || 'AI review failed' }
+  }
+}
+
+export async function runReview(mode: 'quick' | 'full' | 'ai'): Promise<StepResult[]> {
   if (mode === 'ai') {
-    console.log(`\n${COLORS.yellow}AI review requires provider config.${COLORS.reset}`)
-    console.log(`${COLORS.dim}Configure with: rex providers${COLORS.reset}\n`)
-    return []
+    log.info('Starting AI review')
+    const result = await checkAI()
+    return [result]
   }
 
   log.info(`Starting review (mode: ${mode})`)

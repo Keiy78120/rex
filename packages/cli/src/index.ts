@@ -1819,7 +1819,7 @@ async function main() {
       const mode = process.argv.includes('--ai') ? 'ai' as const
         : process.argv.includes('--full') ? 'full' as const
         : 'quick' as const
-      const results = runReview(mode)
+      const results = await runReview(mode)
       printReviewResults(results, jsonFlag)
       break
     }
