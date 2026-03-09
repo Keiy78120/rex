@@ -609,12 +609,16 @@ class _FreeTiersSection extends StatelessWidget {
                   final name = tier['name'] as String? ?? '';
                   final model = tier['defaultModel'] as String? ?? '';
                   final rpm = tier['rpmLimit'];
+                  final fails = (tier['consecutiveFails'] as num?)?.toInt() ?? 0;
 
                   RexChipStatus chipStatus;
                   String chipLabel;
                   if (blocked) {
                     chipStatus = RexChipStatus.error;
-                    chipLabel = 'rate-limited';
+                    chipLabel = 'disabled 30m';
+                  } else if (fails > 0 && available) {
+                    chipStatus = RexChipStatus.warning;
+                    chipLabel = '${fails}x fail';
                   } else if (available) {
                     chipStatus = RexChipStatus.ok;
                     chipLabel = name == 'Ollama' ? 'local' : 'configured';
