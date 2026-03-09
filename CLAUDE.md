@@ -667,6 +667,17 @@ rex doctor --fix     # Auto-fix then health check
 | **CI: tsc --noEmit** — type checking blocks CI on errors | `.github/workflows/ci.yml` |
 | **README update** — Commander/Fleet/Specialists/Comms naming + 10 modules (background agent) | `README.md` |
 
+### ✅ Terminé (session 2026-03-14 — curious memory pattern detection)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| `detectMemoryPatterns()` — pure SQL scan on memory DB (14 patterns: TypeError, ENOENT, unsafe cast, etc.) | `curious.ts` |
+| `'pattern'` type added to `Discovery` union — 🔁 Recurring Patterns as first-class discovery type | `curious.ts` |
+| `seenPatterns` cache field — tracks previously reported patterns to compute `isNew` correctly | `curious.ts` |
+| `better-sqlite3` direct query — readonly DB open, closes after scan, 0 LLM, 0 HTTP | `curious.ts` |
+| Flutter Curious page: 🔁 Patterns filter tab + patterns shown first in 'all' view | `curious_page.dart` |
+| Phase 3 heading updated — `🔄 IN PROGRESS` → `✅ DONE` (all items were already done) | `CLAUDE.md` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 DONE ✅, Phase 4 (LATER)**:
@@ -720,7 +731,7 @@ CLI, Gateway Telegram, Memory, Flutter app, Doctor, Daemon, Agents, MCP registry
 | **Hub token security** | ✅ DONE | Auto-génère + persiste REX_HUB_TOKEN au 1er démarrage, dashboard public |
 | **Proactive session management** | ✅ DONE | auto-compact 75%, recovery-state.json, rex-launcher.ts |
 
-### Phase 3 — Hub & Multi-node (🔄 IN PROGRESS)
+### Phase 3 — Hub & Multi-node (✅ DONE)
 
 | Tache | Priorite | Detail |
 |-------|----------|--------|
