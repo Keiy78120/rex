@@ -1,0 +1,13 @@
+node_modules
+packages/*/node_modules
+packages/flutter_app
+packages/cli/dist
+**/.git
+**/*.log
+**/coverage
+**/.DS_Store
+memory/
+activity/
+.env
+.env.*
+!.env.example

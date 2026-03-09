@@ -1,0 +1,52 @@
+# VPS deployment with Traefik reverse proxy + HTTPS
+# Usage: docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d
+
+services:
+  rex-hub:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rex.rule=Host(`${REX_DOMAIN}`)"
+      - "traefik.http.routers.rex.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.rex.entrypoints=websecure"
+      - "traefik.http.services.rex.loadbalancer.server.port=3117"
+    networks:
+      - rex-network
+
+  ollama:
+    networks:
+      - rex-network
+    # Uncomment if GPU available:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  traefik:
+    image: traefik:v3
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/certs
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/certs/acme.json
+    networks:
+      - rex-network
+    restart: unless-stopped
+
+volumes:
+  traefik-certs:
+
+networks:
+  rex-network:

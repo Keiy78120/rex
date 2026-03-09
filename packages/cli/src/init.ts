@@ -734,10 +734,10 @@ fi
       matcher: 'Bash',
     },
     {
-      file: 'test-protect-guard.sh',
-      event: 'PostToolUse',
-      desc: 'Test assertion protector',
-      matcher: 'Edit|Write',
+      file: 'secret-guard.sh',
+      event: 'PreToolUse',
+      desc: 'Secret/API key leak prevention (BLOCK)',
+      matcher: 'Write|Edit',
     },
     {
       file: 'session-summary.sh',
@@ -746,15 +746,10 @@ fi
       matcher: undefined,
     },
     {
-      file: 'ui-checklist-guard.sh',
+      // Combined guard: test-protect + ui-checklist + scope + any-type + console-log
+      file: 'post-edit-guard.sh',
       event: 'PostToolUse',
-      desc: 'UI states checklist (loading/error/empty)',
-      matcher: 'Edit|Write',
-    },
-    {
-      file: 'scope-guard.sh',
-      event: 'PostToolUse',
-      desc: 'Scope creep detector',
+      desc: 'Combined edit guard (test, UI states, scope, any-type, console.log)',
       matcher: 'Edit|Write',
     },
     {

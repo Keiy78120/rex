@@ -136,8 +136,13 @@ async function main() {
     }
 
     case 'init': {
-      const { init } = await import('./init.js')
-      await init()
+      if (process.argv.includes('--docker')) {
+        const { generateDockerCompose } = await import('./docker.js')
+        await generateDockerCompose()
+      } else {
+        const { init } = await import('./init.js')
+        await init()
+      }
       break
     }
 
@@ -1885,6 +1890,7 @@ ${COLORS.bold}Launch:${COLORS.reset}
 ${COLORS.bold}Commands:${COLORS.reset}
   rex install         One-command setup (init + setup + audit)
   rex init            Setup REX (guards, hooks, MCP, startup)
+  rex init --docker   Generate docker-compose.local.yml + .env.docker for VPS deployment
   rex audit           Run integration audit checks
   rex doctor          Full health check (9 categories)
   rex doctor --fix    Auto-fix common issues then check
