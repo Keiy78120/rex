@@ -196,6 +196,50 @@ async function fetchAwesomeMcpServers(): Promise<Array<{ name: string; descripti
   }
 }
 
+// ── mcpservers.org source ─────────────────────────────────────────────────────
+
+async function fetchMcpServersOrg(): Promise<Array<{ name: string; description: string; url: string }>> {
+  try {
+    // mcpservers.org exposes a JSON API at /api/servers
+    const res = await fetch('https://mcpservers.org/api/servers', {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'User-Agent': 'rex-curious/1.0', 'Accept': 'application/json' },
+    })
+    if (res.ok) {
+      const data = await res.json() as Array<{ name?: string; title?: string; description?: string; url?: string; github?: string }>
+      if (Array.isArray(data) && data.length > 0) {
+        return data.slice(0, 20).map(s => ({
+          name: s.name ?? s.title ?? 'unknown',
+          description: s.description ?? '',
+          url: s.url ?? s.github ?? 'https://mcpservers.org',
+        }))
+      }
+    }
+
+    // Fallback: parse HTML for server links
+    const htmlRes = await fetch('https://mcpservers.org', {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'User-Agent': 'rex-curious/1.0' },
+    })
+    if (!htmlRes.ok) return []
+    const html = await htmlRes.text()
+
+    const results: Array<{ name: string; description: string; url: string }> = []
+    const linkRe = /href="(https?:\/\/github\.com\/[^"]+)"[^>]*>([^<]{3,80})</g
+    let m: RegExpExecArray | null
+    while ((m = linkRe.exec(html)) !== null && results.length < 15) {
+      const url = m[1]
+      const name = m[2].trim()
+      if (name && url && !results.some(r => r.url === url)) {
+        results.push({ name, description: '', url })
+      }
+    }
+    return results
+  } catch {
+    return []
+  }
+}
+
 // ── RSS / Atom feed fetcher (HuggingFace blog, Simon Willison) ───────────────
 
 async function fetchRssFeed(feedUrl: string, source: string): Promise<Array<{ title: string; url: string; summary: string; source: string }>> {
@@ -441,12 +485,13 @@ export async function runCurious(opts: { silent?: boolean } = {}): Promise<Curio
   discoveries.push(...openLoops)
 
   // Run all fetches in parallel
-  const [ollamaLibrary, installedModels, mcpRepos, aiRepos, awesomeMcps, hnStories, hfBlog, simonBlog, localLlama] = await Promise.all([
+  const [ollamaLibrary, installedModels, mcpRepos, aiRepos, awesomeMcps, mcpServersOrg, hnStories, hfBlog, simonBlog, localLlama] = await Promise.all([
     fetchOllamaLibrary(),
     fetchInstalledOllamaModels(),
     fetchGitHubTrending('mcp-server'),
     fetchGitHubTrending('ai-agent'),
     fetchAwesomeMcpServers(),
+    fetchMcpServersOrg(),
     fetchHackerNews(),
     fetchRssFeed('https://huggingface.co/blog/feed.xml', 'huggingface.co'),
     fetchRssFeed('https://simonwillison.net/atom/entries/', 'simonwillison.net'),
@@ -475,8 +520,9 @@ export async function runCurious(opts: { silent?: boolean } = {}): Promise<Curio
   }
   cache.seenModels = [...new Set([...cache.seenModels, ...ollamaLibrary.map(m => m.name.split(':')[0])])]
 
-  // ── MCPs: trending repos + awesome-mcp-servers ── [DISCOVERY]
-  const allMcpRepos = [...mcpRepos, ...aiRepos, ...awesomeMcps]
+  // ── MCPs: trending repos + awesome-mcp-servers + mcpservers.org ── [DISCOVERY]
+  const mcpServersOrgNormalized = mcpServersOrg.map(s => ({ name: s.name, description: s.description, url: s.url, stars: 0 }))
+  const allMcpRepos = [...mcpRepos, ...aiRepos, ...awesomeMcps, ...mcpServersOrgNormalized]
   const seenRepoNames = new Set<string>()
   for (const repo of allMcpRepos) {
     if (seenRepoNames.has(repo.name)) continue
@@ -565,6 +611,66 @@ export async function runCurious(opts: { silent?: boolean } = {}): Promise<Curio
   if (!silent) log.info(`Discovery complete: ${discoveries.length} items, ${newCount} new`)
 
   return { discoveries, newCount, checkedAt: cache.lastRun }
+}
+
+// ── Public API: contextual signal lookup (for REX Identity Layer) ─────────────
+
+/**
+ * Returns OPEN_LOOP signals from memory that are relevant to the given message.
+ * Pure SQL query — no cache update, no LLM. Used by gateway before each response.
+ */
+export function getRelevantSignals(message: string): Discovery[] {
+  if (!existsSync(MEMORY_DB_PATH)) return []
+
+  // Extract meaningful keywords from message (>3 chars, unique, first 8)
+  const keywords = [...new Set(
+    message.toLowerCase().split(/\W+/).filter(w => w.length > 3),
+  )].slice(0, 8)
+  if (keywords.length === 0) return []
+
+  const discoveries: Discovery[] = []
+  const now = new Date()
+  const cutoff = new Date(now.getTime() - OPEN_LOOP_DAYS * 24 * 60 * 60 * 1000).toISOString()
+
+  try {
+    const db = new Database(MEMORY_DB_PATH, { readonly: true })
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
+    if (!tables.some(t => t.name === 'memories')) { db.close(); return [] }
+
+    for (const keyword of keywords.slice(0, 5)) {
+      for (const pattern of OPEN_LOOP_PATTERNS) {
+        const rows = db.prepare(
+          `SELECT content, created_at FROM memories WHERE content LIKE ? AND content LIKE ? AND created_at < ? LIMIT 2`
+        ).all(`%${pattern}%`, `%${keyword}%`, cutoff) as Array<{ content: string; created_at: string }>
+
+        for (const row of rows) {
+          const snippet = row.content.slice(0, 100).replace(/\n/g, ' ')
+          const daysAgo = Math.round(
+            (now.getTime() - new Date(row.created_at).getTime()) / (24 * 60 * 60 * 1000)
+          )
+          discoveries.push({
+            type: 'open_loop',
+            signalType: 'OPEN_LOOP',
+            title: `"${pattern}" related to "${keyword}" (${daysAgo}d old)`,
+            detail: snippet,
+            source: 'memory',
+            seenAt: now.toISOString(),
+            isNew: false,
+          })
+        }
+      }
+    }
+
+    db.close()
+  } catch {}
+
+  // Deduplicate by detail snippet
+  const seen = new Set<string>()
+  return discoveries.filter(d => {
+    if (seen.has(d.detail)) return false
+    seen.add(d.detail)
+    return true
+  }).slice(0, 5)
 }
 
 // ── CLI display ───────────────────────────────────────────────────────────────

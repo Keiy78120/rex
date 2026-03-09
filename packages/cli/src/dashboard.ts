@@ -69,6 +69,22 @@ export interface AlertEntry {
   message: string
 }
 
+export interface ClientSummaryEntry {
+  id: string
+  name: string
+  trade: string
+  plan: string
+  status: string
+}
+
+export interface ClientsSummary {
+  total: number
+  active: number
+  paused: number
+  provisioning: number
+  clients: ClientSummaryEntry[]
+}
+
 export interface HQSnapshot {
   capturedAt: string
   fleet: FleetSummary
@@ -76,6 +92,7 @@ export interface HQSnapshot {
   memory: MemorySummary
   agents: AgentSummary
   curious: CuriousSummary
+  clients: ClientsSummary
   alerts: AlertEntry[]
 }
 
@@ -202,6 +219,30 @@ async function getCurious(): Promise<CuriousSummary> {
   }
 }
 
+// ── Clients ───────────────────────────────────────────────────────────────
+
+async function getClients(): Promise<ClientsSummary> {
+  const indexPath = join(REX_DIR, 'clients', 'index.json')
+  const list = readJson<Array<Record<string, unknown>>>(indexPath) ?? []
+  const visible = list.filter(c => c['status'] !== 'removed')
+  const active       = visible.filter(c => c['status'] === 'active').length
+  const paused       = visible.filter(c => c['status'] === 'paused').length
+  const provisioning = visible.filter(c => c['status'] === 'provisioning').length
+  return {
+    total: visible.length,
+    active,
+    paused,
+    provisioning,
+    clients: visible.map(c => ({
+      id:     (c['id']    as string) ?? '',
+      name:   (c['name']  as string) ?? '',
+      trade:  (c['trade'] as string) ?? '',
+      plan:   (c['plan']  as string) ?? '',
+      status: (c['status'] as string) ?? '',
+    })),
+  }
+}
+
 // ── Alerts ───────────────────────────────────────────────────────────────
 
 function buildAlerts(
@@ -236,12 +277,13 @@ function buildAlerts(
 export async function getHQSnapshot(): Promise<HQSnapshot> {
   log.debug('building HQ snapshot')
 
-  const [fleet, budget, memory, agents, curious] = await Promise.all([
+  const [fleet, budget, memory, agents, curious, clients] = await Promise.all([
     getFleet(),
     getBudget(),
     getMemory(),
     getAgents(),
     getCurious(),
+    getClients(),
   ])
 
   const alerts = buildAlerts(fleet, budget, memory)
@@ -253,6 +295,7 @@ export async function getHQSnapshot(): Promise<HQSnapshot> {
     memory,
     agents,
     curious,
+    clients,
     alerts,
   }
 }
@@ -284,6 +327,17 @@ export async function printHQStatus(): Promise<void> {
   // Curious
   const c = snap.curious
   console.log(`  ${BOLD}CURIOUS${RST} ${c.newDiscoveries} new discoveries`)
+
+  // Clients
+  const cl = snap.clients
+  if (cl.total > 0) {
+    const clLine = [
+      cl.active > 0       ? `${G}${cl.active} active${RST}` : '',
+      cl.paused > 0       ? `${DIM}${cl.paused} paused${RST}` : '',
+      cl.provisioning > 0 ? `${Y}${cl.provisioning} provisioning${RST}` : '',
+    ].filter(Boolean).join('  ')
+    console.log(`  ${BOLD}CLIENTS${RST} ${cl.total} total  ${clLine}`)
+  }
 
   // Alerts
   if (snap.alerts.length > 0) {

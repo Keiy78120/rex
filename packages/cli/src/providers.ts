@@ -6,7 +6,7 @@
  */
 
 import { execSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createLogger } from './logger.js'
 import { FREE_TIER_PROVIDERS, getApiKey } from './free-tiers.js'
@@ -220,7 +220,147 @@ export function createDefaultRegistry(): ProviderRegistry {
     },
   })
 
+  // ── Codex (ChatGPT/Plus OAuth) — background worker via device-code flow ──────
+  registry.register('codex-oauth', {
+    name: 'Codex OAuth',
+    type: 'llm',
+    costTier: 'subscription',
+    capabilities: ['code', 'agent', 'background'],
+    details: 'ChatGPT Plus/Pro — device-code OAuth',
+    check: async () => {
+      const credPath = join(HOME, '.rex', 'credentials', 'codex-token.json')
+      if (!existsSync(credPath)) return false
+      try {
+        const cred = JSON.parse(readFileSync(credPath, 'utf-8'))
+        if (!cred.access_token) return false
+        // Token expires check (if exp field present)
+        if (cred.expires_at) {
+          const exp = new Date(cred.expires_at).getTime()
+          if (Date.now() > exp) return false
+        }
+        return true
+      } catch {
+        return false
+      }
+    },
+  })
+
   return registry
+}
+
+// ── Codex OAuth device-code flow (replicates OpenClaw PR #32065 pattern) ──────
+
+const CODEX_CLIENT_ID = 'openai-codex'
+const CODEX_DEVICE_CODE_URL = 'https://auth.openai.com/oauth/device/code'
+const CODEX_TOKEN_URL = 'https://auth.openai.com/oauth/token'
+const CODEX_SCOPE = 'openid profile email offline_access'
+const CODEX_CRED_DIR = join(process.env.HOME || '~', '.rex', 'credentials')
+const CODEX_CRED_PATH = join(CODEX_CRED_DIR, 'codex-token.json')
+
+export interface CodexDeviceCodeResponse {
+  device_code: string
+  user_code: string
+  verification_uri: string
+  expires_in: number
+  interval: number
+}
+
+export interface CodexTokenResponse {
+  access_token: string
+  token_type: string
+  refresh_token?: string
+  expires_in?: number
+  scope?: string
+}
+
+/**
+ * Start Codex device-code OAuth flow.
+ * Returns device_code info for the user to visit the verification URL.
+ * Follows OpenClaw PR #32065 pattern.
+ */
+export async function startCodexDeviceFlow(): Promise<CodexDeviceCodeResponse> {
+  const res = await fetch(CODEX_DEVICE_CODE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: CODEX_CLIENT_ID,
+      scope: CODEX_SCOPE,
+    }),
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Codex device-code request failed: ${res.status} ${body.slice(0, 200)}`)
+  }
+  return res.json() as Promise<CodexDeviceCodeResponse>
+}
+
+/**
+ * Poll for Codex OAuth token after user completes device-code flow.
+ * Polls every `interval` seconds until token received or expired.
+ */
+export async function pollCodexToken(deviceCode: string, intervalSec: number, timeoutSec: number): Promise<CodexTokenResponse> {
+  const deadline = Date.now() + timeoutSec * 1000
+  const pollMs = Math.max(intervalSec, 5) * 1000
+
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, pollMs))
+    try {
+      const res = await fetch(CODEX_TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: CODEX_CLIENT_ID,
+          device_code: deviceCode,
+          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        }),
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (res.ok) {
+        const token = await res.json() as CodexTokenResponse
+        return token
+      }
+      // authorization_pending → keep polling
+      const err = await res.json().catch(() => ({})) as { error?: string }
+      if (err.error === 'authorization_pending') continue
+      if (err.error === 'slow_down') { await new Promise(r => setTimeout(r, 5000)); continue }
+      throw new Error(`Codex token poll error: ${err.error ?? res.status}`)
+    } catch (e) {
+      if ((e as Error).message?.includes('Codex token poll error')) throw e
+    }
+  }
+  throw new Error('Codex OAuth timed out — user did not complete device-code flow')
+}
+
+/**
+ * Persist Codex OAuth credentials to ~/.rex/credentials/codex-token.json
+ */
+export function saveCodexCredentials(token: CodexTokenResponse): void {
+  mkdirSync(CODEX_CRED_DIR, { recursive: true })
+  const expires_at = token.expires_in
+    ? new Date(Date.now() + token.expires_in * 1000).toISOString()
+    : undefined
+  writeFileSync(CODEX_CRED_PATH, JSON.stringify({ ...token, expires_at }, null, 2), 'utf-8')
+  log.info(`Codex credentials saved to ${CODEX_CRED_PATH}`)
+}
+
+/**
+ * Load Codex access token from credentials file.
+ * Returns null if not found or expired.
+ */
+export function loadCodexToken(): string | null {
+  if (!existsSync(CODEX_CRED_PATH)) return null
+  try {
+    const cred = JSON.parse(readFileSync(CODEX_CRED_PATH, 'utf-8'))
+    if (!cred.access_token) return null
+    if (cred.expires_at && Date.now() > new Date(cred.expires_at).getTime()) {
+      log.warn('Codex token expired — re-run `rex codex auth` to refresh')
+      return null
+    }
+    return cred.access_token as string
+  } catch {
+    return null
+  }
 }
 
 // ── Pretty Print ───────────────────────────────────────

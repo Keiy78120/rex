@@ -417,6 +417,27 @@ export async function removeClient(id: string, opts: { purge?: boolean } = {}): 
   }
 }
 
+// ── Logs / Stop ───────────────────────────────────────────────────────────────
+
+export async function getClientLogs(id: string, lines = 100): Promise<string> {
+  const client = getClient(id)
+  if (!client) throw new Error(`Client ${id} not found`)
+  try {
+    const r = await execFileAsync(
+      'docker',
+      ['compose', '-f', client.docker.composeFile, 'logs', '--tail', String(lines)],
+      { timeout: 15_000 },
+    )
+    return r.stdout
+  } catch (e) {
+    return `Docker logs unavailable: ${(e as Error).message}`
+  }
+}
+
+export async function stopClient(id: string): Promise<void> {
+  await pauseClient(id)
+}
+
 // ── Print helpers ─────────────────────────────────────────────────────────────
 
 const C = {
