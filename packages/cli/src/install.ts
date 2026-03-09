@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { platform, totalmem } from 'node:os'
+import { existsSync, appendFileSync } from 'node:fs'
+import { platform, totalmem, homedir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { init, installDaemonAgent, installGatewayAgent, installApp } from './init.js'
@@ -366,6 +366,37 @@ function printDryRun(profile: InstallProfile, res: ResourceReport) {
   console.log(`\n  ${COLORS.dim}Run without --dry-run to execute.${COLORS.reset}\n`)
 }
 
+const INSTALL_LOG = join(homedir(), '.claude', 'rex', 'install.log')
+
+function installLog(msg: string) {
+  try {
+    appendFileSync(INSTALL_LOG, `[${new Date().toISOString()}] ${msg}\n`)
+  } catch {}
+}
+
+function checkPort(port: number): boolean {
+  try {
+    execSync(`lsof -ti :${port}`, { stdio: 'ignore' })
+    return true // port in use
+  } catch {
+    return false // port free
+  }
+}
+
+function checkPortConflicts() {
+  const conflicts: string[] = []
+  const ports: Array<{ port: number; service: string }> = [
+    { port: 11434, service: 'Ollama' },
+    { port: 7420, service: 'REX Hub' },
+  ]
+  for (const { port, service } of ports) {
+    if (checkPort(port)) {
+      conflicts.push(`Port ${port} (${service}) already in use`)
+    }
+  }
+  return conflicts
+}
+
 export async function install(options: InstallOptions = {}) {
   const profileFlag = options.profile
     || process.argv.find(a => a.startsWith('--profile='))?.split('=')[1] as InstallProfile | undefined
@@ -380,13 +411,16 @@ export async function install(options: InstallOptions = {}) {
   console.log(`${line}`)
 
   ensureRexDirs()
+  installLog(`=== REX install started (dryRun=${dryRun}) ===`)
 
   // 1. Detect resources
   const res = detectResources()
   printResources(res)
+  installLog(`Resources: os=${res.os} ram=${res.ramGB}GB node=${res.node} git=${res.git} ollama=${res.ollama} gpu=${res.gpu}`)
 
   if (!res.node) {
     console.log(`\n  ${COLORS.red}Node.js is required. Install it first.${COLORS.reset}\n`)
+    installLog('ERROR: Node.js not found — aborting')
     process.exitCode = 1
     return
   }
@@ -407,27 +441,43 @@ export async function install(options: InstallOptions = {}) {
   if (profile === 'desktop-full' && res.os !== 'darwin') {
     warn('desktop-full profile targets macOS — Flutter app step will be skipped')
   }
+  installLog(`Profile selected: ${profile}`)
 
   // Dry run: print plan and exit
   if (dryRun) {
     printDryRun(profile, res)
+    installLog(`Dry run complete — no changes made`)
     return
+  }
+
+  // Check port conflicts before executing
+  const conflicts = checkPortConflicts()
+  if (conflicts.length > 0) {
+    console.log(`\n  ${COLORS.bold}Port Conflict Check${COLORS.reset}`)
+    for (const c of conflicts) {
+      warn(c)
+    }
   }
 
   const p = PROFILES[profile]
   log.info(`Starting install with profile: ${profile}`)
+  installLog(`Starting steps: ${p.steps.join(', ')}`)
 
   // 3. Execute steps
   for (const step of p.steps) {
+    installLog(`Step start: ${step}`)
     await runStep(step, res)
+    installLog(`Step done: ${step}`)
   }
 
   // 4. Post-install doctor
   console.log(`\n  ${COLORS.bold}Post-install verification${COLORS.reset}`)
   try {
     await audit({ strict: false })
+    installLog('Post-install audit: pass')
   } catch {
     warn('Post-install audit had warnings — run rex doctor for details')
+    installLog('Post-install audit: warnings')
   }
 
   // 5. Save profile in config
@@ -437,4 +487,5 @@ export async function install(options: InstallOptions = {}) {
 
   // 6. Summary
   printSummary(profile, res)
+  installLog(`=== Install complete: profile=${profile} ===`)
 }
