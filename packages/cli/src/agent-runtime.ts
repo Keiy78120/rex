@@ -21,6 +21,7 @@ import { createLogger } from './logger.js'
 import { detectIntent } from './project-intent.js'
 import { pickModel } from './router.js'
 import { getRexTools, getToolsSummary, executeToolCall } from './tool-adapter.js'
+import { REX_SYSTEM_PROMPT } from './rex-identity.js'
 
 const log = createLogger('AGENTS:agent-runtime')
 
@@ -443,7 +444,7 @@ export async function runAgent(
   const toolsSummary = injectTools ? `\n\nAvailable tools:\n${getToolsSummary()}` : ''
   messages.push({
     role: 'system',
-    content: `You are an AI assistant with access to REX tools. REX is a developer companion system. Use tools when needed to complete the task efficiently.${toolsSummary}`,
+    content: `${REX_SYSTEM_PROMPT}\n\nAvailable tools:${toolsSummary}`,
   })
 
   // Context injection (relevant memory snippets)
@@ -509,7 +510,7 @@ export async function streamAgent(
   const toolsSummary = injectTools ? `\n\nAvailable tools:\n${getToolsSummary()}` : ''
   messages.push({
     role: 'system',
-    content: `You are an AI assistant with access to REX tools. REX is a developer companion system. Use tools when needed to complete the task efficiently.${toolsSummary}`,
+    content: `${REX_SYSTEM_PROMPT}\n\nAvailable tools:${toolsSummary}`,
   })
   if (injectContext) {
     try {

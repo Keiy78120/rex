@@ -2704,6 +2704,60 @@ async function handleText(token: string, chatId: string, text: string, from: str
     return
   }
 
+  if (cmd === '/meeting' || cmd === '/meetings') {
+    const loading = await send(token, chatId, '📝 Fetching recent meetings…')
+    try {
+      const { listMeetings } = await import('./meeting.js')
+      const meetings = listMeetings(5)
+      if (meetings.length === 0) {
+        await editMessage(token, chatId, loading.message_id,
+          '📝 *Meetings*\n\nNo meetings ingested yet\\.\nUse `rex meeting ingest <file>` from CLI\\.')
+      } else {
+        const lines = [`📝 *Recent Meetings \\(${meetings.length}\\)*`, '']
+        for (const m of meetings) {
+          const actions = m.actionItems.length > 0 ? ` · ${m.actionItems.length} actions` : ''
+          lines.push(`📅 *${m.title.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&').slice(0, 50)}*`)
+          lines.push(`   ${m.date} · ${m.source}${actions}`)
+          if (m.summary) lines.push(`   ${m.summary.slice(0, 80).replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&')}…`)
+          lines.push('')
+        }
+        await editMessage(token, chatId, loading.message_id, lines.join('\n'))
+      }
+    } catch (e: any) {
+      await editMessage(token, chatId, loading.message_id, `⚠️ Meetings failed: ${e.message?.slice(0, 100)}`)
+    }
+    logCommand(from, cmd, 'shown')
+    return
+  }
+
+  if (cmd === '/actions') {
+    const loading = await send(token, chatId, '✅ Fetching action items…')
+    try {
+      const { listMeetings } = await import('./meeting.js')
+      const meetings = listMeetings(10)
+      const actions: Array<{ title: string; action: string }> = []
+      for (const m of meetings) {
+        for (const a of m.actionItems) {
+          actions.push({ title: m.title, action: a })
+        }
+      }
+      if (actions.length === 0) {
+        await editMessage(token, chatId, loading.message_id, '✅ *Action Items*\n\nNo action items from recent meetings\\.')
+      } else {
+        const lines = [`✅ *Action Items \\(${actions.length}\\)*`, '']
+        for (const a of actions.slice(0, 10)) {
+          lines.push(`• ${a.action.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&').slice(0, 100)}`)
+          lines.push(`  _${a.title.slice(0, 40).replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&')}_`)
+        }
+        await editMessage(token, chatId, loading.message_id, lines.join('\n'))
+      }
+    } catch (e: any) {
+      await editMessage(token, chatId, loading.message_id, `⚠️ Actions failed: ${e.message?.slice(0, 100)}`)
+    }
+    logCommand(from, cmd, 'shown')
+    return
+  }
+
   if (cmd === '/mesh' || cmd === '/nodes' || cmd === '/fleet') {
     const loading = await send(token, chatId, '🌐 Checking fleet status…')
     try {
@@ -2852,8 +2906,8 @@ async function handleText(token: string, chatId: string, text: string, from: str
     let response: string
 
     if (state.mode === 'qwen') {
-      // REX agent runtime: auto-picks model via router, runs tool-calling loop, streams chunks
-      const { streamAgent } = await import('./agent-runtime.js')
+      // REX Identity Layer: 5-step pipeline (memory → events → intent → script-first → LLM)
+      const { rexIdentityPipeline } = await import('./rex-identity.js')
 
       // Send initial message to obtain message_id for live edits
       const initMsg = await tg(token, 'sendMessage', {
@@ -2867,7 +2921,7 @@ async function handleText(token: string, chatId: string, text: string, from: str
       let lastEdit = 0
       const EDIT_INTERVAL = 800 // ms — Telegram rate limit
 
-      const result = await streamAgent(text, {
+      const result = await rexIdentityPipeline(text, {
         onChunk: async (chunk: string) => {
           accumulated += chunk
           const now = Date.now()
@@ -2880,9 +2934,11 @@ async function handleText(token: string, chatId: string, text: string, from: str
 
       response = result.response.trim() || '⚠️ No response generated'
 
-      // Final edit with complete response + routing info footer
-      const modelLabel = result.model?.split('/').pop() ?? result.model
-      const footer = `\n\n_[${modelLabel} · ${result.turns}t · ${Math.round(result.durationMs / 1000)}s]_`
+      // Final edit with complete response + routing footer
+      const sourceLabel = result.usedLLM
+        ? `${(result.model ?? 'llm').split('/').pop()} · LLM`
+        : 'script'
+      const footer = `\n\n_[${sourceLabel} · ${Math.round(result.durationMs / 1000)}s]_`
       const finalText = (response + footer).slice(0, 4096)
 
       if (msgId) {

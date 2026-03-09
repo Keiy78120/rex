@@ -250,6 +250,118 @@ export class DiscordAdapter implements ChannelAdapter {
   }
 }
 
+// ─── SlackAdapter ─────────────────────────────────────────────────────────────
+
+interface SlackWebhookPayload {
+  text?: string;
+  blocks?: Array<{
+    type: string;
+    text?: { type: string; text: string };
+  }>;
+  username?: string;
+  icon_emoji?: string;
+}
+
+interface SlackEventPayload {
+  type?: string;
+  event?: {
+    type?: string;
+    text?: string;
+    user?: string;
+    ts?: string;
+    channel?: string;
+  };
+}
+
+/**
+ * Slack adapter using Incoming Webhook URL for send (outbound-only).
+ * Webhook URL stored as `token` — full https://hooks.slack.com/services/... URL.
+ * Receive (normalize) parses Slack Events API payloads (for future bot support).
+ */
+export class SlackAdapter implements ChannelAdapter {
+  readonly name = 'slack';
+  private readonly webhookUrl: string;
+
+  constructor(token: string) {
+    this.webhookUrl = token;
+  }
+
+  isAvailable(): boolean {
+    return !!this.webhookUrl && this.webhookUrl.startsWith('https://hooks.slack.com/');
+  }
+
+  async send(_to: string, msg: OutboundMessage): Promise<void> {
+    if (!this.isAvailable()) throw new Error('Slack Incoming Webhook URL not configured');
+
+    // Strip Telegram Markdown escaping for Slack (Slack uses mrkdwn)
+    const text = msg.text
+      .replace(/\\\./g, '.')
+      .replace(/\\!/g, '!')
+      .replace(/\\-/g, '-')
+      .replace(/\*\*(.*?)\*\*/g, '*$1*')  // bold: **text** → *text*
+      .slice(0, 4000);
+
+    const payload: SlackWebhookPayload = {
+      username: 'REX',
+      icon_emoji: ':robot_face:',
+      text,
+    };
+
+    // If buttons provided, convert to Slack Block Kit actions (text-only for simplicity)
+    if (msg.buttons && msg.buttons.length > 0) {
+      const buttonText = msg.buttons.flat().map(b => `• ${b.label}`).join('\n');
+      payload.text = `${text}\n\n${buttonText}`;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(this.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log.error(`Slack fetch error: ${message}`);
+      throw new Error(`Slack send failed: ${message}`);
+    }
+
+    // Slack returns plain text "ok" on success
+    const body = await response.text();
+    if (body !== 'ok') {
+      log.error(`Slack webhook error: ${body}`);
+      throw new Error(`Slack webhook error: ${body}`);
+    }
+
+    log.debug('Slack message sent');
+  }
+
+  normalize(raw: unknown): GatewayMessage | null {
+    if (!raw || typeof raw !== 'object') return null;
+
+    const payload = raw as Partial<SlackEventPayload>;
+
+    // Slack Events API format
+    if (payload.type === 'event_callback' && payload.event?.type === 'message') {
+      const event = payload.event;
+      if (!event.text) return null;
+
+      return {
+        channel: 'slack',
+        from: event.user ?? 'slack-user',
+        text: event.text,
+        ts: event.ts ? new Date(parseFloat(event.ts) * 1000).toISOString() : new Date().toISOString(),
+        meta: {
+          channel_id: event.channel,
+          slack_ts: event.ts,
+        },
+      };
+    }
+
+    return null;
+  }
+}
+
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
 export function createAdapter(channel: string, token: string): ChannelAdapter {
@@ -258,6 +370,8 @@ export function createAdapter(channel: string, token: string): ChannelAdapter {
       return new TelegramAdapter(token);
     case 'discord':
       return new DiscordAdapter(token);
+    case 'slack':
+      return new SlackAdapter(token);
     default:
       throw new Error(`Unknown gateway channel: ${channel}`);
   }
@@ -266,6 +380,7 @@ export function createAdapter(channel: string, token: string): ChannelAdapter {
 export function getAvailableAdapters(config: {
   telegram?: string;
   discord?: string;
+  slack?: string;
 }): ChannelAdapter[] {
   const adapters: ChannelAdapter[] = [];
 
@@ -275,13 +390,16 @@ export function getAvailableAdapters(config: {
   if (config.discord !== undefined) {
     adapters.push(new DiscordAdapter(config.discord));
   }
+  if (config.slack !== undefined) {
+    adapters.push(new SlackAdapter(config.slack));
+  }
 
   return adapters.filter((a) => a.isAvailable());
 }
 
 /**
  * Load all configured adapters from environment + settings.json.
- * Keys: REX_TELEGRAM_BOT_TOKEN, REX_DISCORD_WEBHOOK_URL.
+ * Keys: REX_TELEGRAM_BOT_TOKEN, REX_DISCORD_WEBHOOK_URL, REX_SLACK_WEBHOOK_URL.
  */
 export async function loadAdaptersFromEnv(): Promise<ChannelAdapter[]> {
   const { existsSync, readFileSync } = await import('node:fs');
@@ -299,6 +417,11 @@ export async function loadAdaptersFromEnv(): Promise<ChannelAdapter[]> {
 
   const telegramToken = process.env.REX_TELEGRAM_BOT_TOKEN ?? settingsEnv.REX_TELEGRAM_BOT_TOKEN ?? '';
   const discordWebhook = process.env.REX_DISCORD_WEBHOOK_URL ?? settingsEnv.REX_DISCORD_WEBHOOK_URL ?? '';
+  const slackWebhook = process.env.REX_SLACK_WEBHOOK_URL ?? settingsEnv.REX_SLACK_WEBHOOK_URL ?? '';
 
-  return getAvailableAdapters({ telegram: telegramToken || undefined, discord: discordWebhook || undefined });
+  return getAvailableAdapters({
+    telegram: telegramToken || undefined,
+    discord: discordWebhook || undefined,
+    slack: slackWebhook || undefined,
+  });
 }
