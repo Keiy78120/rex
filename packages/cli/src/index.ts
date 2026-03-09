@@ -387,6 +387,28 @@ async function main() {
       break
     }
 
+    case 'upgrade': {
+      const { applyMigrations, printMigrationStatus } = await import('./db-migrations.js')
+      const status = process.argv.includes('--status')
+      const dryRun = process.argv.includes('--dry-run')
+      if (status) {
+        printMigrationStatus()
+      } else {
+        if (dryRun) console.log('\x1b[2m[dry-run] No changes will be applied\x1b[0m\n')
+        const result = applyMigrations({ dryRun })
+        if (result.applied.length) {
+          console.log(`\x1b[32m✓\x1b[0m Applied ${result.applied.length} migration(s): v${result.applied.join(', v')}`)
+        } else if (!result.errors.length) {
+          console.log('\x1b[2mDatabase is up to date — no migrations pending\x1b[0m')
+        }
+        if (result.skipped.length) {
+          console.log(`\x1b[2m  Skipped ${result.skipped.length} already-applied migration(s)\x1b[0m`)
+        }
+        for (const err of result.errors) console.error(`\x1b[31m✗\x1b[0m ${err}`)
+      }
+      break
+    }
+
     case 'llm': {
       const prompt = process.argv.slice(3).join(' ')
       if (!prompt) {
@@ -3183,10 +3205,25 @@ async function main() {
         console.log('\x1b[2mCtrl+C to stop\x1b[0m')
         process.on('SIGINT', () => { console.log(`\nTokens used: ${getMockTokenCount()}`); process.exit(0) })
         await new Promise(() => {})  // keep alive
+      } else if (sub === 'aw' || sub === 'activitywatch') {
+        const { startMockAwServer, setMockIdleState, AW_MOCK_PORT } = await import('./mock-aw-server.js')
+        const port = parseInt(process.argv.find(a => a.startsWith('--port='))?.split('=')[1] ?? String(AW_MOCK_PORT), 10)
+        const state = (process.argv.find(a => a.startsWith('--state='))?.split('=')[1] ?? 'awake') as 'awake' | 'idle' | 'sleeping'
+        await startMockAwServer(port)
+        setMockIdleState(state)
+        console.log(`\x1b[32m✓\x1b[0m Mock AW server started on port ${port} (state: ${state})`)
+        console.log(`  Info:    http://localhost:${port}/api/0/info`)
+        console.log(`  Buckets: http://localhost:${port}/api/0/buckets`)
+        console.log(`  Health:  http://localhost:${port}/health`)
+        console.log('\x1b[2mCtrl+C to stop\x1b[0m')
+        process.on('SIGINT', () => { process.exit(0) })
+        await new Promise(() => {})  // keep alive
       } else {
         console.log('Usage:')
         console.log('  rex test mock            Start mock LLM server (OpenAI + Ollama compatible)')
         console.log('  rex test mock --port=N   Custom port (default: 11435)')
+        console.log('  rex test aw              Start mock ActivityWatch server (port 5600)')
+        console.log('  rex test aw --state=idle Simulate idle/sleeping state')
       }
       break
     }

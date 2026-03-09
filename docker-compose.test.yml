@@ -1,0 +1,119 @@
+# REX Test Stack
+#
+# Full REX stack in isolated test mode — no real API keys, no real Telegram.
+# Uses mock LLM server (port 11435) and mock AW server (port 5600).
+# All data stored in Docker volumes (discarded after `docker compose down -v`).
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   docker compose -f docker-compose.test.yml down -v   # clean teardown
+#
+# Environment:
+#   Copy .env.test.example → .env.test and fill in test-only values.
+#   NEVER use production keys here.
+
+services:
+
+  # ── Mock LLM Server (OpenAI + Ollama compatible) ────────────────────────────
+  mock-llm:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./packages/cli:/app
+    command: sh -c "npm install --silent && node dist/mock-llm-server.js"
+    environment:
+      REX_TEST_MODE: "true"
+      REX_MOCK_LLM_PORT: "11435"
+    ports:
+      - "11435:11435"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:11435/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Mock ActivityWatch Server ───────────────────────────────────────────────
+  mock-aw:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./packages/cli:/app
+    command: sh -c "node dist/mock-aw-server.js"
+    environment:
+      REX_TEST_MODE: "true"
+      REX_MOCK_AW_PORT: "5600"
+    ports:
+      - "5600:5600"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5600/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── REX Hub (test mode) ─────────────────────────────────────────────────────
+  rex-hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "7421:7420"      # offset by 1 to avoid prod conflict
+    volumes:
+      - rex-test-data:/data
+      - rex-test-memory:/root/.claude/rex
+    environment:
+      REX_MODE: hub
+      REX_TEST_MODE: "true"
+      REX_HUB_PORT: "7420"
+      REX_HUB_TOKEN: test-token-not-secret
+      # Mock endpoints
+      OLLAMA_URL: http://mock-llm:11435
+      REX_MOCK_LLM_URL: http://mock-llm:11435
+      REX_AW_URL: http://mock-aw:5600
+      # Fake Telegram (test bot won't fire real messages)
+      REX_TELEGRAM_BOT_TOKEN: ${REX_TEST_TELEGRAM_BOT_TOKEN:-test-bot-token}
+      REX_TELEGRAM_CHAT_ID: ${REX_TEST_TELEGRAM_CHAT_ID:-0}
+      # Disable real providers
+      GROQ_API_KEY: ""
+      OPENAI_API_KEY: ""
+      ANTHROPIC_API_KEY: ""
+      NODE_ENV: test
+    depends_on:
+      mock-llm:
+        condition: service_healthy
+      mock-aw:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7420/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── REX Daemon (test mode) ──────────────────────────────────────────────────
+  rex-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - rex-test-data:/data
+      - rex-test-memory:/root/.claude/rex
+    environment:
+      REX_MODE: daemon
+      REX_TEST_MODE: "true"
+      OLLAMA_URL: http://mock-llm:11435
+      REX_HUB_URL: http://rex-hub:7420
+      REX_HUB_TOKEN: test-token-not-secret
+      REX_TELEGRAM_BOT_TOKEN: ${REX_TEST_TELEGRAM_BOT_TOKEN:-test-bot-token}
+      REX_TELEGRAM_CHAT_ID: ${REX_TEST_TELEGRAM_CHAT_ID:-0}
+      GROQ_API_KEY: ""
+      OPENAI_API_KEY: ""
+      NODE_ENV: test
+    depends_on:
+      rex-hub:
+        condition: service_healthy
+    restart: on-failure
+
+volumes:
+  rex-test-data:
+    driver: local
+  rex-test-memory:
+    driver: local
