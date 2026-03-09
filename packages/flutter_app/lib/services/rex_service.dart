@@ -2455,10 +2455,36 @@ $transcript
   List<Map<String, dynamic>> _reviewResults = [];
   bool _isReviewing = false;
   String _reviewMode = 'quick';
+  bool _prePushGateEnabled = false;
 
   List<Map<String, dynamic>> get reviewResults => _reviewResults;
   bool get isReviewing => _isReviewing;
   String get reviewMode => _reviewMode;
+  bool get prePushGateEnabled => _prePushGateEnabled;
+
+  Future<void> checkPrePushGate() async {
+    try {
+      final output = await _runRexArgs(['guard', 'list', '--json'], timeout: 10);
+      final json = _extractJson(output);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json) as Map<String, dynamic>;
+        final guards = (parsed['guards'] as List? ?? []).whereType<Map<String, dynamic>>();
+        _prePushGateEnabled = guards.any((g) =>
+          (g['name'] as String? ?? '').contains('pre-push') &&
+          (g['enabled'] as bool? ?? false));
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> togglePrePushGate({required bool enable}) async {
+    try {
+      final action = enable ? 'enable' : 'disable';
+      await _runRexArgs(['guard', action, 'pre-push-guard'], timeout: 10);
+      _prePushGateEnabled = enable;
+      notifyListeners();
+    } catch (_) {}
+  }
 
   Future<void> runReview({String mode = 'quick'}) async {
     _isReviewing = true;

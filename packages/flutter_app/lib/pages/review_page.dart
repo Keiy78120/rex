@@ -18,6 +18,7 @@ class _ReviewPageState extends State<ReviewPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final rex = context.read<RexService>();
+      rex.checkPrePushGate();
       if (rex.reviewResults.isEmpty && !rex.isReviewing) {
         rex.runReview(mode: 'quick');
       }
@@ -38,6 +39,11 @@ class _ReviewPageState extends State<ReviewPage> {
           icon: CupertinoIcons.checkmark_shield_fill,
           label: 'Full',
           onPressed: () => context.read<RexService>().runReview(mode: 'full'),
+        ),
+        RexHeaderButton(
+          icon: CupertinoIcons.sparkles,
+          label: 'AI',
+          onPressed: () => context.read<RexService>().runReview(mode: 'ai'),
         ),
       ],
       builder: (context, scrollController) {
@@ -151,6 +157,16 @@ class _ReviewPageState extends State<ReviewPage> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 20),
+                // Pre-push gate toggle
+                RexCard(
+                  child: RexToggleRow(
+                    label: 'Pre-push gate',
+                    subtitle: 'Block git push if secrets or TS errors found',
+                    value: rex.prePushGateEnabled,
+                    onChanged: (v) => rex.togglePrePushGate(enable: v),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 // Hint
                 Padding(
@@ -164,7 +180,7 @@ class _ReviewPageState extends State<ReviewPage> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Quick: TypeScript + secret scan  ·  Full: + lint + tests',
+                        'Quick: TS + secrets  ·  Full: + lint + tests  ·  AI: LLM review',
                         style: TextStyle(
                           fontSize: 12,
                           color: context.rex.textTertiary,
