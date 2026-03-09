@@ -198,7 +198,14 @@ ${truncatedDiff}
   }
 }
 
-export async function runReview(mode: 'quick' | 'full' | 'ai'): Promise<StepResult[]> {
+export async function runReview(mode: 'quick' | 'full' | 'ai' | 'pre-push'): Promise<StepResult[]> {
+  if (mode === 'pre-push') {
+    log.info('Starting pre-push review (secrets + TypeScript)')
+    const results: StepResult[] = []
+    results.push(checkSecrets())
+    results.push(checkTypeScript())
+    return results
+  }
   if (mode === 'ai') {
     log.info('Starting AI review')
     const result = await checkAI()

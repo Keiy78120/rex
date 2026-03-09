@@ -1,7 +1,7 @@
 #!/bin/bash
 # REX Guard: Pre-push Review Gate
 # Hook: PreToolUse (Bash)
-# Runs rex review --quick before any git push — blocks on failures
+# Runs rex review --pre-push before any git push — blocks on failures (secrets/TS errors)
 # exit 2 = BLOCK, exit 0 = OK
 
 INPUT="${CLAUDE_TOOL_INPUT:-$TOOL_INPUT}"
@@ -15,7 +15,7 @@ except:
   print('')
 " 2>/dev/null)
 
-# Only trigger on git push (not pull, clone, etc.)
+# Only trigger on git push (not pull, clone, fetch, etc.)
 if ! echo "$CMD" | grep -qE '^\s*git\s+push(\s|$)'; then
   exit 0
 fi
@@ -26,9 +26,8 @@ if [ -n "$REX_SKIP_REVIEW" ]; then
 fi
 
 # Locate rex binary
-REX_BIN="${REX_BIN:-rex}"
-if ! command -v "$REX_BIN" &>/dev/null; then
-  # Try common paths
+REX_BIN="rex"
+if ! command -v rex &>/dev/null; then
   for p in "$HOME/.nvm/versions/node/v22.20.0/bin/rex" "$HOME/.local/bin/rex" "/usr/local/bin/rex"; do
     if [ -x "$p" ]; then
       REX_BIN="$p"
@@ -38,52 +37,25 @@ if ! command -v "$REX_BIN" &>/dev/null; then
 fi
 
 if ! command -v "$REX_BIN" &>/dev/null 2>&1 && [ ! -x "$REX_BIN" ]; then
-  # rex not found — allow push, don't block
-  exit 0
+  exit 0  # rex not found — allow push
 fi
 
-echo "REX: Running pre-push review..."
+echo "REX: Running pre-push review (secrets + TypeScript)..."
 
-# Run review with 45s timeout, capture JSON output
-REVIEW_OUTPUT=$(timeout 45 "$REX_BIN" review --quick --json 2>/dev/null)
+# Run pre-push review with 45s timeout; exits 1 on failures
+timeout 45 "$REX_BIN" review --pre-push
 EXIT_CODE=$?
 
 if [ $EXIT_CODE -eq 124 ]; then
-  echo "REX WARNING: Review timed out (45s). Allowing push — run 'rex review --quick' manually."
+  echo "REX WARNING: Review timed out (45s). Allowing push — run 'rex review' manually."
   exit 0
 fi
 
-if [ -z "$REVIEW_OUTPUT" ]; then
-  echo "REX WARNING: Review returned no output. Allowing push."
-  exit 0
-fi
-
-# Parse failures from JSON
-FAILURES=$(echo "$REVIEW_OUTPUT" | python3 -c "
-import sys, json
-try:
-  data = json.load(sys.stdin)
-  results = data.get('results', [])
-  fails = [r for r in results if r.get('status') == 'fail']
-  for f in fails:
-    print(f\"{f.get('name','?')}: {f.get('message','')}\")
-  sys.exit(0 if not fails else 1)
-except Exception as e:
-  sys.exit(0)
-" 2>/dev/null)
-
-PARSE_EXIT=$?
-
-if [ $PARSE_EXIT -ne 0 ]; then
-  echo "REX BLOCK: Pre-push review failed:"
-  echo "$FAILURES" | while IFS= read -r line; do
-    echo "  ✗ $line"
-  done
+if [ $EXIT_CODE -ne 0 ]; then
   echo ""
-  echo "Fix the issues above, then push again."
+  echo "REX BLOCK: Pre-push review failed. Fix the issues above, then push again."
   echo "To bypass: REX_SKIP_REVIEW=1 git push"
   exit 2
 fi
 
-echo "REX: Review passed — pushing."
 exit 0

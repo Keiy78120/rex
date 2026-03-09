@@ -1818,9 +1818,12 @@ async function main() {
       const jsonFlag = process.argv.includes('--json')
       const mode = process.argv.includes('--ai') ? 'ai' as const
         : process.argv.includes('--full') ? 'full' as const
+        : process.argv.includes('--pre-push') ? 'pre-push' as const
         : 'quick' as const
       const results = await runReview(mode)
       printReviewResults(results, jsonFlag)
+      const hasFail = results.some(r => r.status === 'fail')
+      if (hasFail) process.exit(1)
       break
     }
 
