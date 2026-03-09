@@ -565,6 +565,15 @@ rex doctor --fix     # Auto-fix then health check
 | **sources.md**: phases 2 and 3 updated to DONE | `sources.md` |
 | **Flutter analyzer**: zero warnings — fixed unused vars, dead code, unused imports across 6 files | all pages |
 
+### ✅ Terminé (session 2026-03-14 — Gateway spooled messages + final audit)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **Gateway page**: spooled message count — shows pending gateway.message events from queueStats (byType) when > 0 | `gateway_page.dart` |
+| **All pages audit**: curious_page ✅, workflow_page ✅, observer_page ✅, audio_page ✅, voice_page ✅ — all complete | all pages |
+| **Flutter analyzer**: zero errors/warnings maintained after gateway change | — |
+| **CLI build**: pnpm build ✅ zero errors | — |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 DONE ✅, Phase 4 (LATER)**:
