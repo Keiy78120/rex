@@ -17,7 +17,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { execSync, spawnSync } from 'node:child_process'
 import { join } from 'node:path'
-import { homedir, freemem, totalmem, cpus } from 'node:os'
+import { homedir, freemem, totalmem, cpus, loadavg } from 'node:os'
 import { createLogger } from './logger.js'
 
 const log = createLogger('CURIOUS:signals')
@@ -26,6 +26,18 @@ const HOME = homedir()
 // ── Types ──────────────────────────────────────────────────────────
 
 export type PressureLevel = 'ok' | 'warn' | 'critical'
+
+/** Signal categories for CURIOUS proactive notifications */
+export type SignalType = 'DISCOVERY' | 'PATTERN' | 'OPEN_LOOP'
+
+export interface ProactiveSignal {
+  type: SignalType
+  title: string
+  detail: string
+  url?: string
+  source: string
+  detectedAt: string
+}
 
 export interface HardwareSignals {
   cpuCores: number
@@ -258,6 +270,26 @@ export function hasLLMBackend(): boolean {
  */
 export function isCommanderReachable(): boolean {
   return probePort(7420)
+}
+
+/**
+ * Returns CPU load percentage (0–100) based on 1-min loadavg vs core count.
+ * Values >80 indicate the system is under heavy CPU load.
+ */
+export function getCpuLoadPercent(): number {
+  const avg1m = loadavg()[0]
+  const cores = cpus().length
+  return Math.min(100, Math.round((avg1m / cores) * 100))
+}
+
+/**
+ * Returns RAM usage percentage (0–100).
+ * Values >90 indicate high memory pressure.
+ */
+export function getRamUsedPercent(): number {
+  const total = totalmem()
+  const free = freemem()
+  return Math.round(((total - free) / total) * 100)
 }
 
 /**

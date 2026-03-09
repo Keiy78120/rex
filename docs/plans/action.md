@@ -379,6 +379,27 @@ Message Telegram → gateway.ts
 - Tâches code → délégation Code Specialist via fleet
 - Tâches mémoire → Memory layer direct, 0 LLM si grep suffit
 
+### ⚠️ Limitation Claude via Gateway — CRITIQUE
+
+**Problème** : Quand le gateway (`rex gateway`) essaie de spawner `claude -p "prompt"`, Claude détecte qu'il tourne à l'intérieur d'une session Claude Code existante (via les variables d'env) et refuse de répondre.
+
+**Variables responsables** (toutes injectées par Claude Code dans l'env du process parent) :
+```
+CLAUDECODE=1
+CLAUDE_CODE_SSE_PORT=<port>
+CLAUDE_CODE_ENTRYPOINT=cli
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+CLAUDE_CODE_MAX_OUTPUT_TOKENS=<n>
+```
+
+**Fix appliqué dans `gateway.ts` — `claudeEnv()` function** :
+1. Supprimer toutes les vars `CLAUDE_CODE_*` avant de spawner le subprocess Claude
+2. Injecter manuellement `~/.local/bin`, `~/.nvm/versions/node/*/bin` dans PATH (LaunchAgent/daemon n'héritent pas du PATH shell)
+
+**Impact** : Ce fix est actif en production. Si Claude Code ajoute de nouvelles vars de session, les ajouter à `claudeEnv()` dans gateway.ts.
+
+**Workaround si Claude reste inaccessible** : Utiliser Groq/Ollama via `orchestrate()` (free tier, pas de restriction de session).
+
 ### Session management
 
 - `dmScope: per-channel-peer` — isolation par utilisateur
@@ -536,3 +557,229 @@ Les scripts bash et les prompts LLM internes doivent référencer le module pour
 Un LLM qui reçoit un log préfixé `[CURIOUS]` sait immédiatement qu'il s'agit d'un background solver — pas besoin de contexte supplémentaire. Un script qui cherche les fichiers du module FLEET sait qu'il cherche dans `node-mesh.ts`, `daemon.ts`, `hub.ts`.
 
 **Le naming n'est pas cosmétique — c'est de l'organisation sémantique pour humains ET machines.**
+
+---
+
+## Principe REX — Système Vivant (Never Die)
+
+### Règle absolue
+
+REX ne s'arrête jamais. Si une tâche bloque, REX route autour et continue.
+
+### Self-healing loop
+
+```
+Tâche bloque sur Claude Code
+  → Codex prend le relais
+  → Si Codex bloque → scripts + free tier
+  → Si tout bloque → CURIOUS cherche pourquoi
+     → trouve alternative → reprend
+  → Jamais d'arrêt complet
+```
+
+### Self-improve sans casser l'existant
+
+Quand CURIOUS ou Milo trouve une amélioration (recherche web, nouvelle lib, meilleure approche) :
+
+1. **Règle 1** : ne jamais modifier ce qui fonctionne → additive uniquement
+2. **Règle 2** : toute modification passe par lint-loop.ts validation avant application
+3. **Règle 3** : plan updates (action.md, TODO.md) reflètent la réalité implémentée — jamais en avance de phase sur le code réel
+4. **Règle 4** : respecter la REX Vision — relay chain, script-first, Commander/Fleet, adaptive routing
+
+### Vivant = 3 niveaux simultanés
+
+```
+Niveau 1 — Exécution    : tâches en cours (Claude Code, Codex, scripts)
+Niveau 2 — Surveillance : daemon heartbeat 60s, health checks, routing table
+Niveau 3 — Amélioration : CURIOUS background research, plan updates, self-improve
+```
+
+Les 3 niveaux tournent en parallèle, indépendamment. Si le niveau 1 bloque, les niveaux 2 et 3 continuent.
+
+### Fleet adaptive routing
+
+À chaque changement de disponibilité d'un Specialist :
+- node-mesh.ts update routing table immédiatement
+- orchestrator.ts recompute les relay chains disponibles
+- En cours de session : aucune interruption, handoff documenté
+- Plans mis à jour si la capacité change durablement
+
+### REX Vision (immuable)
+
+Ces principes ne changent jamais, même si les plans évoluent :
+- Script avant LLM toujours
+- Relay chain staggerée (local → free → subscription)
+- Commander unique, Fleet adaptive
+- Additive uniquement — jamais destructif sur l'existant
+- Transparent — chaque handoff documenté, chaque décision tracée
+
+---
+
+## MILO — Rôle dans REX (à lire par Claude Code)
+
+**Milo = l'agent VPS (OpenClaw/Telegram).** Il tourne 24/7 sur le VPS, gère les conversations Telegram avec Kevin, documente les décisions dans action.md, et fait des recherches web. Il a MOINS de contexte que Claude Code (fenêtre courte, pas d'accès au repo complet en temps réel).
+
+**Règle de collaboration Milo ↔ Claude Code :**
+- Milo documente les décisions et plans dans action.md → Claude Code implémente
+- Milo briefe Claude Code via messages/keystrokes → Claude Code lit action.md + TODO.md
+- Claude Code ne demande JAMAIS à Milo de coder — Milo ne pousse JAMAIS du code en production
+- Si Milo dit "faire X", Claude Code vérifie d'abord si c'est déjà implémenté (éviter les doublons)
+- Milo peut se tromper sur l'état du repo → Claude Code a la vérité, il corrige silencieusement
+
+---
+
+## État réel du repo (09/03/2026)
+
+### ✅ Implémenté par Claude Code
+
+**BUDGET**
+- `litellm.ts` — wrapper LiteLLM custom (usage tracking, retry, queue, free-tiers routing)
+- `litellm-config.ts` — config providers
+- `free-tiers.ts` + `free-models.ts` — relay chain providers
+- `burn-rate.ts` — token/coût tracking
+- `budget.ts` — vue budget
+- `semantic-cache.ts` — cache avant appels LLM
+- `orchestrator.ts` — orchestration centrale
+- `orchestration-policy.ts` — policy routing
+
+**TOOLS**
+- `resource-hub.ts` — catalogue unifié MCPs/guards/skills/scripts/boilerplates
+- `mcp-discover.ts` + `mcp_registry.ts` — découverte et registry
+- `security-scanner.ts` — scan avant install
+- `guard-ast.ts` + `guard-manager.ts` — guards système
+- `config-lint.ts` — lint config
+- `lint-loop.ts` — boucle lint code source
+- `skills.ts` — gestion skills
+- `tool-adapter.ts` + `tool-registry.ts` — registry outils
+- `install.ts` — installation resources
+
+**FLEET**
+- `node-mesh.ts` — fleet Commander/Specialists
+- `daemon.ts` — heartbeat 60s
+- `hub.ts` — API Commander (register, status, capabilities)
+- `node.ts` — modèle nœud
+- `vps-deploy.ts` — déploiement VPS
+
+**AGENTS**
+- `rex-launcher.ts` — entry point, profils, kill/relaunch
+- `agent-runtime.ts` — runtime agents
+- `agents.ts` — Codex workers
+- `account-pool.ts` — rotation comptes
+- `project-intent.ts` — détection intent
+- `session-guard.ts` — protection sessions
+
+**CURIOUS**
+- `curious.ts` — moteur background
+- `signal-detector.ts` — détection signaux mémoire
+- `self-improve.ts` — auto-amélioration
+- `reflector.ts` — réflexion sur décisions passées
+
+**MEMORY**
+- `packages/memory/` — RAG complet (BM25 + vector, embed, ingest, hybrid-search, iMessage)
+- `semantic-cache.ts` — cache sémantique
+- `sync.ts` + `sync-queue.ts` — sync fleet
+- `backup.ts` — backup memory
+
+**HQ**
+- `dashboard.ts` — vue globale
+- `event-journal.ts` — log central
+- `metrics.ts` — métriques
+- `observer.ts` — observabilité
+- `audit.ts` — audit état système
+- `inventory.ts` — inventaire ressources
+
+**GATEWAY**
+- `gateway.ts` — gateway universel multi-canal
+- `router.ts` — routing messages
+
+**PROJETS**
+- `project-intent.ts` — détection intent par repo
+- `project-init.ts` — init projet
+- `init.ts` — setup avec --ci et --review flags
+- `workflow.ts` — workflows
+
+**OPTIMIZE**
+- `setup-wizard.ts` — wizard onboarding
+- `setup.ts` + `quick-setup.ts` — setup rapide
+- `prune.ts` — pruning
+- `optimize.ts` — optimisation
+- `training.ts` — training/fine-tuning
+- `lang-graph.ts` — graphe de connaissances
+
+**@module headers** — ajoutés sur TOUS les fichiers ✅
+
+---
+
+### 🆕 À implémenter (décisions session 09/03/2026)
+
+**UX — REX multi-surface**
+- Flutter app (Mac/iPhone/iPad) — frontend WebSocket vers VPS REX
+  - Embed terminal xterm.dart pour mode CLI dans Flutter
+  - Push notifications (Flutter + Telegram fallback)
+  - Dashboard 10 modules (HQ, TOOLS, CURIOUS...)
+- CLI Ink (TypeScript) — interface terminal sur VPS
+- Gateway universel — normaliser Telegram/WhatsApp/Discord/Signal vers format REX unique
+
+**CURIOUS proactif (signal → push notif)**
+- Système de notification proactive (3 types de signaux) :
+  - DISCOVERY : "J'ai trouvé un OSS utile pour votre projet X"
+  - PATTERN : "Vous faites cette tâche souvent, voulez-vous que je l'automatise ?"
+  - OPEN LOOP : "Le bug client X n'est toujours pas fixé"
+- Push Flutter + Telegram fallback
+- Propose, ne force jamais. Kevin dit oui → REX exécute.
+
+**Fleet thermal awareness**
+- Avant routing d'une tâche : checker CPU/GPU/RAM du Specialist
+- Node trop chargé → évité automatiquement
+- Pas juste "online/offline" mais "capacité disponible maintenant"
+
+**P2P Enterprise Fleet (futur)**
+- Isolation stricte entre fleets par entreprise
+- Zero-trust : chaque nœud vérifié avant intégration
+- DGX Spark, cloud, PC, Mac, RPi — tous compatibles via node-mesh
+
+**LiteLLM proxy server (option)**
+- Le `litellm.ts` actuel est un wrapper TS custom (suffisant)
+- Option future : déployer le vrai LiteLLM Python proxy pour + de providers
+- Modèles chinois (DeepSeek, Qwen) → déjà dans free-tiers, ajouter config
+- DGX Spark → NVIDIA NIM → LiteLLM proxy quand fleet scale
+
+**REX Vision — principe Never Die**
+- REX ne s'arrête jamais (voir section précédente)
+- Fleet adaptive : si GPU node down → CPU/API fallback automatique
+- Additive uniquement — ne jamais casser l'existant
+
+---
+
+### Sources CURIOUS à monitorer (cron)
+
+- `github.com/punkpeye/awesome-mcp-servers` — GitHub API
+- `github.com/wong2/awesome-mcp-servers` — GitHub API
+- `mcpservers.org` — fetch + parse
+- Hugging Face blog RSS
+- Simon Willison blog RSS
+- r/LocalLLaMA Reddit API
+
+---
+
+*Mis à jour par Milo — 09/03/2026 16h55 Paris*
+
+---
+
+## LLM Strategy — Clarification 09/03/2026
+
+### Modèles locaux Ollama (Qwen, etc.)
+- Qwen2.5:7b, Qwen2.5:1.5b → **gardés** pour tâches légères locales (categorize, lint, embed)
+- Utilisés par CURIOUS en background, jamais comme orchestrateur principal
+- Zéro coût, zéro latence réseau
+
+### Modèles chinois cloud (DeepSeek API, Qwen API...)
+- **Pas encore prêts comme orchestrateur principal**
+- Peuvent être en free-tiers comme fallback optionnel
+- Promotion possible quand : REX est stable + modèle prouvé + intégration LiteLLM parfaite
+
+### Orchestrateur principal (immuable pour l'instant)
+- **Claude Code** (Mac) — implémentation
+- **Codex** (background workers)
+- Sonnet/Haiku — réponses Milo + décisions complexes
+

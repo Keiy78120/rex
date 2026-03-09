@@ -14,7 +14,7 @@
 import { execSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { hostname, platform, networkInterfaces, cpus, totalmem } from 'node:os'
+import { hostname, platform, networkInterfaces, cpus, totalmem, freemem, loadavg } from 'node:os'
 import { homedir } from 'node:os'
 import { createLogger } from './logger.js'
 import { REX_DIR, ensureRexDirs } from './paths.js'
@@ -41,6 +41,12 @@ export interface NodeCapacity {
   ollamaModels: string[] // model names loaded in Ollama (non-embed)
 }
 
+export interface ThermalStatus {
+  cpuLoadPercent: number   // 0–100 based on 1-min loadavg / core count
+  ramUsedPercent: number   // 0–100
+  healthy: boolean         // cpu < 80% AND ram < 90%
+}
+
 export interface FleetNode {
   id: string
   hostname: string
@@ -49,6 +55,7 @@ export interface FleetNode {
   capabilities: string[]   // keys of NodeCapabilities that are true
   score: number            // weighted score — higher = preferred
   capacity?: NodeCapacity  // hardware capacity (set by buildLocalFleetNode)
+  thermalStatus?: ThermalStatus  // live CPU/RAM (local node only)
   lastSeen: string
   registeredAt: string
   status?: 'healthy' | 'stale' | 'offline'
@@ -234,6 +241,24 @@ export function detectLocalCapabilities(): NodeCapabilities {
 }
 
 /**
+ * Get live CPU/RAM thermal status using native os module.
+ * No external dependencies — uses loadavg + freemem/totalmem.
+ */
+export function detectLocalThermal(): ThermalStatus {
+  const avg1m = loadavg()[0]
+  const cores = cpus().length
+  const cpuLoadPercent = Math.min(100, Math.round((avg1m / cores) * 100))
+  const total = totalmem()
+  const free = freemem()
+  const ramUsedPercent = Math.round(((total - free) / total) * 100)
+  return {
+    cpuLoadPercent,
+    ramUsedPercent,
+    healthy: cpuLoadPercent < 80 && ramUsedPercent < 90,
+  }
+}
+
+/**
  * Build a FleetNode descriptor for this local machine.
  */
 export function buildLocalFleetNode(): FleetNode {
@@ -243,6 +268,8 @@ export function buildLocalFleetNode(): FleetNode {
     .map(([k]) => k)
   const capacity = detectLocalCapacity()
 
+  const thermalStatus = detectLocalThermal()
+
   return {
     id:           getNodeId(),
     hostname:     hostname(),
@@ -251,6 +278,7 @@ export function buildLocalFleetNode(): FleetNode {
     capabilities: active,
     score:        computeScore(active, capacity),
     capacity,
+    thermalStatus,
     lastSeen:     new Date().toISOString(),
     registeredAt: new Date().toISOString(),
   }
@@ -435,10 +463,18 @@ export async function routeTask(taskType: TaskType): Promise<FleetNode | null> {
     nodes = [local]
   }
 
-  // Filter: only healthy nodes with required capabilities
+  // Filter: only healthy nodes with required capabilities, skip thermally overloaded ones
   const capable = nodes
     .filter(n => n.status !== 'offline')
     .filter(n => required.every(cap => n.capabilities.includes(cap)))
+    .filter(n => {
+      // Skip nodes with thermal data showing overload (CPU >80% or RAM >90%)
+      if (n.thermalStatus && !n.thermalStatus.healthy) {
+        log.debug(`Skipping node ${n.hostname}: CPU=${n.thermalStatus.cpuLoadPercent}% RAM=${n.thermalStatus.ramUsedPercent}%`)
+        return false
+      }
+      return true
+    })
     .sort((a, b) => b.score - a.score)   // highest score first
 
   return capable[0] ?? null

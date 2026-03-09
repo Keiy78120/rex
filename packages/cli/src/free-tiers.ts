@@ -138,6 +138,21 @@ export const FREE_TIER_PROVIDERS: FreeTierProvider[] = [
     rpmLimit: 60,
     tpmLimit: 100000,
   },
+  {
+    name: 'Qwen API',
+    envKey: 'DASHSCOPE_API_KEY',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    defaultModel: 'qwen-plus',
+    requiresKey: true,
+    models: [
+      { id: 'qwen-turbo', contextWindow: 131072, capabilities: ['chat', 'fast'] },
+      { id: 'qwen-plus', contextWindow: 131072, capabilities: ['chat', 'code'] },
+      { id: 'qwen-max', contextWindow: 32768, capabilities: ['chat', 'code', 'reasoning'] },
+      { id: 'qwen-coder-plus', contextWindow: 131072, capabilities: ['code'] },
+    ],
+    rpmLimit: 60,
+    tpmLimit: 100000,
+  },
 ]
 
 // ── API Key resolution ─────────────────────────────────

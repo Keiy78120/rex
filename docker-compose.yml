@@ -25,6 +25,50 @@ services:
       ollama:
         condition: service_healthy
 
+  rex-daemon:
+    image: ghcr.io/keiy78120/rex:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - rex-data:/data
+    environment:
+      REX_MODE: daemon
+      REX_HUB_URL: http://rex-hub:7420
+      REX_HUB_TOKEN: ${REX_HUB_TOKEN}
+      REX_TELEGRAM_BOT_TOKEN: ${REX_TELEGRAM_BOT_TOKEN}
+      REX_TELEGRAM_CHAT_ID: ${REX_TELEGRAM_CHAT_ID}
+      OLLAMA_URL: http://ollama:11434
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    command: ["rex", "daemon"]
+    restart: unless-stopped
+    depends_on:
+      - rex-hub
+
+  rex-gateway:
+    image: ghcr.io/keiy78120/rex:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - rex-data:/data
+    environment:
+      REX_MODE: gateway
+      REX_HUB_URL: http://rex-hub:7420
+      REX_HUB_TOKEN: ${REX_HUB_TOKEN}
+      REX_TELEGRAM_BOT_TOKEN: ${REX_TELEGRAM_BOT_TOKEN}
+      REX_TELEGRAM_CHAT_ID: ${REX_TELEGRAM_CHAT_ID}
+      OLLAMA_URL: http://ollama:11434
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    command: ["rex", "gateway"]
+    restart: unless-stopped
+    depends_on:
+      - rex-hub
+
   ollama:
     image: ollama/ollama:latest
     ports:

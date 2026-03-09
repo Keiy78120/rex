@@ -43,10 +43,15 @@
     "@ai-sdk/openai": "^1.3.24",
     "@langchain/core": "^1.1.31",
     "@langchain/langgraph": "^1.2.1",
+    "@types/react": "^19.2.14",
+    "@types/ws": "^8.18.1",
     "ai": "^6.0.116",
     "better-sqlite3": "^11.8.1",
+    "ink": "^6.8.0",
     "openai": "^6.27.0",
-    "sqlite-vec": "^0.1.6"
+    "react": "^19.2.4",
+    "sqlite-vec": "^0.1.6",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@rex/core": "workspace:*",
