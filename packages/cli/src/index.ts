@@ -3169,6 +3169,28 @@ async function main() {
       break
     }
 
+    // ── Mock LLM Server (test mode) ─────────────────────────────────────────
+    case 'test': {
+      const sub = process.argv[3]
+      if (sub === 'mock' || sub === 'mock-llm') {
+        const { startMockLlmServer, getMockTokenCount, MOCK_PORT } = await import('./mock-llm-server.js')
+        const port = parseInt(process.argv.find(a => a.startsWith('--port='))?.split('=')[1] ?? String(MOCK_PORT), 10)
+        await startMockLlmServer(port)
+        console.log(`\x1b[32m✓\x1b[0m Mock LLM server started on port ${port}`)
+        console.log(`  OpenAI: http://localhost:${port}/v1/chat/completions`)
+        console.log(`  Ollama: http://localhost:${port}/api/chat`)
+        console.log(`  Health: http://localhost:${port}/health`)
+        console.log('\x1b[2mCtrl+C to stop\x1b[0m')
+        process.on('SIGINT', () => { console.log(`\nTokens used: ${getMockTokenCount()}`); process.exit(0) })
+        await new Promise(() => {})  // keep alive
+      } else {
+        console.log('Usage:')
+        console.log('  rex test mock            Start mock LLM server (OpenAI + Ollama compatible)')
+        console.log('  rex test mock --port=N   Custom port (default: 11435)')
+      }
+      break
+    }
+
     // ── Project Init ────────────────────────────────────────────────────────
     case 'project': {
       const sub = process.argv[3]

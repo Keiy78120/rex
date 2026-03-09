@@ -2,9 +2,9 @@
 import { createServer, get as httpGet, IncomingMessage, ServerResponse, Server } from 'node:http'
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { execFile, execFileSync } from 'node:child_process'
+import { execFile, execFileSync, execSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { homedir } from 'node:os'
+import { homedir, cpus, loadavg, freemem, totalmem } from 'node:os'
 import { REX_DIR, PENDING_DIR, MEMORY_DB_PATH, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
 import { getInventoryCache } from './inventory.js'
@@ -194,23 +194,39 @@ function matchRoute(url: string, method: string): { handler: Handler; params: Re
 
 // ── Route handlers ─────────────────────────────────────
 
-addRoute('GET', '/api/health', (_req, res) => {
-  sendJson(res, 200, {
+function buildHealthPayload() {
+  const mem = process.memoryUsage()
+  const cores = cpus().length || 1
+  const cpuLoad = Math.min(100, Math.round((loadavg()[0] / cores) * 100))
+  const memUsedMb = Math.round(mem.rss / 1024 / 1024)
+  const memTotalMb = Math.round(totalmem() / 1024 / 1024)
+  const memFreeMb = Math.round(freemem() / 1024 / 1024)
+
+  let diskFreeGb = -1
+  try {
+    const dfOut = execSync("df -g ~ | tail -1 | awk '{print $4}'", { encoding: 'utf-8', timeout: 2000 }).trim()
+    diskFreeGb = parseInt(dfOut) || -1
+  } catch {}
+
+  return {
     status: 'running',
     uptime: Math.floor((Date.now() - startTime) / 1000),
-    nodeCount: nodes.size,
     version: VERSION,
-  })
+    nodeCount: nodes.size,
+    cpu: { loadPercent: cpuLoad, cores },
+    memory: { processMb: memUsedMb, systemFreeMb: memFreeMb, systemTotalMb: memTotalMb },
+    disk: { freeGb: diskFreeGb },
+    ts: new Date().toISOString(),
+  }
+}
+
+addRoute('GET', '/api/health', (_req, res) => {
+  sendJson(res, 200, buildHealthPayload())
 })
 
 // v1 alias for /api/health (OpenClaw addendum spec)
 addRoute('GET', '/api/v1/health', (_req, res) => {
-  sendJson(res, 200, {
-    status: 'running',
-    uptime: Math.floor((Date.now() - startTime) / 1000),
-    nodeCount: nodes.size,
-    version: VERSION,
-  })
+  sendJson(res, 200, buildHealthPayload())
 })
 
 addRoute('GET', '/api/nodes', (_req, res) => {

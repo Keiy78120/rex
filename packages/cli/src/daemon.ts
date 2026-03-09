@@ -622,7 +622,25 @@ export async function daemon(): Promise<void> {
   await refreshInventory()
   purgeQueue()
 
-  while (true) {
+  // ─── Graceful shutdown ───────────────────────────────────
+  let daemonRunning = true
+
+  const shutdown = async (signal: string) => {
+    if (!daemonRunning) return  // already shutting down
+    daemonRunning = false
+    log.info(`${signal} received — shutting down gracefully`)
+    try {
+      journalAppend('daemon_action', 'daemon', { action: 'shutdown', signal })
+    } catch {}
+    // Give current loop iteration time to finish cleanly
+    await new Promise(r => setTimeout(r, 800))
+    process.exit(0)
+  }
+
+  process.on('SIGTERM', () => { void shutdown('SIGTERM') })
+  process.on('SIGINT',  () => { void shutdown('SIGINT') })
+
+  while (daemonRunning) {
     const now = Date.now()
 
     if (now - lastHealth >= config.daemon.healthCheckInterval * 1000) {
@@ -874,7 +892,11 @@ export async function daemon(): Promise<void> {
       lastSessionGuard = now
     }
 
-    // Sleep 30 seconds between loop iterations
-    await new Promise(r => setTimeout(r, 30_000))
+    // Sleep 30 seconds (interrupt immediately if shutdown requested)
+    if (daemonRunning) {
+      await new Promise(r => setTimeout(r, 30_000))
+    }
   }
+
+  log.info('Daemon loop exited cleanly')
 }
