@@ -268,11 +268,25 @@ export async function dispatchDiscoveries(discoveries: Discovery[]): Promise<num
 }
 
 /**
- * Send a one-off custom notification (macOS + Telegram).
+ * Send a one-off custom notification (macOS + Telegram + Discord if configured).
  */
 export async function sendCustomNotification(message: string, title = 'REX'): Promise<void> {
   sendMacNotification(title, message)
   await sendTelegramNotification(`🔔 *${title}*\n${message}`)
+  // Also dispatch via any configured channel adapters (Discord, etc.)
+  try {
+    const { loadAdaptersFromEnv } = await import('./gateway-adapter.js')
+    const adapters = await loadAdaptersFromEnv()
+    for (const adapter of adapters) {
+      if (adapter.name === 'telegram') continue // already sent above
+      try {
+        await adapter.send('', { text: `🔔 **${title}**\n${message}` })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        log.debug(`Adapter ${adapter.name} send failed: ${msg}`)
+      }
+    }
+  } catch {}
 }
 
 // ── CLI display helpers ───────────────────────────────────────────────────────

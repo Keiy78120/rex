@@ -841,6 +841,34 @@ export async function mcpRegistry(args: string[]) {
     case 'refresh-marketplace':
       await refreshMarketplace(jsonMode)
       return
+    case 'browse': {
+      // List all marketplace entries, optionally filtered by category tag
+      const tag = rest.filter(a => !a.startsWith('--'))[0]?.toLowerCase()
+      const marketplace = readMarketplace()
+      const entries = tag
+        ? marketplace.filter(e => e.tags.some(t => t.toLowerCase().includes(tag)))
+        : marketplace
+      if (jsonMode) { console.log(JSON.stringify(entries, null, 2)); return }
+      const header = tag ? `MCP Marketplace — category: ${tag}` : 'MCP Marketplace'
+      console.log(`\n${header} (${entries.length} servers)\n`)
+      // Group by source
+      const grouped: Record<string, typeof entries> = {}
+      for (const e of entries) {
+        const src = e.source ?? 'other'
+        grouped[src] ??= []
+        grouped[src].push(e)
+      }
+      for (const [src, list] of Object.entries(grouped)) {
+        console.log(`  ── ${src} ──`)
+        for (const e of list) {
+          console.log(`  ${e.name.padEnd(24)} ${e.description}`)
+          if (e.tags.length) console.log(`  ${''.padEnd(24)} tags: ${e.tags.join(', ')}`)
+        }
+        console.log('')
+      }
+      console.log(`  Run "rex mcp search <query>" to filter, "rex mcp install <name>" to install.\n`)
+      return
+    }
     case 'search': {
       const query = rest.filter(a => !a.startsWith('--')).join(' ')
       if (!query) { console.log('Usage: rex mcp search <query>'); return }
@@ -900,6 +928,6 @@ export async function mcpRegistry(args: string[]) {
       return
     }
     default:
-      console.log('Usage: rex mcp <list|add|add-url|remove|enable|disable|check|sync-claude|import-claude|export|discover|search|install|refresh-marketplace|auto|scan|serve|register> ...')
+      console.log('Usage: rex mcp <list|add|add-url|remove|enable|disable|check|sync-claude|import-claude|export|discover|browse|search|install|refresh-marketplace|auto|scan|serve|register> ...')
   }
 }
