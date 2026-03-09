@@ -15,7 +15,7 @@ class CuriousPage extends StatefulWidget {
 
 class _CuriousPageState extends State<CuriousPage> {
   String _filter = 'all';
-  static const _filters = ['all', 'model', 'mcp', 'repo', 'news'];
+  static const _filters = ['all', 'model', 'mcp', 'repo', 'news', 'pattern'];
 
   @override
   void initState() {
@@ -120,7 +120,7 @@ class _CuriousPageState extends State<CuriousPage> {
     }
 
     // Group by type for 'all' view
-    final order = ['model', 'mcp', 'repo', 'news'];
+    final order = ['pattern', 'model', 'mcp', 'repo', 'news'];
     final widgets = <Widget>[];
 
     for (final type in order) {
@@ -187,19 +187,21 @@ class _CuriousPageState extends State<CuriousPage> {
   }
 
   String _typeIcon(String type) => switch (type) {
-    'model' => '🤖',
-    'mcp'   => '🔌',
-    'repo'  => '📦',
-    'news'  => '📰',
-    _       => '·',
+    'model'   => '🤖',
+    'mcp'     => '🔌',
+    'repo'    => '📦',
+    'news'    => '📰',
+    'pattern' => '🔁',
+    _         => '·',
   };
 
   String _typeLabel(String type) => switch (type) {
-    'model' => 'MODELS',
-    'mcp'   => 'MCP SERVERS',
-    'repo'  => 'REPOS',
-    'news'  => 'NEWS',
-    _       => type.toUpperCase(),
+    'model'   => 'MODELS',
+    'mcp'     => 'MCP SERVERS',
+    'repo'    => 'REPOS',
+    'news'    => 'NEWS',
+    'pattern' => 'RECURRING PATTERNS',
+    _         => type.toUpperCase(),
   };
 }
 
@@ -276,11 +278,12 @@ class _FilterBar extends StatelessWidget {
   final Map<String, int> counts;
 
   static const _labels = {
-    'all': 'All',
-    'model': '🤖 Models',
-    'mcp': '🔌 MCP',
-    'repo': '📦 Repos',
-    'news': '📰 News',
+    'all':     'All',
+    'pattern': '🔁 Patterns',
+    'model':   '🤖 Models',
+    'mcp':     '🔌 MCP',
+    'repo':    '📦 Repos',
+    'news':    '📰 News',
   };
 
   @override
@@ -342,11 +345,12 @@ class _DiscoveryRow extends StatelessWidget {
   final Map<String, dynamic> item;
 
   String _icon(String? type) => switch (type) {
-    'model' => '🤖',
-    'mcp'   => '🔌',
-    'repo'  => '📦',
-    'news'  => '📰',
-    _       => '·',
+    'model'   => '🤖',
+    'mcp'     => '🔌',
+    'repo'    => '📦',
+    'news'    => '📰',
+    'pattern' => '🔁',
+    _         => '·',
   };
 
   @override

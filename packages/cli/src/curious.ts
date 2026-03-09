@@ -2,13 +2,13 @@
  * REX Curious — Proactive discovery module
  *
  * REX checks for new models, trending MCPs, and relevant news
- * without being asked. Stores discoveries in memory as 'idea' entries.
+ * without being asked. Also scans memory for recurring error patterns.
  *
  * Sources:
+ *  - Memory DB (recurring errors, bug patterns — 0 LLM, pure SQL)
  *  - Ollama registry (new models available vs installed)
  *  - GitHub trending repos tagged mcp/llm/ai-agent
  *  - Hacker News top stories (AI/dev filter)
- *  - Awesome-MCP-Servers catalog refresh
  *
  * Rules:
  *  §22 Token Economy — HTTP fetch only, no LLM for discovery itself
@@ -18,8 +18,9 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import Database from 'better-sqlite3'
 import { createLogger } from './logger.js'
-import { REX_DIR } from './paths.js'
+import { REX_DIR, MEMORY_DB_PATH } from './paths.js'
 
 const log = createLogger('CURIOUS:discovery')
 
@@ -30,7 +31,7 @@ const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface Discovery {
-  type: 'model' | 'mcp' | 'news' | 'repo'
+  type: 'model' | 'mcp' | 'news' | 'repo' | 'pattern'
   title: string
   detail: string
   url?: string
@@ -45,6 +46,7 @@ interface CuriousCache {
   seenMcps: string[]
   seenRepos: string[]
   seenNewsIds: number[]
+  seenPatterns: string[]
 }
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
@@ -61,6 +63,7 @@ function loadCache(): CuriousCache {
     seenMcps: [],
     seenRepos: [],
     seenNewsIds: [],
+    seenPatterns: [],
   }
 }
 
@@ -162,6 +165,61 @@ async function fetchHackerNews(): Promise<Array<{ id: number; title: string; url
   }
 }
 
+// ── Memory pattern detection (0 LLM, pure SQL) ───────────────────────────────
+
+const ERROR_PATTERNS = [
+  { keyword: 'TypeError',           label: 'TypeError' },
+  { keyword: 'ReferenceError',      label: 'ReferenceError' },
+  { keyword: 'Cannot find module',  label: 'Cannot find module' },
+  { keyword: 'ENOENT',              label: 'File not found (ENOENT)' },
+  { keyword: 'ECONNREFUSED',        label: 'Connection refused (ECONNREFUSED)' },
+  { keyword: 'EADDRINUSE',          label: 'Port in use (EADDRINUSE)' },
+  { keyword: 'null is not',         label: 'Null dereference' },
+  { keyword: 'undefined is not',    label: 'Undefined dereference' },
+  { keyword: '.cast<',              label: 'Unsafe .cast<>() in Flutter' },
+  { keyword: 'notifyListeners',     label: 'notifyListeners during build' },
+  { keyword: 'require(',            label: 'CommonJS require() in ESM' },
+  { keyword: 'waitUntilReadyToShow',label: 'waitUntilReadyToShow crash' },
+  { keyword: 'silent fail',         label: 'Silent failure pattern' },
+  { keyword: 'app-sandbox',         label: 'Sandbox entitlement issue' },
+]
+
+const MIN_OCCURRENCES = 3
+
+function detectMemoryPatterns(cache: CuriousCache): Discovery[] {
+  if (!existsSync(MEMORY_DB_PATH)) return []
+  const discoveries: Discovery[] = []
+  const now = new Date().toISOString()
+
+  try {
+    const db = new Database(MEMORY_DB_PATH, { readonly: true })
+
+    for (const { keyword, label } of ERROR_PATTERNS) {
+      const row = db.prepare(
+        `SELECT COUNT(*) AS cnt FROM memories WHERE content LIKE ? LIMIT 1`
+      ).get(`%${keyword}%`) as { cnt: number }
+
+      if (row.cnt >= MIN_OCCURRENCES) {
+        const isNew = !cache.seenPatterns.includes(keyword)
+        discoveries.push({
+          type: 'pattern',
+          title: label,
+          detail: `Found ${row.cnt} times in memory — consider adding a rule`,
+          source: 'memory',
+          seenAt: now,
+          isNew,
+        })
+      }
+    }
+
+    db.close()
+  } catch {
+    // DB not accessible — skip silently
+  }
+
+  return discoveries
+}
+
 // ── Main discovery ────────────────────────────────────────────────────────────
 
 export interface CuriousResult {
@@ -176,6 +234,13 @@ export async function runCurious(opts: { silent?: boolean } = {}): Promise<Curio
   const discoveries: Discovery[] = []
 
   if (!silent) log.info('Starting proactive discovery...')
+
+  // Memory pattern detection (sync, 0 LLM)
+  const memoryPatterns = detectMemoryPatterns(cache)
+  discoveries.push(...memoryPatterns)
+  cache.seenPatterns = [
+    ...new Set([...cache.seenPatterns, ...memoryPatterns.map(p => p.title)]),
+  ]
 
   // Run all fetches in parallel
   const [ollamaLibrary, installedModels, mcpRepos, aiRepos, hnStories] = await Promise.all([
@@ -272,10 +337,11 @@ const C = {
 const LINE = '─'.repeat(56)
 
 const TYPE_ICON: Record<string, string> = {
-  model: '🤖',
-  mcp:   '🔌',
-  repo:  '📦',
-  news:  '📰',
+  model:   '🤖',
+  mcp:     '🔌',
+  repo:    '📦',
+  news:    '📰',
+  pattern: '🔁',
 }
 
 export function printDiscoveries(result: CuriousResult): void {
@@ -298,7 +364,7 @@ export function printDiscoveries(result: CuriousResult): void {
 
   for (const [type, items] of Object.entries(grouped)) {
     const icon = TYPE_ICON[type] ?? '·'
-    const label = type === 'model' ? 'Models' : type === 'mcp' ? 'MCP Servers' : type === 'repo' ? 'Repos' : 'News'
+    const label = type === 'model' ? 'Models' : type === 'mcp' ? 'MCP Servers' : type === 'repo' ? 'Repos' : type === 'pattern' ? 'Recurring Patterns' : 'News'
     console.log(`\n  ${icon}  ${C.bold}${label}${C.reset}`)
 
     for (const d of items.slice(0, 5)) {
