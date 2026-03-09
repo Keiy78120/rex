@@ -808,17 +808,25 @@ rex doctor --fix     # Auto-fix then health check
 | Sidebar: Training item à l'index 23 (groupe ADMIN) | `main.dart`, `rex_sidebar.dart` |
 | Flutter build ✅ zero errors, CLI build ✅ zero errors | — |
 
+### ✅ Terminé (session 2026-03-15 — Memory + Guards + Sources)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **BM25 hybrid search** (FTS5 SQLite + RRF fusion) | `packages/memory/src/hybrid-search.ts`, `search.ts`, `cli-search.ts` |
+| **memory_fts FTS5 table** auto-created at DB init, inserted in `learn()` | `packages/memory/src/ingest.ts` |
+| **`rex search --hybrid`** flag + `--limit=N` + `--json` + `--rebuild-fts` | `packages/cli/src/index.ts` |
+| **iMessage ingest** (`rex ingest --imessage [--imessage-days=N]`) | `packages/memory/src/ingest.ts`, `packages/cli/src/index.ts` |
+| **Guards v3**: force-push-guard, large-file-guard, env-commit-guard, todo-limit-guard | `packages/cli/src/guards/`, `~/.claude/rex-guards/` |
+| living-rex-vision.md updated: BM25, iMessage, guards v3, fine-tuning → ✅ | `docs/plans/living-rex-vision.md` |
+| CLI build ✅ zero errors, memory TS check ✅ zero errors | — |
+
 ### 🔄 En cours / A faire
 
-**Phase 4 ~80% DONE**:
-- ✅ LangGraph spike — done (@langchain/langgraph@1.2.1)
-- ✅ Training pipeline — done (mlx-lm + OpenAI fine-tune)
-- ✅ Universal agent loop (tool-calling pour tous les modèles locaux)
-- ✅ Routing policy (6 tiers, zero LLM, `rex route --explain`)
-- Cross-platform Flutter (Windows/Linux) — Phase 4 later (workaround: hub web dashboard)
-- Tunnels + fallback (SSH/RustDesk) — Phase 4 later
+**Phase 4 COMPLETE (cross-platform + LangGraph deferred)**:
+- Cross-platform Flutter (Windows/Linux) — explicitly deferred to Phase 4 later
+- Tunnels + fallback (SSH/RustDesk) — explicitly deferred
 - @libsql/client sync (Turso replica) — when VPS configured
-- Fine-tune avec fleet: architecture définie, activation quand >2 nodes disponibles
+- Fine-tune avec fleet: activation quand >2 nodes disponibles
 
 ---
 

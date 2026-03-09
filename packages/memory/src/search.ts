@@ -1,6 +1,9 @@
 import { getDb } from "./ingest.js";
 import { embed, embeddingToBuffer } from "./embed.js";
 
+export { hybridSearch, rebuildFtsIndex } from "./hybrid-search.js";
+export type { HybridSearchResult } from "./hybrid-search.js";
+
 export interface SearchResult {
   content: string;
   category: string;

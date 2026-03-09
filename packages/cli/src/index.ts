@@ -219,13 +219,16 @@ async function main() {
       // Check for external source flags first
       const obsidianArg = process.argv.find(a => a.startsWith('--obsidian='))
       const whatsappArg = process.argv.find(a => a.startsWith('--whatsapp='))
-      if (obsidianArg || whatsappArg) {
+      const imessageFlag = process.argv.includes('--imessage')
+      const imessageDaysArg = process.argv.find(a => a.startsWith('--imessage-days='))
+      const imessageDays = imessageDaysArg ? parseInt(imessageDaysArg.split('=')[1] ?? '90', 10) : 90
+      if (obsidianArg || whatsappArg || imessageFlag) {
         const memDir = findMemoryPackage()
         if (!memDir) {
           console.log(`${COLORS.yellow}Memory package not found.${COLORS.reset}`)
           process.exit(1)
         }
-        const { ingestObsidian, ingestWhatsApp } = await import(`${memDir}/src/ingest.js`)
+        const { ingestObsidian, ingestWhatsApp, ingestIMessage } = await import(`${memDir}/src/ingest.js`)
         if (obsidianArg) {
           const vaultPath = obsidianArg.split('=').slice(1).join('=')
           await ingestObsidian(vaultPath)
@@ -233,6 +236,9 @@ async function main() {
         if (whatsappArg) {
           const chatPath = whatsappArg.split('=').slice(1).join('=')
           await ingestWhatsApp(chatPath)
+        }
+        if (imessageFlag) {
+          await ingestIMessage(imessageDays)
         }
         break
       }
@@ -256,9 +262,26 @@ async function main() {
     }
 
     case 'search': {
-      const query = process.argv.slice(3).join(' ')
+      const rawArgs = process.argv.slice(3)
+      // --rebuild-fts: repopulate FTS5 index from existing memories table
+      if (rawArgs.includes('--rebuild-fts')) {
+        try {
+          const memDir = findMemoryPackage()
+          if (!memDir) { console.error('Memory package not found'); process.exit(1) }
+          const { rebuildFtsIndex } = await import(`${memDir}/src/hybrid-search.js`)
+          rebuildFtsIndex()
+          console.log('FTS5 index rebuilt from memories table.')
+        } catch (err) { console.error((err as Error).message); process.exit(1) }
+        break
+      }
+      const hybrid = rawArgs.includes('--hybrid')
+      const jsonFlag = rawArgs.includes('--json')
+      const limitArg = rawArgs.find(a => a.startsWith('--limit='))
+      const queryWords = rawArgs.filter(a => !a.startsWith('--'))
+      const query = queryWords.join(' ')
       if (!query) {
-        console.error('Usage: rex search <query>')
+        console.error('Usage: rex search [--hybrid] [--json] [--limit=N] <query>')
+        console.error('       rex search --rebuild-fts   (repopulate FTS5 index)')
         process.exit(1)
       }
       try {
@@ -268,7 +291,9 @@ async function main() {
           process.exit(1)
         }
         const { execSync } = await import('node:child_process')
-        execSync(`npx tsx src/cli-search.ts ${query.split(' ').map(w => JSON.stringify(w)).join(' ')}`, { cwd: memDir, stdio: 'inherit' })
+        const flags = [hybrid ? '--hybrid' : '', jsonFlag ? '--json' : '', limitArg ?? ''].filter(Boolean).join(' ')
+        const escapedWords = queryWords.map(w => JSON.stringify(w)).join(' ')
+        execSync(`npx tsx src/cli-search.ts ${flags} ${escapedWords}`, { cwd: memDir, stdio: 'inherit' })
       } catch { process.exit(1) }
       break
     }

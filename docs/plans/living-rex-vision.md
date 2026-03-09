@@ -434,7 +434,7 @@ Il est curieux : il cherche activement de nouvelles solutions.
 | Setup wizard zero-config | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Tunnels sécurisés auto (Tailscale) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Monitor vie dev | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Fine-tuning modèle | ❌ | ❌ | ❌ | ❌ | 🔄 |
+| Fine-tuning modèle (mlx-lm + OpenAI JSONL pipeline) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Curieux / proactif | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Security scanner MCP/skills (§27) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Lint loop script-first (§28) | ❌ | ❌ | ❌ | ❌ | ✅ |
@@ -447,6 +447,10 @@ Il est curieux : il cherche activement de nouvelles solutions.
 | Cockpit Flutter UI (22 pages, 7 sidebar groups, KPI strips, RexListRow) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Commander/Fleet hub page (HQSnapshot, fleet KPIs, agent profiles, alerts) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | HQ dashboard data mapping (burn-rate + agents list → correct field names) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| BM25 + vector hybrid search (FTS5 + RRF fusion, `rex search --hybrid`) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| iMessage ingest (`rex ingest --imessage`, macOS SQLite chat.db) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Guards v3 (force-push, large-file, env-commit, todo-limit) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| 6-tier orchestration policy (zero-LLM routing, Opus budget guard) | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 ---
 

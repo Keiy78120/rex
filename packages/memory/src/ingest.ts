@@ -1,7 +1,8 @@
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
-import { readFileSync, readdirSync, existsSync, statSync, mkdirSync, unlinkSync, writeFileSync as writeFS } from "fs";
+import { readFileSync, readdirSync, existsSync, statSync, mkdirSync, unlinkSync, writeFileSync as writeFS, copyFileSync } from "fs";
 import { join, basename } from "path";
+import { tmpdir, homedir } from "os";
 import { embed, fastEmbed, embeddingToBuffer, EMBEDDING_DIM } from "./embed.js";
 
 const REX_DB = join(process.env.HOME || '~', '.claude', 'rex', 'memory', 'rex.sqlite')
@@ -202,6 +203,13 @@ export function getDb(): Database.Database {
       lines_ingested INTEGER DEFAULT 0,
       ingested_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+      content,
+      content='memories',
+      content_rowid='id',
+      tokenize='porter unicode61'
+    );
   `);
 
   // Migration: add columns if missing (existing DBs)
@@ -249,7 +257,9 @@ export async function learn(fact: string, category: string = "general", source?:
 
   try {
     const info = db.prepare("INSERT INTO memories (content, category, source, project) VALUES (?, ?, ?, ?)").run(fact, category, source ?? null, project ?? null);
-    db.prepare("INSERT INTO memory_vec (rowid, embedding) VALUES (CAST(? AS INTEGER), ?)").run(Number(info.lastInsertRowid), embeddingToBuffer(embedding));
+    const rowid = Number(info.lastInsertRowid);
+    db.prepare("INSERT INTO memory_vec (rowid, embedding) VALUES (CAST(? AS INTEGER), ?)").run(rowid, embeddingToBuffer(embedding));
+    db.prepare("INSERT INTO memory_fts(rowid, content) VALUES (?, ?)").run(rowid, fact);
   } catch (err) {
     console.error(`  Skipping chunk (DB insert failed): ${(err as Error).message}`);
   }
@@ -646,6 +656,84 @@ export async function ingestWhatsApp(chatPath: string): Promise<void> {
       await savePending(chunks.map(c => ({ text: c, source: chatPath, project: 'whatsapp' })));
       console.log(`WhatsApp ingest done: ${chunks.length} chunks saved to pending/`);
     }
+  } finally {
+    releaseLock();
+  }
+}
+
+/**
+ * Ingest iMessage conversations from ~/Library/Messages/chat.db (macOS only).
+ * Reads directly from the SQLite DB — requires Full Disk Access in macOS privacy settings.
+ * Only ingests conversations you've participated in (not group chats by default).
+ *
+ * @param daysBack  How many days back to ingest (default: 90)
+ */
+export async function ingestIMessage(daysBack = 90): Promise<void> {
+  const IMESSAGE_DB = join(homedir(), 'Library', 'Messages', 'chat.db');
+  if (!existsSync(IMESSAGE_DB)) {
+    console.error(`iMessage DB not found at ${IMESSAGE_DB}. Only available on macOS.`);
+    return;
+  }
+  if (!acquireLock()) {
+    console.error('Another ingest process is already running.');
+    return;
+  }
+  try {
+    // Use a read-only copy to avoid locking the live DB
+    const tmpDb = join(tmpdir(), `rex-imessage-${Date.now()}.db`);
+    copyFileSync(IMESSAGE_DB, tmpDb);
+
+    const imdb = new Database(tmpDb, { readonly: true });
+    imdb.pragma('journal_mode = WAL');
+
+    const cutoff = new Date(Date.now() - daysBack * 86400 * 1000);
+    // macOS stores dates as seconds since 2001-01-01 00:00:00 UTC
+    const APPLE_EPOCH_OFFSET = 978307200; // seconds between Unix epoch and Apple epoch
+    const cutoffApple = Math.floor(cutoff.getTime() / 1000) - APPLE_EPOCH_OFFSET;
+
+    type ImRow = { handle_id: string; text: string | null; date: number; is_from_me: number };
+    const messages = imdb
+      .prepare(
+        `SELECT h.id AS handle_id, m.text, m.date, m.is_from_me
+         FROM message m
+         JOIN handle h ON h.rowid = m.handle_id
+         WHERE m.text IS NOT NULL
+           AND LENGTH(m.text) >= ?
+           AND m.date >= ?
+         ORDER BY h.id, m.date ASC
+         LIMIT 5000`
+      )
+      .all(MIN_TEXT_LENGTH, cutoffApple) as ImRow[];
+
+    imdb.close();
+    unlinkSync(tmpDb);
+
+    if (messages.length === 0) {
+      console.log(`iMessage ingest: no messages found in the last ${daysBack} days.`);
+      return;
+    }
+
+    // Group by handle (contact) and form conversation blocks
+    const byHandle = new Map<string, string[]>();
+    for (const msg of messages) {
+      const role = msg.is_from_me ? 'Me' : msg.handle_id;
+      const line = `${role}: ${(msg.text ?? '').trim()}`;
+      if (!byHandle.has(msg.handle_id)) byHandle.set(msg.handle_id, []);
+      byHandle.get(msg.handle_id)!.push(line);
+    }
+
+    let totalChunks = 0;
+    for (const [handle, lines] of byHandle) {
+      const chunks = chunkText(lines);
+      if (chunks.length) {
+        await savePending(chunks.map(c => ({ text: c, source: `imessage:${handle}`, project: 'imessage' })));
+        totalChunks += chunks.length;
+      }
+    }
+    console.log(`iMessage ingest done: ${totalChunks} chunks from ${byHandle.size} conversations saved to pending/`);
+  } catch (err) {
+    console.error(`iMessage ingest error: ${(err as Error).message}`);
+    console.error('If you get a permissions error, grant Full Disk Access to Terminal in System Settings > Privacy & Security.');
   } finally {
     releaseLock();
   }
