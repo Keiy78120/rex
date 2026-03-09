@@ -44,9 +44,16 @@ export interface MemorySummary {
   lastIngestAt: string | null
 }
 
+export interface AgentProfile {
+  name: string
+  model: string
+  profile: string
+  running: boolean
+}
+
 export interface AgentSummary {
   activeSessions: number
-  profiles: string[]
+  profiles: AgentProfile[]
   lastLaunchedAt: string | null
 }
 
@@ -106,7 +113,8 @@ async function getFleet(): Promise<FleetSummary> {
 // ── Budget ───────────────────────────────────────────────────────────────
 
 async function getBudget(): Promise<BudgetSummary> {
-  const raw = runRex(['budget', '--json']) as Record<string, unknown> | null
+  // burn-rate --json returns: burnRatePerHour, dailyTotal, dailyPercent, contextPercent, sessionTotal
+  const raw = runRex(['burn-rate', '--json']) as Record<string, unknown> | null
   if (!raw) {
     return { dailyTokens: 0, sessionTokens: 0, burnRatePerHour: 0, ctxPercent: 0, dailyPercent: 0 }
   }
@@ -114,7 +122,7 @@ async function getBudget(): Promise<BudgetSummary> {
     dailyTokens: (raw.dailyTotal as number) ?? 0,
     sessionTokens: (raw.sessionTotal as number) ?? 0,
     burnRatePerHour: (raw.burnRatePerHour as number) ?? 0,
-    ctxPercent: (raw.ctxPercent as number) ?? 0,
+    ctxPercent: (raw.contextPercent as number) ?? 0,   // burn-rate uses contextPercent
     dailyPercent: (raw.dailyPercent as number) ?? 0,
   }
 }
@@ -146,9 +154,25 @@ async function getAgents(): Promise<AgentSummary> {
   const r = spawnSync('pgrep', ['-c', '-f', 'claude'], { encoding: 'utf-8' })
   const activeSessions = r.status === 0 ? Math.max(0, parseInt(r.stdout.trim()) - 1) : 0
 
+  // Get agent profiles from rex agents list --json
+  let profiles: AgentProfile[] = []
+  const agentsRaw = runRex(['agents', 'list', '--json']) as Record<string, unknown> | null
+  if (agentsRaw) {
+    const rows = (agentsRaw.agents as unknown[]) ?? []
+    profiles = rows
+      .filter((a): a is Record<string, unknown> => typeof a === 'object' && a !== null)
+      .filter(a => a.running === true || a.enabled === true)
+      .map(a => ({
+        name: (a.name as string) ?? 'agent',
+        model: (a.model as string) ?? 'unknown',
+        profile: (a.profile as string) ?? '',
+        running: (a.running as boolean) ?? false,
+      }))
+  }
+
   return {
     activeSessions,
-    profiles: recovery?.profile ? [recovery.profile] : [],
+    profiles,
     lastLaunchedAt: recovery?.launchedAt ?? null,
   }
 }

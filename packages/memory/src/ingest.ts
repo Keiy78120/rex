@@ -555,6 +555,94 @@ async function ingestSessions() {
   }
 }
 
+// ── External Source Ingesters ─────────────────────────────────────────────
+
+/**
+ * Ingest an Obsidian vault directory.
+ * Reads all .md files recursively, chunks them, saves to pending/.
+ */
+export async function ingestObsidian(vaultPath: string): Promise<void> {
+  if (!existsSync(vaultPath)) {
+    console.error(`Obsidian vault not found: ${vaultPath}`);
+    return;
+  }
+  if (!acquireLock()) {
+    console.error('Another ingest process is already running.');
+    return;
+  }
+  try {
+    const files = collectMarkdownFiles(vaultPath);
+    let totalIngested = 0;
+    console.log(`Obsidian vault: ${vaultPath} — ${files.length} markdown files`);
+    for (const file of files) {
+      try {
+        const content = readFileSync(file, 'utf-8');
+        const lines = content.split('\n');
+        const chunks = chunkText(lines);
+        if (chunks.length === 0) continue;
+        const pendingChunks = chunks.map(c => ({ text: c, source: file, project: vaultPath }));
+        await savePending(pendingChunks);
+        totalIngested += chunks.length;
+        console.log(`  ${basename(file)}: ${chunks.length} chunks`);
+      } catch (err) {
+        console.error(`  Error ${file}: ${(err as Error).message}`);
+      }
+    }
+    console.log(`\nObsidian ingest done: ${totalIngested} chunks saved to pending/`);
+  } finally {
+    releaseLock();
+  }
+}
+
+function collectMarkdownFiles(dir: string, files: string[] = []): string[] {
+  try {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith('.')) continue; // skip .trash, .obsidian, etc
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        collectMarkdownFiles(full, files);
+      } else if (entry.name.endsWith('.md')) {
+        files.push(full);
+      }
+    }
+  } catch { /* skip unreadable dirs */ }
+  return files;
+}
+
+/**
+ * Ingest WhatsApp exported chat file (_chat.txt format).
+ * Strips timestamps and phone numbers, chunks conversation blocks.
+ */
+export async function ingestWhatsApp(chatPath: string): Promise<void> {
+  if (!existsSync(chatPath)) {
+    console.error(`WhatsApp chat file not found: ${chatPath}`);
+    return;
+  }
+  if (!acquireLock()) {
+    console.error('Another ingest process is already running.');
+    return;
+  }
+  try {
+    const content = readFileSync(chatPath, 'utf-8');
+    // Strip timestamps: "[12/03/2024, 14:30:00] Name: message"
+    const lines = content.split('\n')
+      .map(l => l.replace(/^\[[\d/,: ]+\] [^:]+: /, ''))
+      .filter(l => l.trim().length >= MIN_TEXT_LENGTH &&
+        !l.includes('<Media omis>') &&
+        !l.includes('<image omise>') &&
+        !l.startsWith('Messages and calls are end-to-end'));
+    const chunks = chunkText(lines);
+    if (chunks.length === 0) {
+      console.log('No chunks extracted from WhatsApp export.');
+    } else {
+      await savePending(chunks.map(c => ({ text: c, source: chatPath, project: 'whatsapp' })));
+      console.log(`WhatsApp ingest done: ${chunks.length} chunks saved to pending/`);
+    }
+  } finally {
+    releaseLock();
+  }
+}
+
 // Run CLI if called directly
 if (process.argv[1]?.endsWith("ingest.ts") || process.argv[1]?.endsWith("ingest.js")) {
   ingestSessions().catch(console.error);

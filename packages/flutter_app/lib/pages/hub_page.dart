@@ -134,8 +134,8 @@ class _HubPageState extends State<HubPage> {
                         label: 'SESSIONS',
                       ),
                       RexKpiItem(
-                        value: '\$${(budget['estimatedDailyCost'] as num? ?? 0.0).toStringAsFixed(3)}',
-                        label: 'DAILY COST',
+                        value: '${((budget['burnRatePerHour'] as num? ?? 0) / 1000).toStringAsFixed(1)}k/h',
+                        label: 'BURN RATE',
                       ),
                     ]),
                   ),
@@ -154,12 +154,14 @@ class _HubPageState extends State<HubPage> {
                                 child: Row(children: [
                                   RexStatusChip(
                                     label: p['name'] as String? ?? 'agent',
-                                    status: RexChipStatus.ok,
+                                    status: (p['running'] as bool? ?? false)
+                                        ? RexChipStatus.ok
+                                        : RexChipStatus.inactive,
                                     small: true,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    p['model'] as String? ?? '',
+                                    '${p['profile'] as String? ?? ''} · ${p['model'] as String? ?? ''}',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: context.rex.textSecondary,
