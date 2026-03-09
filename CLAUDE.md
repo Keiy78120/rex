@@ -574,11 +574,38 @@ rex doctor --fix     # Auto-fix then health check
 | **Flutter analyzer**: zero errors/warnings maintained after gateway change | — |
 | **CLI build**: pnpm build ✅ zero errors | — |
 
+### ✅ Terminé (session 2026-03-14 — Guards v2 + Docker deployment)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **Guards v2**: `secret-guard.sh` — PreToolUse BLOCK (API keys: sk-, ghp_, Bearer, etc.), skips .env.example/tests | `packages/cli/src/guards/secret-guard.sh`, `init.ts` |
+| **Guards v2**: `post-edit-guard.sh` — consolidated PostToolUse with TypeScript `any` + `console.log` detection | `packages/cli/src/guards/post-edit-guard.sh`, `init.ts` |
+| **Docker deployment**: multi-stage `Dockerfile` (builder→runtime alpine), `docker-compose.yml`, `docker-compose.vps.yml` (Traefik HTTPS) | `Dockerfile`, `docker-compose.yml`, `docker-compose.vps.yml` |
+| **`docker.ts`**: reads credentials from `~/.claude/settings.json` env, writes `docker-compose.local.yml` + `.env.docker` | `packages/cli/src/docker.ts` |
+| **`rex init --docker`**: CLI command to generate local Docker override files | `index.ts` |
+| **`.dockerignore`**: excludes node_modules, flutter_app, .env files | `.dockerignore` |
+
+### ✅ Terminé (session 2026-03-14 — Switchable LLM backends + Platform warnings)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **`llm-backend.ts`**: LlmBackend interface + OllamaBackend (native API) + OpenAICompatBackend (llama-cpp/localai/vllm/llamafile) | `packages/cli/src/llm-backend.ts` |
+| **`getBackend()` / `createBackend()`**: factory + config-driven singleton, reads `llm.backend` + `llm.backendUrl` from config.json | `llm-backend.ts` |
+| **`switchBackend(type, url)`**: health-check + save to config + cache reset | `llm-backend.ts` |
+| **`BACKEND_INFO`**: install instructions + platform notes per backend type | `llm-backend.ts` |
+| **`llm.ts`**: `detectModel()` now routes through `getBackend().listModels()` instead of hardcoded Ollama URL | `llm.ts` |
+| **`config.ts`**: added `backend?` + `backendUrl?` fields to `RexConfig.llm` | `config.ts` |
+| **`rex backend [list|switch|info|test]`**: CLI command to manage LLM backend | `index.ts` |
+| **`platform-warnings.ts`**: platform detection (macOS/linux-gpu/linux-no-gpu/docker/windows-wsl2) + PlatformWarning table per profile | `packages/cli/src/platform-warnings.ts` |
+| **`rex doctor --platform`**: detailed platform limitation report | `index.ts` |
+| **`rex doctor`**: shows platform warnings summary when limitations detected | `index.ts` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 DONE ✅, Phase 4 (LATER)**:
 - All 28 action.md sections implemented
 - All Phase 3 items complete (hub, sync, mesh, VPS deploy, Tailscale auto-join)
+- Alternative Ollama backends (llm-backend.ts) — ✅ DONE
 - Cross-platform Flutter (Windows/Linux) — Phase 4 later
 - LangGraph spike — Phase 4 later
 - Training pipeline — Phase 4 later
