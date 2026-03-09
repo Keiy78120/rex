@@ -28,6 +28,7 @@ import 'pages/settings_page.dart';
 import 'pages/files_page.dart';
 import 'pages/training_page.dart';
 import 'pages/terminal_page.dart';
+import 'pages/clients_page.dart';
 import 'widgets/rex_sidebar.dart';
 
 void main() {
@@ -111,14 +112,15 @@ class _RexMainWindowState extends State<RexMainWindow> {
                   ReviewPage(),
                   GuardsPage(),
                   SandboxPage(),
-                  // RESOURCES (15-16)
+                  // RESOURCES (15-17)
                   ProvidersPage(),
                   ResourceHubPage(),
-                  // COMMS (17-19)
+                  ClientsPage(),
+                  // COMMS (18-20)
                   GatewayPage(),
                   VoicePage(),
                   AudioPage(),
-                  // ADMIN (20-24)
+                  // ADMIN (21-25)
                   LogsPage(),
                   SettingsPage(),
                   FilesPage(),

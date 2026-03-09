@@ -32,19 +32,20 @@ const List<_NavItem> _items = [
   (index: 12, icon: CupertinoIcons.checkmark_shield_fill, label: 'Review'),
   (index: 13, icon: CupertinoIcons.lock_shield_fill, label: 'Guards'),
   (index: 14, icon: CupertinoIcons.square_stack_3d_up, label: 'Sandbox'),
-  // RESOURCES (15-16)
+  // RESOURCES (15-17)
   (index: 15, icon: CupertinoIcons.layers_fill, label: 'Providers'),
   (index: 16, icon: CupertinoIcons.square_grid_2x2_fill, label: 'Hub'),
-  // COMMS (17-19)
-  (index: 17, icon: CupertinoIcons.paperplane_fill, label: 'Gateway'),
-  (index: 18, icon: CupertinoIcons.mic_fill, label: 'Voice'),
-  (index: 19, icon: CupertinoIcons.waveform, label: 'Audio'),
-  // ADMIN (20-24)
-  (index: 20, icon: CupertinoIcons.doc_text, label: 'Logs'),
-  (index: 21, icon: CupertinoIcons.gear, label: 'Settings'),
-  (index: 22, icon: CupertinoIcons.doc_text_fill, label: 'Files'),
-  (index: 23, icon: CupertinoIcons.waveform_path_ecg, label: 'Training'),
-  (index: 24, icon: CupertinoIcons.chevron_right_square, label: 'Terminal'),
+  (index: 17, icon: CupertinoIcons.person_2_fill, label: 'Clients'),
+  // COMMS (18-20)
+  (index: 18, icon: CupertinoIcons.paperplane_fill, label: 'Gateway'),
+  (index: 19, icon: CupertinoIcons.mic_fill, label: 'Voice'),
+  (index: 20, icon: CupertinoIcons.waveform, label: 'Audio'),
+  // ADMIN (21-25)
+  (index: 21, icon: CupertinoIcons.doc_text, label: 'Logs'),
+  (index: 22, icon: CupertinoIcons.gear, label: 'Settings'),
+  (index: 23, icon: CupertinoIcons.doc_text_fill, label: 'Files'),
+  (index: 24, icon: CupertinoIcons.waveform_path_ecg, label: 'Training'),
+  (index: 25, icon: CupertinoIcons.chevron_right_square, label: 'Terminal'),
 ];
 
 const Map<int, String?> _groupHeaders = {
@@ -53,8 +54,8 @@ const Map<int, String?> _groupHeaders = {
   6: 'KNOWLEDGE',
   10: 'WORKFLOW',
   15: 'RESOURCES',
-  17: 'COMMS',
-  20: 'ADMIN',
+  18: 'COMMS',
+  21: 'ADMIN',
 };
 
 // ── Widget ───────────────────────────────────────────────────────────────────
