@@ -436,6 +436,10 @@ Il est curieux : il cherche activement de nouvelles solutions.
 | Monitor vie dev | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Fine-tuning modèle | ❌ | ❌ | ❌ | ❌ | 🔄 |
 | Curieux / proactif | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Security scanner MCP/skills (§27) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Lint loop script-first (§28) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Fleet relay race specialists (§26) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| REX as MCP server 7 tools | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 ---
 

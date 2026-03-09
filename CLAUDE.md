@@ -518,9 +518,16 @@ rex doctor --fix     # Auto-fix then health check
 | `lint-loop.ts`: script-first iterative correction loop — tsc/eslint/secrets analyzers, orchestrate() for LLM corrections, converges on diff (§28) | `lint-loop.ts` |
 | `rex lint-loop <path> [--eslint\|--secrets] [--max=N]`: CLI command | `index.ts` |
 
+### ✅ Terminé (session 2026-03-13 — §25 Fleet terminology + §26 Orchestrator relay)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **§26 Orchestrator relay race** — SPECIALIST_PROFILES (10 specialists: contextWindow, strengths, weaknesses, avgLatencyMs, costPerToken, staggerMs), `checkSpecialistLimits()`, `relayRace()` avec tier stagger (Tier 0: 0ms, Tier 1: +300ms, Tier 2: +800ms), handoffNotes pour Commander context propre | `orchestrator.ts` |
+| **§25 Fleet terminology** — user-facing labels: Hub→Commander, Node→Specialist, Task routing→Mission assignment dans CLI output, node.ts `showNodeStatus()`, index.ts help text + hub status/start/stop console lines | `orchestrator.ts`, `node.ts`, `index.ts` |
+
 ### 🔄 En cours / A faire
 
-**Phase 2 DONE, Phase 3 ~90% DONE**:
+**Phase 2 DONE, Phase 3 ~95% DONE — All 28 sections implemented**:
 - Cross-platform Flutter (Windows/Linux) — Phase 3 later
 - VPS brain: hub API done ✅, sync done ✅, Tailscale mesh done ✅
 - Fleet routing with capacity: done ✅
@@ -528,6 +535,8 @@ rex doctor --fix     # Auto-fix then health check
 - REX as MCP server: done ✅ (`rex mcp serve` + `rex mcp register`)
 - Security fleet (§27): scanner done ✅, MCP pre-install scan done ✅
 - Lint loop (§28): done ✅
+- §25 Fleet terminology: done ✅
+- §26 Orchestrator relay race + SPECIALIST_PROFILES: done ✅
 
 ---
 
