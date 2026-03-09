@@ -96,6 +96,28 @@ export async function preload(cwd: string): Promise<string> {
       }
     }
 
+    // 1.5. BLOC 1.2 — Inject last-session.md for current project
+    try {
+      const encoded = cwd.replace(/\//g, '-').replace(/^-/, '')
+      const sessionFile = join(homedir(), '.claude', 'projects', encoded, 'memory', 'last-session.md')
+      if (existsSync(sessionFile)) {
+        const raw = readFileSync(sessionFile, 'utf-8')
+        const age = Date.now() - (new Date(raw.match(/timestamp:\s*(\S+)/)?.[1] ?? 0)).getTime()
+        if (age < 48 * 3600_000) { // only surface if <48h old
+          const task     = raw.match(/^task:\s*["']?(.+?)["']?\s*$/m)?.[1]?.trim()
+          const nextLine = raw.match(/^next_steps:\n((?:\s+- .+\n?)+)/m)?.[1]
+            ?.split('\n').filter(l => l.trim().startsWith('-')).slice(0, 2).map(l => l.replace(/^\s*- /, '')).join('; ')
+          const blockerLine = raw.match(/^blockers:\n((?:\s+- .+\n?)+)/m)?.[1]
+            ?.split('\n').filter(l => l.trim().startsWith('-') && !l.includes('none')).slice(0, 1).map(l => l.replace(/^\s*- /, '')).join('')
+          const parts: string[] = ['[Last session]']
+          if (task && !task.includes('not set')) parts.push(`Task: ${task.slice(0, 80)}`)
+          if (nextLine) parts.push(`Next: ${nextLine.slice(0, 100)}`)
+          if (blockerLine) parts.push(`Blocker: ${blockerLine.slice(0, 80)}`)
+          if (parts.length > 1) sections.push(parts.join(' | '))
+        }
+      }
+    } catch { /* non-blocking */ }
+
     // 2. Active lessons (cross-project)
     const lessons = db.prepare(
       "SELECT summary FROM memories WHERE category = 'lesson' AND summary IS NOT NULL ORDER BY created_at DESC LIMIT 3"
