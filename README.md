@@ -40,7 +40,9 @@ REX is the layer that runs **before** Opus sees your task:
 | **CLI** | Health checks, memory ingest/search, guards, agents, logs, audit |
 | **Memory** | Local SQLite + embeddings via Ollama, semantic search, pending queue |
 | **Guards** | 8 hook-based safeguards for dangerous commands, weak completions, UI issues, and more |
-| **Gateway** | Telegram control surface |
+| **Comms** | Telegram control surface (`rex comms` / `gateway.ts`) |
+| **Commander** | Central hub API always-on, port 7420 (`hub.ts`) |
+| **Fleet** | Connected machines as FleetNodes, managed by `node-mesh.ts` |
 | **App** | Flutter macOS desktop app |
 | **Ops** | LaunchAgents, doctor checks, audit command |
 
@@ -52,6 +54,87 @@ REX is the layer that runs **before** Opus sees your task:
 
 ---
 
+## Architecture
+
+REX is organized around a military-style command structure: a single **Commander** orchestrates a **Fleet** of specialized machines, reachable through **Comms**.
+
+```text
+You / Operator
+(CLI · Comms · Flutter App)
+         │
+         ▼
+┌─────────────────────────────────────────────────┐
+│              COMMANDER  (port 7420)             │
+│              hub.ts — always-on API             │
+│                                                 │
+│  routes tasks · aggregates health · auth token  │
+└────────────┬──────────────────────┬─────────────┘
+             │                      │
+       ┌─────┴──────┐        ┌──────┴──────┐
+       │   COMMS    │        │    FLEET    │
+       │ gateway.ts │        │ node-mesh.ts│
+       │  Telegram  │        │  FleetNodes │
+       └────────────┘        └──────┬──────┘
+                                    │
+              ┌─────────────────────┼─────────────────────┐
+              │                     │                      │
+   ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+   │ Code Specialist  │  │Inference Spec.   │  │Background Spec.  │
+   │ Mac+Claude Code  │  │ Ollama / GPU     │  │ Daemon / Pi      │
+   │  agents.ts       │  │ orchestrator.ts  │  │  daemon.ts       │
+   └──────────────────┘  └──────────────────┘  └──────────────────┘
+              │
+   ┌──────────────────┐
+   │Storage Specialist│
+   │ NAS / sync node  │
+   │  sync.ts         │
+   └──────────────────┘
+```
+
+### Commander
+
+`hub.ts` — Central API, always-on at port 7420. Orchestrates the fleet, aggregates health, routes LLM tasks, and enforces auth. Runs on a VPS or the main machine. Every other component talks to it.
+
+### Fleet
+
+`node-mesh.ts` — All connected machines register as **FleetNodes** with a typed role and a capability profile (CPU cores, RAM, Ollama models). The Commander routes tasks to the right node automatically.
+
+### Specialists
+
+Each machine in the Fleet plays a typed role:
+
+| Specialist | Role | Source |
+|------------|------|--------|
+| **Code Specialist** | Mac with Claude Code — runs agents, reviews, lint loops | `agents.ts` |
+| **Inference Specialist** | Machine with Ollama/GPU — handles LLM inference requests | `orchestrator.ts` |
+| **Storage Specialist** | NAS or dedicated storage node — manages sync and backup | `sync.ts` |
+| **Background Specialist** | Lightweight node (Raspberry Pi, cheap VPS) — runs daemon cycles | `daemon.ts` |
+
+### Comms
+
+`gateway.ts` — Telegram bot interface, alias `rex comms`. Remote control, notifications, and interactive commands from anywhere. Rate-limited, streaming-capable, and tied into the full Commander API.
+
+---
+
+## 10 Modules
+
+REX is divided into 10 modules that serve as both **UI navigation menus** in the Flutter app and **internal semantic namespaces** for task routing.
+
+| Module | Role |
+|--------|------|
+| **HQ** | Health dashboard — system status, guards, burn rate, quick actions |
+| **TOOLS** | MCP marketplace, tool registry, enable/disable integrations |
+| **CURIOUS** | Proactive discovery — new Ollama models, GitHub trending, HN AI filter |
+| **AGENTS** | Autonomous agent management — profiles, teams, orchestrator chat |
+| **BUDGET** | Cost tracking, provider usage, free tier quotas, burn rate |
+| **FLEET** | Node topology, Commander status, Tailscale mesh, sync queue |
+| **MEMORY** | Session indexing, semantic search, categories, consolidation |
+| **GATEWAY** | Comms / Telegram control surface status and logs |
+| **PROJETS** | Project scanner — stack detection, open in Claude, recent activity |
+| **OPTIMIZE** | CLAUDE.md analysis, rule suggestions, self-improvement |
+
+---
+
 ## What Makes REX Different
 
 | Without REX | With REX |
@@ -59,7 +142,7 @@ REX is the layer that runs **before** Opus sees your task:
 | Opus starts cold — no memory of past sessions, errors, or solutions | REX injects relevant memory at session start — Opus arrives with context |
 | Every task hits the paid API by default | REX checks cache, local scripts, Ollama, and free tiers first |
 | No guardrails beyond what you manually wire | 8 guards catch dangerous commands, fake completions, weak test fixes, and scope creep |
-| Remote control is awkward | Telegram + CLI + Flutter app — all backed by the same API |
+| Remote control is awkward | Comms (Telegram) + CLI + Flutter app — all backed by the same Commander API |
 | Successful workflows disappear after the session ends | REX promotes patterns into runbooks, lessons into rules |
 | One machine = one context | REX manages topology across 1 machine, a small cluster, or a larger fleet |
 
@@ -75,7 +158,7 @@ REX is being shaped around a few hard rules:
 4. **No fake complexity**: if open source already solves a low-level problem well, REX integrates it instead of rebuilding it.
 5. **Zero-loss before fancy sync**: append-only logs, queues, ack, replay, then real-time niceties.
 6. **Flutter is the main operator UI, not the brain**: the system must still run on a headless VPS.
-7. **Continuity beats immediacy**: if one node survives, REX should preserve, spool, organize, and replay rather than lose work.
+7. **Continuity beats immediacy**: if one Specialist survives, REX should preserve, spool, organize, and replay rather than lose work.
 
 ---
 
@@ -83,15 +166,14 @@ REX is being shaped around a few hard rules:
 
 REX is moving toward a stricter v7 shape:
 
-- **One brain, multiple machines**: Mac, VPS, GPU node, NAS
+- **One Commander, multiple Specialists**: Mac, VPS, GPU node, NAS
 - **User-owned resources first**: scripts, installed CLIs, local services, and owned hardware before paid inference
 - **Governed tool registry**: many tools can be known, but external ones stay disabled until the user enables them
-- **Flutter-first operator console**: keep the main app in Flutter; if a remote dashboard is needed later, use a light Next.js/React surface on the same API
+- **Flutter-first operator console**: keep the main app in Flutter; if a remote dashboard is needed later, use a light Next.js/React surface on the same Commander API
 - **Cross-platform target**: macOS today, desktop target later is macOS + Windows + Linux
-- **Topology-aware**: one machine, 2-5 machines, or 10-30+ nodes must all degrade cleanly
-- **OpenClaw-inspired capabilities**: central routing and remote control, not its interface style
+- **Topology-aware**: one machine, 2-5 machines, or 10-30+ Specialists must all degrade cleanly
 - **Living memory**: failures become lessons, successes become runbooks
-- **Optional secure hub**: VPS preferred when available, never required for single-machine usefulness
+- **Optional secure Commander**: VPS preferred when available, never required for single-machine usefulness
 
 ---
 
@@ -109,22 +191,22 @@ REX is being built in practical layers, not as a giant rewrite.
 ### Phase 2 — Reliable Background System
 
 - [ ] unify background jobs around reconcile / organize / reflect / prune
-- [ ] preserve gateway messages, tasks, and observations before processing
+- [ ] preserve Comms messages, tasks, and observations before processing
 - [ ] keep organizing work possible through scripts, local LLMs, or free tiers
 - [ ] strengthen audit and doctor flows
 
 ### Phase 3 — Secure Multi-Machine REX
 
-- [ ] add secure hub API for nodes, tasks, events, and health
+- [ ] add Commander API for Fleet, tasks, events, and health
 - [ ] add durable sync with queue, ack, and replay
 - [ ] make Tailscale the default networking layer
-- [ ] support clean fallback when the preferred hub goes down
+- [ ] support clean fallback when the preferred Commander goes down
 
 ### Phase 4 — Better Operator Surfaces
 
 - [ ] extend the Flutter operator app beyond the current macOS-first state
-- [ ] add better views for nodes, queue health, degraded mode, and incidents
-- [ ] keep remote dashboard support secondary to the shared API
+- [ ] add better views for Fleet health, queue, degraded mode, and incidents
+- [ ] keep remote dashboard support secondary to the shared Commander API
 - [ ] keep the UI minimal, fast, and readable
 
 ### Phase 5 — Governed Tooling
@@ -136,8 +218,8 @@ REX is being built in practical layers, not as a giant rewrite.
 
 ### Phase 6 — Install and Fleet Readiness
 
-- [ ] one-command install profiles for local dev, desktop full, headless node, hub VPS, and GPU node
-- [ ] clearer fleet behaviors for 10-30+ machines
+- [ ] one-command install profiles for local dev, desktop full, headless Specialist, Commander VPS, and GPU node
+- [ ] clearer Fleet behaviors for 10-30+ machines
 - [ ] group/tag-based targeting and aggregate health
 - [ ] better packaging and setup on macOS, Linux, Windows, and VPS
 
@@ -150,9 +232,9 @@ REX is being built in practical layers, not as a giant rewrite.
 
 ### Near-term
 
-- Secure REX hub API for nodes, tasks, health, and events
+- Commander API hardening: Fleet, tasks, health, and events
 - Resource inventory: scripts, installed tools, services, quotas, hardware
-- Durable queue + replay between machines
+- Durable queue + replay between Specialists
 - Success memory and reusable runbooks
 - Tailscale-first networking with explicit fallbacks
 - MCP registry with recommendation-only defaults and explicit activation
@@ -161,11 +243,11 @@ REX is being built in practical layers, not as a giant rewrite.
 ### Product direction
 
 - Flutter desktop surface extended beyond macOS
-- Remote dashboard as a view on the same API, not a second brain
-- Better operator views for nodes, queue health, and incidents
+- Remote dashboard as a view on the same Commander API, not a second brain
+- Better operator views for Fleet health, queue, and incidents
 - Meeting/transcription bots through existing OSS where possible
 - One-command install strategy for macOS, Linux, Windows, and VPS
-- Clearer fleet behavior for larger machine sets
+- Clearer Fleet behavior for larger machine sets
 
 ### Explicit non-goals
 
@@ -181,22 +263,22 @@ REX is being built in practical layers, not as a giant rewrite.
 
 ### 1 machine
 
-- No hub required
+- No Commander required (runs locally)
 - No Tailscale required
 - Local mode must stay fully useful
-- Multi-node features should hide or degrade cleanly
+- Fleet features should hide or degrade cleanly
 
 ### 2 to 5 machines
 
 - Preferred standard mode
-- Stable hub if available, otherwise a main machine can temporarily lead
+- Stable Commander if available, otherwise a main machine can temporarily lead
 - Tailscale, wake, and health checks become valuable
 
 ### 10 to 30+ machines
 
 - Inventory, tags, groups, and aggregate health become mandatory
 - No noisy full-sync assumptions everywhere
-- Scheduling and rate limiting must target groups, not only individual nodes
+- Scheduling and rate limiting must target groups, not only individual Specialists
 
 </details>
 
@@ -207,9 +289,9 @@ REX is being built in practical layers, not as a giant rewrite.
 | Interface | Role |
 |-----------|------|
 | **CLI** | Primary execution surface |
-| **Flutter app** | Main operator UI |
-| **Telegram** | Remote control and notifications |
-| **Hub API** | Future shared control plane for app, CLI, gateway, and nodes |
+| **Flutter app** | Main operator UI (10-module layout) |
+| **Comms** | Remote control and notifications via Telegram |
+| **Commander API** | Shared control plane for app, CLI, Comms, and Fleet |
 
 ---
 
@@ -256,7 +338,7 @@ On Linux, see `docs/linux-setup.md` if present in the repo branch you use.
 | `rex doctor` | Full health check |
 | `rex doctor --fix` | Auto-repair common issues |
 | `rex status` | One-line system summary |
-| `rex gateway` | Start Telegram gateway |
+| `rex comms` | Start Comms (Telegram gateway) |
 | `rex audit` | Run integration audit |
 | `rex ingest` | Index Claude Code sessions into memory |
 | `rex categorize` | Auto-tag memories |
@@ -266,8 +348,8 @@ On Linux, see `docs/linux-setup.md` if present in the repo branch you use.
 | `rex providers` | Show provider registry and availability |
 | `rex budget` | Show cost tracking summary |
 | `rex inventory` | Scan detected hardware, CLIs, services, models |
-| `rex hub` | Start the REX hub API server |
-| `rex node status` | Show node identity and hub connection |
+| `rex hub` | Start the Commander API server |
+| `rex node status` | Show node identity and Commander connection |
 | `rex memory-check` | Verify memory integrity and health |
 
 <details>
@@ -295,27 +377,26 @@ cd packages/flutter_app
 flutter build macos --debug
 ```
 
-Current pages:
+Current pages (10-module layout):
 
-- Health
-- Network (topology, hub, sync, queue)
-- Providers (routing order, inventory, budget, runbooks)
-- Voice
-- Audio
-- Memory
-- Gateway
-- Agents
-- MCP
-- Optimize
+- HQ (Health)
+- FLEET (Network topology, Commander, sync, queue)
+- BUDGET (Providers, routing order, inventory, runbooks)
+- Voice / Audio
+- MEMORY
+- GATEWAY (Comms status and logs)
+- AGENTS
+- TOOLS (MCP marketplace)
+- OPTIMIZE
 - Logs
 - Settings
 
 Design direction for future UI work:
 
 - keep the operator surface minimal
-- show essentials first: health, nodes, queue, memory pending, incidents
+- show essentials first: health, Fleet status, queue, memory pending, incidents
 - avoid dashboard bloat
-- keep remote and desktop surfaces aligned with the same API
+- keep remote and desktop surfaces aligned with the same Commander API
 
 ---
 
@@ -357,7 +438,7 @@ REX currently ships **8 guards** around Claude Code activity.
 | Session Summary | Save repo state at session end |
 | Error Pattern | Surface repeated failure signatures |
 | UI Checklist | Catch missing loading/empty/error states |
-| Notify Telegram | Push important events to a quiet notification flow |
+| Notify | Push important events to Comms |
 
 ---
 
@@ -384,15 +465,15 @@ REX ships a large built-in skill set for design, engineering, review, delivery, 
 
 ---
 
-## Architecture
+## Component Map
 
-REX sits **above** Claude Code. When you invoke REX — via CLI, Telegram, or the Flutter app — REX prepares everything first: memory, context, resources, guards, routing. Only then does it hand off to Claude Code (Opus/Sonnet) or Codex for the actual reasoning and coding work.
+REX sits **above** Claude Code. When you invoke REX — via CLI, Comms, or the Flutter app — REX prepares everything first: memory, context, resources, guards, routing. Only then does it hand off to Claude Code (Opus/Sonnet) or Codex for the actual reasoning and coding work.
 
 Claude Code is not the entry point. **REX is.**
 
 ```text
 You / Operator
-(CLI · Telegram · Flutter App)
+(CLI · Comms · Flutter App)
          │
          ▼
 ┌─────────────────────────────────────────────────┐
@@ -400,7 +481,7 @@ You / Operator
 │                                                 │
 │  Memory · Guards · Router · Budget              │
 │  Scripts · Context prep · Skills                │
-│  Inventory · Daemon · Hub API                   │
+│  Inventory · Daemon · Commander API             │
 │                                                 │
 │  load memory → apply guards → route → delegate │
 └────────────────────┬────────────────────────────┘
@@ -431,8 +512,6 @@ You / Operator
 4. Provides the full resource inventory so Opus can make better decisions
 5. Tracks cost, captures results, promotes successes into runbooks
 
-### Component map
-
 ```text
 rex-claude
 ├── CLI (TypeScript/Node)           ← entry point for all operations
@@ -440,18 +519,19 @@ rex-claude
 ├── Guards (Claude hooks)           ← Pre/PostToolUse, SessionStart/End
 ├── Router (llm.ts + free-tiers)   ← owned-first model routing
 ├── Daemon (daemon.ts)              ← background cycles, health, sync
-├── Telegram gateway                ← remote control surface
-├── Flutter desktop app             ← operator UI
-├── Hub API (Node.js http)          ← shared control plane for all surfaces
+├── Comms (gateway.ts)             ← Telegram remote control surface
+├── Flutter desktop app             ← operator UI (10 modules)
+├── Commander API (hub.ts)          ← shared control plane for all surfaces
+├── Fleet (node-mesh.ts)           ← FleetNodes: Code/Inference/Storage/Background
 ├── Provider registry               ← inventory of all available resources
 ├── Sync queue (SQLite)             ← append-only, ack, replay
 └── Reflector                       ← lessons, runbooks from sessions
 ```
 
-### Hub shape (current + planned)
+### Commander shape
 
-- **Hub**: always-on daemon on a VPS or the main machine
-- **Nodes**: Mac, Linux, GPU box, NAS — register and heartbeat
+- **Commander**: always-on daemon on a VPS or the main machine (port 7420)
+- **Fleet**: Mac, Linux, GPU box, NAS — register as typed Specialists and heartbeat
 - **Routing**: cache → script/tool → owned hardware → free provider → paid provider
 - **Tool policy**: CLI/script → MCP → API → other
 - **Transport**: Tailscale first
@@ -466,7 +546,7 @@ rex-claude
 | **macOS** | Primary experience today |
 | **Linux** | CLI/headless direction is valid; desktop app is not the main surface today |
 | **Windows** | Future desktop target; current focus is not native parity yet |
-| **VPS** | Expected to run headless via CLI, daemon, gateway, and API |
+| **VPS** | Expected to run headless via CLI, daemon, Comms, and Commander API |
 
 ---
 
