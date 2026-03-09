@@ -789,6 +789,12 @@ fi
       desc: 'Warn when TODO/FIXME count exceeds threshold',
       matcher: 'Edit|Write',
     },
+    {
+      file: 'pre-push-guard.sh',
+      event: 'PreToolUse',
+      desc: 'Run rex review --quick before git push, block on failures',
+      matcher: 'Bash',
+    },
   ]
 
   let guardsInstalled = 0
