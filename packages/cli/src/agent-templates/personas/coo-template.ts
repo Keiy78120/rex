@@ -6,6 +6,7 @@
  * @module AGENTS
  */
 
+import { Agent } from '@openai/agents'
 import type { AgentTemplate } from '../base-template.js'
 
 export const cooTemplate: AgentTemplate = {
@@ -112,4 +113,14 @@ Domaines principaux :
   monitorModules: ['activitywatch'],
 
   integrations: ['google-calendar', 'gmail', 'google-drive'],
+}
+
+/** Create a runnable COO agent using the OpenAI Agents SDK. */
+export function createCooAgent(): Agent {
+  return new Agent({
+    name: 'REX-COO',
+    instructions: cooTemplate.systemPrompt,
+    model: 'gpt-4o-mini',
+    tools: [],
+  })
 }

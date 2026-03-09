@@ -6,6 +6,7 @@
  * @module AGENTS
  */
 
+import { Agent } from '@openai/agents'
 import type { AgentTemplate } from '../base-template.js'
 
 export const ceoTemplate: AgentTemplate = {
@@ -111,4 +112,14 @@ Focus :
   monitorModules: ['activitywatch', 'hammerspoon'],
 
   integrations: ['google-calendar', 'gmail', 'google-drive'],
+}
+
+/** Create a runnable CEO agent using the OpenAI Agents SDK. */
+export function createCeoAgent(): Agent {
+  return new Agent({
+    name: 'REX-CEO',
+    instructions: ceoTemplate.systemPrompt,
+    model: 'gpt-4o-mini',
+    tools: [],
+  })
 }

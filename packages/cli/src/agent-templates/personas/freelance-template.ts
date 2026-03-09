@@ -6,6 +6,7 @@
  * @module AGENTS
  */
 
+import { Agent } from '@openai/agents'
 import type { AgentTemplate } from '../base-template.js'
 
 export const freelanceTemplate: AgentTemplate = {
@@ -125,4 +126,14 @@ Principe clé : le temps du freelance = argent. Chaque réponse doit faire gagne
   monitorModules: ['activitywatch', 'hammerspoon'],
 
   integrations: ['google-calendar', 'gmail', 'google-drive'],
+}
+
+/** Create a runnable Freelance agent using the OpenAI Agents SDK. */
+export function createFreelanceAgent(): Agent {
+  return new Agent({
+    name: 'REX-FREELANCE',
+    instructions: freelanceTemplate.systemPrompt,
+    model: 'gpt-4o-mini',
+    tools: [],
+  })
 }

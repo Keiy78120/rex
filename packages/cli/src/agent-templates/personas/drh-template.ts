@@ -6,6 +6,7 @@
  * @module AGENTS
  */
 
+import { Agent } from '@openai/agents'
 import type { AgentTemplate } from '../base-template.js'
 
 export const drhTemplate: AgentTemplate = {
@@ -109,4 +110,14 @@ Domaines couverts :
   monitorModules: ['activitywatch'],
 
   integrations: ['google-calendar', 'gmail', 'google-drive'],
+}
+
+/** Create a runnable DRH agent using the OpenAI Agents SDK. */
+export function createDrhAgent(): Agent {
+  return new Agent({
+    name: 'REX-DRH',
+    instructions: drhTemplate.systemPrompt,
+    model: 'gpt-4o-mini',
+    tools: [],
+  })
 }
