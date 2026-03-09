@@ -9,7 +9,106 @@
  * @module AGENTS
  */
 
+import { Agent, tool } from '@openai/agents'
 import type { AgentTemplate } from '../base-template.js'
+
+// ── DG Tools (OpenAI Agents SDK) ──────────────────────────────────────────────
+
+const calendarBriefTool = tool({
+  name: 'calendar_brief',
+  description: 'Récupère les RDV du jour avec participants et objectifs',
+  parameters: {
+    type: 'object',
+    properties: {
+      date: { type: 'string', description: "Date ISO (défaut: aujourd'hui)" },
+    },
+    required: [],
+  },
+  execute: async (args: { date?: string }) => {
+    const target = args.date ?? new Date().toISOString().split('T')[0]
+    // Stub: in production, reads from google-calendar MCP
+    return JSON.stringify({ date: target, events: [], note: 'Connectez le MCP google-calendar pour activer ce tool' })
+  },
+})
+
+const memorySearchTool = tool({
+  name: 'memory_search',
+  description: 'Recherche dans la mémoire REX : historique réunions, décisions, dossiers',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Requête de recherche' },
+      limit: { type: 'number', description: 'Nombre max de résultats (défaut: 5)' },
+    },
+    required: ['query'],
+  },
+  execute: async (args: { query: string; limit?: number }) => {
+    const limit = args.limit ?? 5
+    try {
+      const { execSync } = await import('node:child_process')
+      const out = execSync(`rex search "${args.query.replace(/"/g, '')}" --limit=${limit} --json 2>/dev/null`, {
+        timeout: 10_000,
+        encoding: 'utf-8',
+      })
+      return out.trim() || '[]'
+    } catch {
+      return '[]'
+    }
+  },
+})
+
+const emailSummaryTool = tool({
+  name: 'email_summary',
+  description: 'Résume les emails non lus prioritaires',
+  parameters: {
+    type: 'object',
+    properties: {
+      maxEmails: { type: 'number', description: "Nombre max d'emails à analyser (défaut: 10)" },
+    },
+    required: [],
+  },
+  execute: async (args: { maxEmails?: number }) => {
+    const maxEmails = args.maxEmails ?? 10
+    // Stub: in production, reads from gmail MCP
+    return JSON.stringify({ emails: [], maxEmails, note: 'Connectez le MCP gmail pour activer ce tool' })
+  },
+})
+
+const openLoopsTool = tool({
+  name: 'open_loops',
+  description: 'Liste les boucles ouvertes : décisions non actées, emails sans réponse, tâches en attente',
+  parameters: { type: 'object', properties: {}, required: [] },
+  execute: async (_args: Record<string, never>) => {
+    try {
+      const { execSync } = await import('node:child_process')
+      const out = execSync('rex search "open_loop" --limit=10 --json 2>/dev/null', {
+        timeout: 10_000,
+        encoding: 'utf-8',
+      })
+      return out.trim() || '[]'
+    } catch {
+      return '[]'
+    }
+  },
+})
+
+/**
+ * Create a runnable DG agent using the OpenAI Agents SDK.
+ * The agent uses the DG system prompt and has access to calendar,
+ * memory search, email summary, and open-loop detection tools.
+ *
+ * @example
+ * const agent = createDgAgent()
+ * const result = await run(agent, 'Prépare mon brief du matin')
+ */
+export function createDgAgent(): Agent {
+  return new Agent({
+    name: 'REX-DG',
+    instructions: dgTemplate.systemPrompt,
+    model: 'gpt-4o-mini', // fallback model — overridden by rex routing in production
+    tools: [calendarBriefTool, memorySearchTool, emailSummaryTool, openLoopsTool],
+  })
+}
 
 export const dgTemplate: AgentTemplate = {
   id: 'dg',
