@@ -440,6 +440,10 @@ Il est curieux : il cherche activement de nouvelles solutions.
 | Lint loop script-first (§28) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Fleet relay race specialists (§26) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | REX as MCP server 7 tools | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Docker VPS deployment (Dockerfile + compose) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Guards v2 (secret-guard BLOCK + consolidated post-edit) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Switchable LLM backends (ollama/llama-cpp/localai/vllm/llamafile) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Platform warnings (Linux/Docker/WSL2 feature gap detection) | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 ---
 
