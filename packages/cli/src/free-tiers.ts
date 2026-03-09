@@ -38,6 +38,7 @@ interface RateState {
   windowStart: number
   blocked: boolean
   blockedUntil: number
+  consecutiveFails: number
 }
 
 // ── Catalog ────────────────────────────────────────────
@@ -157,10 +158,12 @@ export function getApiKey(envKey: string): string | null {
 
 const _rateStates = new Map<string, RateState>()
 const BLOCK_MS = 60_000
+const HARD_DISABLE_MS = 30 * 60 * 1000 // 30min after 3 consecutive failures
+const MAX_CONSECUTIVE_FAILS = 3
 
 function getRateState(name: string): RateState {
   if (!_rateStates.has(name)) {
-    _rateStates.set(name, { requests: 0, windowStart: Date.now(), blocked: false, blockedUntil: 0 })
+    _rateStates.set(name, { requests: 0, windowStart: Date.now(), blocked: false, blockedUntil: 0, consecutiveFails: 0 })
   }
   return _rateStates.get(name)!
 }
@@ -170,6 +173,21 @@ export function markRateLimited(name: string): void {
   state.blocked = true
   state.blockedUntil = Date.now() + BLOCK_MS
   log.warn(`${name} rate-limited — blocked for ${BLOCK_MS / 1000}s`)
+}
+
+export function markFailed(name: string): void {
+  const state = getRateState(name)
+  state.consecutiveFails++
+  if (state.consecutiveFails >= MAX_CONSECUTIVE_FAILS) {
+    state.blocked = true
+    state.blockedUntil = Date.now() + HARD_DISABLE_MS
+    log.warn(`${name} disabled for 30min after ${state.consecutiveFails} consecutive failures`)
+  }
+}
+
+export function markSuccess(name: string): void {
+  const state = getRateState(name)
+  state.consecutiveFails = 0
 }
 
 function isBlocked(name: string, rpmLimit: number): boolean {
@@ -231,6 +249,7 @@ export async function callProvider(
       maxTokens: 2048,
       abortSignal: AbortSignal.timeout(30_000),
     })
+    markSuccess(provider.name)
     return text
   } catch (err) {
     const msg = String(err)
@@ -238,6 +257,7 @@ export async function callProvider(
       markRateLimited(provider.name)
       throw new Error(`RATE_LIMIT:${provider.name}`)
     }
+    markFailed(provider.name)
     throw err
   }
 }
@@ -308,12 +328,28 @@ export async function callWithAutoFallback(
   throw new Error(`All providers failed [${tried.join(', ')}]: ${lastErr?.message}`)
 }
 
+export async function pingAllProviders(): Promise<Array<{ name: string; ok: boolean; latencyMs: number }>> {
+  const results = await Promise.all(
+    FREE_TIER_PROVIDERS.map(async (p) => {
+      if (!isProviderAvailable(p)) return { name: p.name, ok: false, latencyMs: 0 }
+      const start = Date.now()
+      const ok = await validateProvider(p)
+      const latencyMs = Date.now() - start
+      if (!ok) markFailed(p.name)
+      else markSuccess(p.name)
+      return { name: p.name, ok, latencyMs }
+    })
+  )
+  return results
+}
+
 export function getProvidersSnapshot(): object[] {
   return FREE_TIER_PROVIDERS.map(p => ({
     name: p.name,
     envKey: p.envKey,
     available: isProviderAvailable(p),
     blocked: p.name !== 'Ollama' ? getRateState(p.name).blocked : false,
+    consecutiveFails: getRateState(p.name).consecutiveFails,
     rpmLimit: p.rpmLimit,
     defaultModel: p.defaultModel,
     modelsCount: p.models.length,

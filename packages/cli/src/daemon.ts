@@ -11,7 +11,7 @@ import { syncBidirectional } from './sync.js'
 import { purgeOldEvents } from './sync-queue.js'
 import { appendEvent as journalAppend, purgeOldJournalEvents } from './event-journal.js'
 import { cacheClean } from './semantic-cache.js'
-import { getRoutableProviders } from './free-tiers.js'
+import { getRoutableProviders, pingAllProviders } from './free-tiers.js'
 import { buildLocalNodeInfo, registerWithHub, autoDiscoverHubs, persistDiscoveredHub } from './node-mesh.js'
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
@@ -557,6 +557,7 @@ export async function daemon(): Promise<void> {
   let lastSessionGuard = 0  // check immediately
   let lastTailscaleMesh = 0  // discover Tailscale hubs immediately on start
   let lastCurious = Date.now() - 23 * 60 * 60 * 1000  // run ~1h after daemon start
+  let lastProviderPing = 0  // ping providers immediately on start
   let lastDailySummaryDate = ''  // tracks 'YYYY-MM-DD' to send once per day
   let lastAlertDate = ''  // disk/backlog alerts — max once per day
 
@@ -635,6 +636,26 @@ export async function daemon(): Promise<void> {
         log.debug(`Curious cycle skipped: ${e.message?.slice(0, 80)}`)
       }
       lastCurious = now
+    }
+
+    // Provider health ping every 5 min — 3-strike / 30min disable
+    if (now - lastProviderPing >= 5 * 60_000) {
+      try {
+        const results = await pingAllProviders()
+        const disabled = results.filter(r => !r.ok && r.latencyMs === 0)
+        const degraded = results.filter(r => !r.ok && r.latencyMs > 0)
+        if (degraded.length > 0) {
+          const names = degraded.map(r => r.name).join(', ')
+          log.warn(`Provider health: degraded — ${names}`)
+          await sendTelegramNotify(`⚠️ REX providers degraded: ${names}`)
+        }
+        if (disabled.length > 0) {
+          log.debug(`Provider health: unavailable (no key) — ${disabled.map(r => r.name).join(', ')}`)
+        }
+      } catch (e: any) {
+        log.debug(`Provider ping skipped: ${e.message?.slice(0, 80)}`)
+      }
+      lastProviderPing = now
     }
 
     // Node registration every 60s (advertise capabilities to hub)
