@@ -1126,18 +1126,31 @@ async function askLLM(prompt: string): Promise<string> {
 }
 
 async function askQwen(prompt: string): Promise<string> {
+  let ollamaUp = false
   try {
-    const check = await fetch(`${OLLAMA_URL}/api/tags`)
-    if (!check.ok) return '⚠️ Ollama not running. /wake to wake Mac first.'
+    const check = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(3000) })
+    ollamaUp = check.ok
   } catch {
-    return '⚠️ Ollama not running. Wake Mac first.'
+    ollamaUp = false
   }
 
-  const out = runRex(['llm', prompt], 60000)
-  if (!out || out.includes('rex-claude') || out.includes('Commands:')) {
-    return '⚠️ LLM returned no useful response'
+  if (ollamaUp) {
+    const out = runRex(['llm', prompt], 60000)
+    if (out && !out.includes('rex-claude') && !out.includes('Commands:')) {
+      return truncate(out)
+    }
   }
-  return truncate(out)
+
+  // Ollama offline or returned nothing — fallback to free-tier APIs
+  try {
+    const { callWithAutoFallback } = await import('./free-tiers.js')
+    const result = await callWithAutoFallback(prompt, undefined, { maxProviders: 3 })
+    return truncate(result.text)
+  } catch {
+    // no free-tier configured or all rate-limited
+  }
+
+  return '⚠️ Ollama offline and no free-tier API configured. /wake to wake Mac first.'
 }
 
 /** Streaming Qwen via Ollama /api/chat — sends progressive edits to Telegram */
