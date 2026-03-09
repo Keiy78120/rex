@@ -22,6 +22,7 @@ class _CuriousPageState extends State<CuriousPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RexService>().loadCurious();
+      context.read<RexService>().loadPendingSignals();
     });
   }
 
@@ -58,6 +59,41 @@ class _CuriousPageState extends State<CuriousPage> {
               controller: scrollController,
               padding: const EdgeInsets.all(20),
               children: [
+                // Pending signals section
+                if (rex.pendingSignals.isNotEmpty) ...[
+                  RexSection(
+                    title: 'Pending Signals',
+                    icon: CupertinoIcons.bell_fill,
+                    action: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: context.rex.accent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: context.rex.accent.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        '${rex.pendingSignals.length}',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: context.rex.accent),
+                      ),
+                    ),
+                  ),
+                  RexCard(
+                    child: Column(
+                      children: rex.pendingSignals.asMap().entries.map((e) {
+                        final s = e.value;
+                        return Column(
+                          children: [
+                            _PendingSignalRow(signal: s, onConfirm: () => rex.confirmSignal(s['id'] as String? ?? ''), onDismiss: () => rex.dismissSignal(s['id'] as String? ?? '')),
+                            if (e.key < rex.pendingSignals.length - 1)
+                              Container(height: 1, color: context.rex.separator),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Status bar
                 if (rex.curiousCheckedAt.isNotEmpty) ...[
                   _StatusBar(
@@ -332,6 +368,107 @@ class _FilterBar extends StatelessWidget {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+// ── Pending signal row ────────────────────────────────────────────────────────
+
+class _PendingSignalRow extends StatelessWidget {
+  const _PendingSignalRow({
+    required this.signal,
+    required this.onConfirm,
+    required this.onDismiss,
+  });
+
+  final Map<String, dynamic> signal;
+  final VoidCallback onConfirm;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.rex;
+    final type   = signal['signalType'] as String? ?? signal['type'] as String? ?? '';
+    final title  = signal['title'] as String? ?? '';
+    final detail = signal['detail'] as String? ?? '';
+    final action = signal['action'] as String?;
+
+    final String icon;
+    final Color badge;
+    switch (type) {
+      case 'PATTERN':
+        icon = '🔁'; badge = c.warning;
+      case 'OPEN_LOOP':
+        icon = '🔓'; badge = c.accent;
+      default:
+        icon = '💡'; badge = c.success;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 16)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: badge.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(type, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: badge)),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.text), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                ]),
+                if (detail.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(detail, style: TextStyle(fontSize: 11, color: c.textSecondary), maxLines: 2, overflow: TextOverflow.ellipsis),
+                ],
+                if (action != null) ...[
+                  const SizedBox(height: 3),
+                  Text('Action: $action', style: TextStyle(fontSize: 10, color: c.textTertiary, fontFamily: 'Menlo'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+                const SizedBox(height: 8),
+                Row(children: [
+                  _ActionButton(label: 'Confirm', color: c.success, onPressed: onConfirm),
+                  const SizedBox(width: 8),
+                  _ActionButton(label: 'Dismiss', color: c.textTertiary, onPressed: onDismiss),
+                ]),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({required this.label, required this.color, required this.onPressed});
+  final String label;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+          borderRadius: BorderRadius.circular(5),
+          color: color.withValues(alpha: 0.06),
+        ),
+        child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: color)),
       ),
     );
   }

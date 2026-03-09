@@ -2722,6 +2722,56 @@ $transcript
   String get curiousCheckedAt => _curiousCheckedAt;
   int get curiousNewCount => _curiousNewCount;
 
+  // ── Pending Signals ──────────────────────────────────────────────────────
+
+  List<Map<String, dynamic>> _pendingSignals = [];
+  List<Map<String, dynamic>> get pendingSignals => _pendingSignals;
+
+  Future<void> loadPendingSignals() async {
+    try {
+      final output = await _runRexArgs(['notify', '--pending', '--json']);
+      final parsed = _safeParseJson(output);
+      if (parsed != null) {
+        _pendingSignals = (parsed['pending'] as List? ?? [])
+            .whereType<Map<String, dynamic>>().toList();
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<bool> confirmSignal(String id) async {
+    try {
+      final output = await _runRexArgs(['notify', '--confirm', id, '--json']);
+      final parsed = _safeParseJson(output);
+      final ok = parsed?['success'] as bool? ?? false;
+      if (ok) await loadPendingSignals();
+      return ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> dismissSignal(String id) async {
+    try {
+      final output = await _runRexArgs(['notify', '--dismiss', id, '--json']);
+      final parsed = _safeParseJson(output);
+      final ok = parsed?['success'] as bool? ?? false;
+      if (ok) await loadPendingSignals();
+      return ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Map<String, dynamic>? _safeParseJson(String raw) {
+    try {
+      final extracted = _extractJson(raw);
+      return jsonDecode(extracted) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> loadCurious() async {
     _isLoadingCurious = true;
     notifyListeners();
