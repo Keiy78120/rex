@@ -11,6 +11,7 @@ import { getInventoryCache } from './inventory.js'
 import { getEventLog, appendEvent, getUnacked, ackEvent, getQueueStats } from './sync-queue.js'
 import type { EventType } from './sync-queue.js'
 import { getFleetStatus } from './node-mesh.js'
+import type { WebSocket as WsType } from 'ws'
 
 /** @module FLEET */
 const log = createLogger('FLEET:commander')
@@ -88,7 +89,18 @@ interface NodeInfo {
 const nodes = new Map<string, NodeInfo>()
 let flushInterval: ReturnType<typeof setInterval> | null = null
 let server: Server | null = null
+let wsClients: Set<WsType> = new Set()
 const startTime = Date.now()
+
+export function broadcastHubEvent(event: Record<string, unknown>): void {
+  if (wsClients.size === 0) return
+  const payload = JSON.stringify(event)
+  for (const ws of wsClients) {
+    try {
+      if ((ws as { readyState: number }).readyState === 1 /* OPEN */) ws.send(payload)
+    } catch { /* ignore disconnected clients */ }
+  }
+}
 
 function loadNodes(): void {
   if (!existsSync(NODES_PATH)) return
@@ -238,6 +250,7 @@ addRoute('POST', '/api/nodes/register', async (req, res) => {
   }
   nodes.set(id, node)
   log.info(`Node registered: ${id} (${hostname})`)
+  broadcastHubEvent({ type: 'node.registered', nodeId: id, ts: new Date().toISOString() })
   sendJson(res, 201, node)
 })
 
@@ -834,6 +847,32 @@ export async function startCommander(port?: number): Promise<void> {
     }
   })
 
+  // WebSocket upgrade — same port as HTTP, auth via Bearer token
+  server.on('upgrade', async (req, socket, head) => {
+    const auth = req.headers.authorization ?? req.headers['sec-websocket-protocol'] ?? ''
+    if (HUB_TOKEN && auth !== `Bearer ${HUB_TOKEN}`) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+      socket.destroy()
+      return
+    }
+    const { WebSocketServer } = await import('ws')
+    const wss = new WebSocketServer({ noServer: true })
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wsClients.add(ws as WsType)
+      ws.send(JSON.stringify({ type: 'connected', version: VERSION, ts: new Date().toISOString() }))
+      ws.on('close', () => wsClients.delete(ws as WsType))
+      ws.on('error', () => wsClients.delete(ws as WsType))
+      // Heartbeat pong
+      ws.on('message', (data: Buffer) => {
+        try {
+          const msg = JSON.parse(data.toString()) as { type?: string }
+          if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong', ts: new Date().toISOString() }))
+        } catch { /* ignore malformed */ }
+      })
+      log.info(`WS client connected (total: ${wsClients.size})`)
+    })
+  })
+
   flushInterval = setInterval(flushNodes, 60_000)
 
   const shutdown = () => {
@@ -851,7 +890,7 @@ export async function startCommander(port?: number): Promise<void> {
 
   return new Promise<void>((resolve) => {
     server!.listen(listenPort, () => {
-      log.info(`Hub listening on port ${listenPort}`)
+      log.info(`Hub listening on port ${listenPort} (HTTP + WS)`)
       resolve()
     })
   })
@@ -864,6 +903,7 @@ export function stopCommander(): void {
   }
   flushNodes()
   if (server) {
+    wsClients.clear()
     server.close()
     server = null
     log.info('Hub stopped')

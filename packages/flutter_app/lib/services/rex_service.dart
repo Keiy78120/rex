@@ -170,6 +170,16 @@ class RexService extends ChangeNotifier {
   Timer? _burnRateTimer;
   bool _callAutoRecording = false;
   bool callStateActive = false;
+
+  // ── WebSocket connections (hub + gateway) ─────────────────────────────────
+  WebSocket? _hubWs;
+  WebSocket? _gatewayWs;
+  Timer? _hubWsReconnectTimer;
+  Timer? _gatewayWsReconnectTimer;
+  bool hubWsConnected = false;
+  bool gatewayWsConnected = false;
+  final List<Map<String, dynamic>> hubEvents = [];
+  final List<Map<String, dynamic>> gatewayEvents = [];
   String callStateApp = '';
   String callStateReason = '';
   String callStateTitle = '';
@@ -3047,11 +3057,127 @@ $transcript
 
   // ── End Training ──────────────────────────────────────────────────────────────
 
+  // ── WebSocket clients ──────────────────────────────────────────────────────
+
+  /// Connect to the REX Hub WebSocket (ws://localhost:7420).
+  /// Auto-reconnects on disconnect with 10s backoff.
+  Future<void> connectHubWs() async {
+    _hubWsReconnectTimer?.cancel();
+    try {
+      final token = await _readHubToken();
+      final headers = token != null ? {'Authorization': 'Bearer $token'} : <String, String>{};
+      _hubWs = await WebSocket.connect('ws://localhost:7420/', headers: headers)
+          .timeout(const Duration(seconds: 5));
+      hubWsConnected = true;
+      notifyListeners();
+      _hubWs!.listen(
+        (dynamic data) {
+          try {
+            final event = jsonDecode(data as String);
+            if (event is Map<String, dynamic>) {
+              hubEvents.insert(0, event);
+              if (hubEvents.length > 200) hubEvents.removeLast();
+              notifyListeners();
+            }
+          } catch (_) {}
+        },
+        onDone: _onHubWsDone,
+        onError: (_) => _onHubWsDone(),
+        cancelOnError: true,
+      );
+      // Periodic ping to keep connection alive
+      Timer.periodic(const Duration(seconds: 30), (t) {
+        if (_hubWs == null || _hubWs!.readyState != WebSocket.open) {
+          t.cancel();
+          return;
+        }
+        _hubWs!.add(jsonEncode({'type': 'ping'}));
+      });
+    } catch (_) {
+      hubWsConnected = false;
+      _scheduleHubWsReconnect();
+    }
+  }
+
+  void _onHubWsDone() {
+    _hubWs = null;
+    hubWsConnected = false;
+    notifyListeners();
+    _scheduleHubWsReconnect();
+  }
+
+  void _scheduleHubWsReconnect() {
+    _hubWsReconnectTimer?.cancel();
+    _hubWsReconnectTimer = Timer(const Duration(seconds: 10), connectHubWs);
+  }
+
+  /// Connect to the REX Gateway WebSocket (ws://localhost:7421).
+  /// Receives real-time messages from Telegram and other channels.
+  Future<void> connectGatewayWs() async {
+    _gatewayWsReconnectTimer?.cancel();
+    try {
+      _gatewayWs = await WebSocket.connect('ws://localhost:7421/')
+          .timeout(const Duration(seconds: 5));
+      gatewayWsConnected = true;
+      notifyListeners();
+      _gatewayWs!.listen(
+        (dynamic data) {
+          try {
+            final event = jsonDecode(data as String);
+            if (event is Map<String, dynamic>) {
+              gatewayEvents.insert(0, event);
+              if (gatewayEvents.length > 200) gatewayEvents.removeLast();
+              notifyListeners();
+            }
+          } catch (_) {}
+        },
+        onDone: _onGatewayWsDone,
+        onError: (_) => _onGatewayWsDone(),
+        cancelOnError: true,
+      );
+    } catch (_) {
+      gatewayWsConnected = false;
+      _scheduleGatewayWsReconnect();
+    }
+  }
+
+  void _onGatewayWsDone() {
+    _gatewayWs = null;
+    gatewayWsConnected = false;
+    notifyListeners();
+    _scheduleGatewayWsReconnect();
+  }
+
+  void _scheduleGatewayWsReconnect() {
+    _gatewayWsReconnectTimer?.cancel();
+    _gatewayWsReconnectTimer = Timer(const Duration(seconds: 15), connectGatewayWs);
+  }
+
+  Future<String?> _readHubToken() async {
+    try {
+      final home = Platform.environment['HOME'] ?? '';
+      final settingsFile = File('$home/.claude/settings.json');
+      if (!await settingsFile.exists()) return null;
+      final raw = await settingsFile.readAsString();
+      final settings = jsonDecode(raw) as Map<String, dynamic>;
+      final env = settings['env'] as Map<String, dynamic>?;
+      return env?['REX_HUB_TOKEN'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── End WebSocket ──────────────────────────────────────────────────────────
+
   @override
   void dispose() {
     _recordingTimer?.cancel();
     _callStateTimer?.cancel();
     _burnRateTimer?.cancel();
+    _hubWsReconnectTimer?.cancel();
+    _gatewayWsReconnectTimer?.cancel();
+    _hubWs?.close();
+    _gatewayWs?.close();
     _gatewayProcess?.kill();
     super.dispose();
   }
