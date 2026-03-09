@@ -3228,6 +3228,35 @@ async function main() {
         console.log(`\n\x1b[2mRunning load test: ${rps} rps × ${duration}s…\x1b[0m`)
         const result = await runLoadTest(opts)
         printLoadTestResult(result, opts)
+      } else if (sub === 'coldstart' || sub === 'cold-start') {
+        // Benchmark: measure time from process start to this point
+        const startMs = performance.now()
+        const { execFileSync } = await import('node:child_process')
+        const trials = parseInt(process.argv.find(a => a.startsWith('--trials='))?.split('=')[1] ?? '3', 10)
+        const rexBin = process.argv[1]
+        const times: number[] = []
+        console.log(`\x1b[2mRunning ${trials} cold start trials…\x1b[0m`)
+        for (let i = 0; i < trials; i++) {
+          const t0 = Date.now()
+          try {
+            execFileSync(process.execPath, [rexBin, 'version'], {
+              encoding: 'utf-8', stdio: 'ignore', timeout: 15_000,
+              env: { ...process.env, REX_NO_STARTUP: '1' },
+            })
+          } catch {}
+          times.push(Date.now() - t0)
+        }
+        const avg = times.reduce((a, b) => a + b, 0) / times.length
+        const min = Math.min(...times)
+        const max = Math.max(...times)
+        console.log(`\nCold start benchmark (${trials} trials):`)
+        console.log(`  avg: ${avg.toFixed(0)}ms  min: ${min}ms  max: ${max}ms`)
+        console.log(`  target: < 5000ms  ${avg < 5000 ? '\x1b[32m✓ OK\x1b[0m' : '\x1b[31m✗ SLOW\x1b[0m'}`)
+        void startMs  // suppress unused warning
+      } else if (sub === 'seed' || sub === 'seed-db') {
+        const dbPath = process.argv.find(a => a.startsWith('--db='))?.split('=').slice(1).join('=')
+        const { seedTestDb } = await import('./test-seed.js')
+        seedTestDb(dbPath)
       } else {
         console.log('Usage:')
         console.log('  rex test mock            Start mock LLM server (OpenAI + Ollama compatible)')
@@ -3236,6 +3265,8 @@ async function main() {
         console.log('  rex test aw --state=idle Simulate idle/sleeping state')
         console.log('  rex test load            Load test (default: 5 rps, 30s)')
         console.log('  rex test load --rps=10 --duration=60 --url=http://...')
+        console.log('  rex test coldstart       Benchmark REX cold start time (target < 5s)')
+        console.log('  rex test seed            Seed test SQLite DB with Kevin-like fixtures')
       }
       break
     }
