@@ -604,6 +604,11 @@ export async function daemon(): Promise<void> {
   let lastDailySummaryDate = ''  // tracks 'YYYY-MM-DD' to send once per day
   let lastAlertDate = ''  // disk/backlog alerts — max once per day
   let lastCoachingDate = ''  // coaching suggestions — max once per week
+  // Circuit breaker: track consecutive failures per cycle type
+  const cbFailCounts: Record<string, number> = { ingest: 0, health: 0, reflect: 0 }
+  const CB_MAX_FAILS = 3  // pause cycle after N consecutive failures
+  const cbPauseUntil: Record<string, number> = {}
+  const CB_PAUSE_MS = 5 * 60_000  // 5 minute pause
 
   // Run maintenance immediately on start
   await maintenanceCycle()
@@ -624,7 +629,23 @@ export async function daemon(): Promise<void> {
     }
 
     if (now - lastIngest >= config.daemon.ingestInterval * 1000) {
-      await ingestCycle()
+      // Circuit breaker: skip if paused due to consecutive failures
+      if (now < (cbPauseUntil['ingest'] ?? 0)) {
+        log.debug(`Circuit breaker: ingest paused until ${new Date(cbPauseUntil['ingest']).toISOString()}`)
+      } else {
+        try {
+          await ingestCycle()
+          cbFailCounts['ingest'] = 0  // reset on success
+        } catch (e: any) {
+          cbFailCounts['ingest'] = (cbFailCounts['ingest'] ?? 0) + 1
+          log.warn(`Ingest cycle failed (${cbFailCounts['ingest']}/${CB_MAX_FAILS}): ${e.message?.slice(0, 80)}`)
+          if (cbFailCounts['ingest'] >= CB_MAX_FAILS) {
+            cbPauseUntil['ingest'] = now + CB_PAUSE_MS
+            log.warn(`Circuit breaker: ingest paused for ${CB_PAUSE_MS / 60_000}min after ${CB_MAX_FAILS} failures`)
+            await sendTelegramNotify(`⚡ REX daemon: ingest paused after ${CB_MAX_FAILS} failures. Will retry in ${CB_PAUSE_MS / 60_000}min.`)
+          }
+        }
+      }
       lastIngest = now
     }
 
