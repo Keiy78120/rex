@@ -8,7 +8,7 @@ services:
       - "traefik.http.routers.rex.rule=Host(`${REX_DOMAIN}`)"
       - "traefik.http.routers.rex.tls.certresolver=letsencrypt"
       - "traefik.http.routers.rex.entrypoints=websecure"
-      - "traefik.http.services.rex.loadbalancer.server.port=3117"
+      - "traefik.http.services.rex.loadbalancer.server.port=7420"
     networks:
       - rex-network
 

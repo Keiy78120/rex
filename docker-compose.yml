@@ -5,18 +5,19 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3117:3117"
+      - "7420:7420"
     volumes:
       - rex-data:/data
     environment:
       REX_MODE: hub
+      REX_HUB_PORT: "7420"
       REX_TELEGRAM_BOT_TOKEN: ${REX_TELEGRAM_BOT_TOKEN}
       REX_TELEGRAM_CHAT_ID: ${REX_TELEGRAM_CHAT_ID}
       OLLAMA_URL: http://ollama:11434
       REX_HUB_TOKEN: ${REX_HUB_TOKEN}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3117/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:7420/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
