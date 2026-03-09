@@ -4,7 +4,9 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "dev": "pnpm -r --parallel dev"
+    "dev": "pnpm -r --parallel dev",
+    "build:binary": "bash scripts/build-binary.sh",
+    "build:binary:all": "bash scripts/build-binary.sh --target=all"
   },
   "engines": {
     "node": ">=20",
