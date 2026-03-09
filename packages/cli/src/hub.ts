@@ -191,7 +191,23 @@ addRoute('GET', '/api/health', (_req, res) => {
   })
 })
 
+// v1 alias for /api/health (OpenClaw addendum spec)
+addRoute('GET', '/api/v1/health', (_req, res) => {
+  sendJson(res, 200, {
+    status: 'running',
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    nodeCount: nodes.size,
+    version: VERSION,
+  })
+})
+
 addRoute('GET', '/api/nodes', (_req, res) => {
+  const list = [...nodes.values()]
+  sendJson(res, 200, list, { total: list.length })
+})
+
+// v1 alias for /api/nodes (OpenClaw addendum spec)
+addRoute('GET', '/api/v1/nodes', (_req, res) => {
   const list = [...nodes.values()]
   sendJson(res, 200, list, { total: list.length })
 })
