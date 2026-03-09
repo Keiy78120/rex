@@ -774,6 +774,14 @@ rex doctor --fix     # Auto-fix then health check
 | **living-rex-vision.md** : 3 new ✅ entries (Cockpit UI, Commander hub page, HQ data mapping) | `docs/plans/living-rex-vision.md` |
 | CLI build ✅ zero errors | — |
 
+### ✅ Terminé (session 2026-03-15 — @module headers + plan audit)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **@module headers** ajoutés à 16 fichiers CLI manquants (hub.ts→FLEET, backend-runner.ts→AGENTS, free-models.ts→BUDGET, sandbox.ts→TOOLS, vps-deploy.ts→FLEET, llm.ts→BUDGET, litellm-config.ts→BUDGET, platform-warnings.ts→TOOLS, prune.ts→OPTIMIZE, optimize.ts→OPTIMIZE, context.ts→PROJETS, audit.ts→TOOLS, migrate.ts→MEMORY, recategorize.ts→MEMORY, docker.ts→FLEET, skills.ts→TOOLS) | `packages/cli/src/*.ts` |
+| **Audit plans complet** : action.md, frontend-design.md, backend-functions.md, sources.md, living-rex-vision.md, install-optimization-plan.md → tous Phase 1/2/3 ✅ | docs/plans/ |
+| CLI build ✅ zero errors | — |
+
 ### 🔄 En cours / A faire
 
 **ALL PHASES DONE (Phase 2 ✅, Phase 3 ✅, Phase 3 extras ✅). Phase 4 = LATER**:
