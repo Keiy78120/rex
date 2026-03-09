@@ -220,6 +220,9 @@ class RexService extends ChangeNotifier {
   Map<String, dynamic> journalStats = {};
   Map<String, dynamic> cacheStats = {};
 
+  // Snapshots
+  List<Map<String, dynamic>> snapshots = [];
+
   // System Metrics
   Map<String, dynamic> systemMetrics = {};
 
@@ -2242,6 +2245,22 @@ $transcript
       }
     } catch (_) {
       backups = [];
+    }
+    notifyListeners();
+  }
+
+  Future<void> loadSnapshots() async {
+    try {
+      final out = await _runRexArgs(['snapshot', 'list', '--json'], timeout: 10);
+      final json = _extractJson(out);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is List) {
+          snapshots = parsed.whereType<Map<String, dynamic>>().toList();
+        }
+      }
+    } catch (_) {
+      snapshots = [];
     }
     notifyListeners();
   }

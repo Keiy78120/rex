@@ -47,6 +47,7 @@ class _MemoryPageState extends State<MemoryPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadStats();
       context.read<RexService>().loadMemoryHealth();
+      context.read<RexService>().loadSnapshots();
     });
   }
 
@@ -539,6 +540,93 @@ class _MemoryPageState extends State<MemoryPage> {
                 child: _CodeBlock(text: _statsOutput),
               ),
             ],
+
+            // Snapshots
+            Consumer<RexService>(
+              builder: (context, rex, _) {
+                final snaps = rex.snapshots;
+                if (snaps.isEmpty) return const SizedBox.shrink();
+                return Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    RexCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          RexSection(
+                            title: 'Snapshots',
+                            icon: CupertinoIcons.camera_viewfinder,
+                            action: RexStatusChip(
+                              label: '${snaps.length}',
+                              status: RexChipStatus.ok,
+                              small: true,
+                            ),
+                          ),
+                          ...snaps.take(5).toList().asMap().entries.map((entry) {
+                            final i = entry.key;
+                            final s = entry.value;
+                            final ts = s['timestamp'] as String? ?? '';
+                            final project = s['project'] as String? ?? '';
+                            final branch = s['branch'] as String? ?? '';
+                            final files = (s['modifiedFiles'] as List?)?.length ?? 0;
+                            final pr = s['pr'] as int?;
+                            DateTime? dt;
+                            try { dt = DateTime.parse(ts); } catch (_) {}
+                            final ageMin = dt != null
+                                ? DateTime.now().difference(dt).inMinutes
+                                : null;
+                            final ageStr = ageMin == null
+                                ? ''
+                                : ageMin < 60
+                                    ? '${ageMin}m ago'
+                                    : '${(ageMin / 60).round()}h ago';
+                            return Column(
+                              children: [
+                                if (i > 0)
+                                  Container(height: 0.5, color: context.rex.separator),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  child: Row(
+                                    children: [
+                                      Icon(CupertinoIcons.camera_viewfinder,
+                                          size: 14, color: context.rex.accent),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '$project · $branch${pr != null ? ' · PR #$pr' : ''}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: context.rex.text,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '$files modified files${ageStr.isNotEmpty ? ' · $ageStr' : ''}',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: context.rex.textTertiary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
 
             // How it works
             const SizedBox(height: 8),
