@@ -458,48 +458,53 @@ addRoute('GET', '/api/v1/monitor', async (_req, res) => {
   }
 })
 
-// ── LLM proxy — /api/chat ──────────────────────────────
+// ── LLM proxy — /api/chat (routed via REX agent runtime) ──────
 
 addRoute('POST', '/api/chat', async (req, res) => {
   try {
     const body = await parseBody(req) as {
+      message?: string
       prompt?: string
       messages?: Array<{ role: string; content: string }>
       system?: string
       model?: string
+      task?: string
       stream?: boolean
     }
 
-    // Support both prompt and messages format
-    const prompt = body.prompt ??
-      body.messages?.find(m => m.role === 'user')?.content ??
-      ''
-    const system = body.system ??
-      body.messages?.find(m => m.role === 'system')?.content
+    // Support both message/prompt and messages array formats
+    const message = body.message
+      ?? body.prompt
+      ?? body.messages?.find(m => m.role === 'user')?.content
+      ?? ''
 
-    if (!prompt.trim()) {
-      sendError(res, 400, 'BAD_REQUEST', 'prompt or messages[].role=user required')
+    if (!message.trim()) {
+      sendError(res, 400, 'BAD_REQUEST', 'message, prompt, or messages[].role=user required')
       return
     }
 
-    const { callWithFallback } = await import('./litellm.js')
-    const result = await callWithFallback(prompt, system, {
-      modelId: body.model,
-      queueOnExhaustion: true,
+    const { runAgent } = await import('./agent-runtime.js')
+    const result = await runAgent(message, {
+      task: body.task,
+      model: body.model,
     })
 
     sendJson(res, 200, {
       id: `chatcmpl-${Date.now()}`,
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
+      response: result.response,
       model: result.model,
-      provider: result.provider,
+      turns: result.turns,
+      toolCalls: result.toolCalls,
+      durationMs: result.durationMs,
+      // OpenAI-compatible shape for clients that expect it
       choices: [{
         index: 0,
-        message: { role: 'assistant', content: result.text },
+        message: { role: 'assistant', content: result.response },
         finish_reason: 'stop',
       }],
-      usage: { estimated_tokens: result.estimatedTokens },
+      usage: result.tokens != null ? { total_tokens: result.tokens } : undefined,
     })
   } catch (err: any) {
     sendError(res, 500, 'LLM_ERROR', err.message?.slice(0, 200) ?? 'LLM call failed')

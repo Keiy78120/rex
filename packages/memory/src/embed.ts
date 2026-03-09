@@ -21,3 +21,24 @@ export function embeddingToBuffer(embedding: Float32Array): Buffer {
 }
 
 export const EMBEDDING_DIM = 768; // nomic-embed-text dimension
+
+// ── fastembed backend (used when Ollama is unavailable) ───────
+
+import { FlagEmbedding, EmbeddingModel } from "fastembed";
+
+let _fastEmbedder: FlagEmbedding | null = null;
+
+export async function fastEmbed(texts: string[]): Promise<number[][]> {
+  if (!_fastEmbedder) {
+    _fastEmbedder = await FlagEmbedding.init({
+      model: EmbeddingModel.BGESmallENV15,
+    });
+  }
+  const results: number[][] = [];
+  for await (const batch of _fastEmbedder.embed(texts, 32)) {
+    for (const vec of batch) {
+      results.push(Array.from(vec));
+    }
+  }
+  return results;
+}

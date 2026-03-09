@@ -1912,24 +1912,59 @@ async function main() {
       break
     }
 
-    case 'ask': {
-      // rex ask "<prompt>" [--task=<type>] [--skip-cache] [--json]
-      const prompt = process.argv.slice(3).filter(a => !a.startsWith('--')).join(' ')
-      if (!prompt) {
-        console.error('Usage: rex ask "<prompt>" [--task=code|classify|general] [--skip-cache] [--json]')
-        process.exit(1)
+    case 'graph': {
+      const { graph } = await import('./lang-graph.js')
+      await graph(process.argv.slice(3))
+      break
+    }
+
+    case 'train': {
+      const { training } = await import('./training.js')
+      await training(process.argv.slice(3))
+      break
+    }
+
+    case 'route': {
+      // rex route "<message>"         → show routing decision
+      // rex route --explain           → show policy overview
+      // rex route --json "<message>"  → JSON output
+      const { routeRequest, routeAndExplain, explainPolicy } = await import('./orchestration-policy.js')
+      if (process.argv.includes('--explain') || process.argv[3] === 'explain') {
+        explainPolicy()
+        break
       }
-      const taskArg = process.argv.find(a => a.startsWith('--task='))
-      const taskType = taskArg ? taskArg.split('=')[1] : 'general'
-      const skipCache = process.argv.includes('--skip-cache')
+      const message = process.argv.slice(3).filter(a => !a.startsWith('--')).join(' ')
       const jsonOut = process.argv.includes('--json')
-      const { runPrompt } = await import('./backend-runner.js')
-      const result = await runPrompt(prompt, { taskType, skipCache })
+      if (!message) { explainPolicy(); break }
+      if (jsonOut) {
+        const d = await routeRequest(message)
+        console.log(JSON.stringify(d, null, 2))
+      } else {
+        await routeAndExplain(message)
+      }
+      break
+    }
+
+    case 'ask': {
+      // rex ask "<message>" [--model=name] [--task=code|review|etc] [--verbose] [--json]
+      const message = process.argv.slice(3).filter(a => !a.startsWith('--')).join(' ')
+      if (!message) {
+        console.log('Usage: rex ask "<message>" [--model=name] [--task=code|review|etc] [--verbose]')
+        break
+      }
+      const modelArg = process.argv.find(a => a.startsWith('--model='))?.split('=')[1]
+      const taskArg = process.argv.find(a => a.startsWith('--task='))?.split('=')[1]
+      const verbose = process.argv.includes('--verbose')
+      const jsonOut = process.argv.includes('--json')
+      const { runAgent } = await import('./agent-runtime.js')
+      const result = await runAgent(message, { model: modelArg, task: taskArg, verbose })
       if (jsonOut) {
         console.log(JSON.stringify(result, null, 2))
       } else {
-        console.log(result.response)
-        console.error(`\n[${result.source} · ${result.latencyMs}ms]`)
+        console.log(`\n[${result.model}] ${result.response}\n`)
+        if (verbose) {
+          console.error(`(${result.turns} turns, ${result.toolCalls.length} tool calls, ${result.durationMs}ms)`)
+        }
       }
       break
     }

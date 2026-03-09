@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import { readFileSync, readdirSync, existsSync, statSync, mkdirSync, unlinkSync, writeFileSync as writeFS } from "fs";
 import { join, basename } from "path";
-import { embed, embeddingToBuffer, EMBEDDING_DIM } from "./embed.js";
+import { embed, fastEmbed, embeddingToBuffer, EMBEDDING_DIM } from "./embed.js";
 
 const REX_DB = join(process.env.HOME || '~', '.claude', 'rex', 'memory', 'rex.sqlite')
 const DB_PATH = existsSync(REX_DB) ? REX_DB : join(import.meta.dirname, '..', 'db', 'rex.sqlite')
@@ -216,6 +216,14 @@ export function getDb(): Database.Database {
 }
 
 async function embedWithRetry(text: string): Promise<Float32Array> {
+  // REX_EMBED_BACKEND=fastembed → use local fastembed (no Ollama required)
+  if (process.env.REX_EMBED_BACKEND === "fastembed") {
+    const results = await fastEmbed([text]);
+    const vec = results[0];
+    if (!vec) throw new Error("fastEmbed returned empty result");
+    return new Float32Array(vec);
+  }
+
   for (let attempt = 1; attempt <= EMBED_MAX_RETRIES; attempt++) {
     try {
       return await embed(text);

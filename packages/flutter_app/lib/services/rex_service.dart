@@ -2833,6 +2833,76 @@ $transcript
 
   // ── End Guards ────────────────────────────────────────────────────────────────
 
+  // ── Training ──────────────────────────────────────────────────────────────────
+
+  Map<String, dynamic> _trainingStats = {};
+  List<Map<String, dynamic>> _trainingJobs = [];
+  bool _isTraining = false;
+
+  Map<String, dynamic> get trainingStats => _trainingStats;
+  List<Map<String, dynamic>> get trainingJobs => _trainingJobs;
+  bool get isTraining => _isTraining;
+
+  Future<void> loadTrainingStats() async {
+    try {
+      final result = await _runRexArgs(['train', 'collect', '--json', '--dry-run']);
+      final parsed = jsonDecode(_extractJson(result));
+      if (parsed is Map<String, dynamic>) {
+        _trainingStats = parsed;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> loadTrainingJobs() async {
+    try {
+      final result = await _runRexArgs(['train', 'status', '--json']);
+      final parsed = jsonDecode(_extractJson(result));
+      if (parsed is Map<String, dynamic>) {
+        _trainingJobs = (parsed['jobs'] as List? ?? []).whereType<Map<String, dynamic>>().toList();
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<String> exportTrainingData() async {
+    try {
+      final result = await _runRexArgs(['train', 'export', '--json'], timeout: 30);
+      final parsed = jsonDecode(_extractJson(result));
+      return (parsed['path'] as String?) ?? 'exported';
+    } catch (e) {
+      return 'error: $e';
+    }
+  }
+
+  Future<bool> startTraining({String backend = 'auto', String model = 'qwen2.5:1.5b'}) async {
+    _isTraining = true;
+    notifyListeners();
+    try {
+      await _runRexArgs(['train', 'run', '--backend=$backend', '--model=$model', '--json'], timeout: 120);
+      await loadTrainingJobs();
+      _isTraining = false;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      _isTraining = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Routing policy decision (for UI preview)
+  Future<Map<String, dynamic>> getRoutingDecision(String message) async {
+    try {
+      final result = await _runRexArgs(['route', '--json', message]);
+      final parsed = jsonDecode(_extractJson(result));
+      if (parsed is Map<String, dynamic>) return parsed;
+    } catch (_) {}
+    return {};
+  }
+
+  // ── End Training ──────────────────────────────────────────────────────────────
+
   @override
   void dispose() {
     _recordingTimer?.cancel();

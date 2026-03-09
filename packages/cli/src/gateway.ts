@@ -1887,6 +1887,22 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
       break
     }
 
+    case 'routing_info': {
+      // Show which model REX would pick for common task types
+      try {
+        const { getRouterSnapshot } = await import('./router.js')
+        const snap = await getRouterSnapshot()
+        const lines = Object.entries(snap).map(([t, m]) => `  ${t.padEnd(12)}: ${m}`)
+        await editMessage(token, chatId, messageId,
+          `🧠 *REX Model Router*\n\`\`\`\n${lines.join('\n')}\n\`\`\``,
+          [[{ text: '◀️ Menu', callback_data: 'menu' }]]
+        )
+      } catch {
+        await editMessage(token, chatId, messageId, '⚠️ Router info unavailable', [[{ text: '◀️ Menu', callback_data: 'menu' }]])
+      }
+      break
+    }
+
     default: {
       if (data.startsWith('set_local_')) {
         const model = data.replace('set_local_', '')
@@ -2564,7 +2580,7 @@ async function handleText(token: string, chatId: string, text: string, from: str
     return
   }
 
-  // Free text -> send to current LLM (with fallback cascade)
+  // Free text -> route through REX agent runtime (model auto-pick + tool-calling loop)
   if (text.length > 2) {
     // Re-read state from disk to pick up mode changes from other sources (buttons, /mode command)
     state = loadState()
@@ -2572,29 +2588,56 @@ async function handleText(token: string, chatId: string, text: string, from: str
     saveState(state)
 
     let response: string
-    if (state.mode === 'qwen') {
-      // Streaming mode for Qwen — sends progressive edits
-      response = await askQwenStream(token, chatId, text)
 
-      // Fallback cascade: if Ollama failed, try Claude CLI
-      if (response.startsWith('⚠️')) {
-        console.log(`${COLORS.yellow}Qwen failed, falling back to Claude CLI${COLORS.reset}`)
-        try {
-          const claudeResponse = await askClaude(text)
-          if (!claudeResponse.startsWith('⚠️')) {
-            response = `_[fallback: Claude]_\n\n${claudeResponse}`
+    if (state.mode === 'qwen') {
+      // REX agent runtime: auto-picks model via router, runs tool-calling loop, streams chunks
+      const { streamAgent } = await import('./agent-runtime.js')
+
+      // Send initial message to obtain message_id for live edits
+      const initMsg = await tg(token, 'sendMessage', {
+        chat_id: chatId,
+        text: '🧠 _REX thinking..._',
+        parse_mode: 'Markdown',
+      }) as { result?: { message_id: number } }
+      const msgId = initMsg?.result?.message_id
+
+      let accumulated = ''
+      let lastEdit = 0
+      const EDIT_INTERVAL = 800 // ms — Telegram rate limit
+
+      const result = await streamAgent(text, {
+        onChunk: async (chunk: string) => {
+          accumulated += chunk
+          const now = Date.now()
+          if (msgId && now - lastEdit > EDIT_INTERVAL && accumulated.trim()) {
+            lastEdit = now
+            await editMessage(token, chatId, msgId, accumulated.trim().slice(0, 4000))
           }
-        } catch {
-          // Both failed
-        }
+        },
+      })
+
+      response = result.response.trim() || '⚠️ No response generated'
+
+      // Final edit with complete response + routing info footer
+      const modelLabel = result.model?.split('/').pop() ?? result.model
+      const footer = `\n\n_[${modelLabel} · ${result.turns}t · ${Math.round(result.durationMs / 1000)}s]_`
+      const finalText = (response + footer).slice(0, 4096)
+
+      if (msgId) {
+        await editMessage(token, chatId, msgId, finalText)
+      } else if (!response.startsWith('⚠️')) {
+        await send(token, chatId, finalText)
       }
 
-      // If both failed in degrade mode, spool and inform user
+      // Degrade-mode spool if all providers failed
       if (response.startsWith('⚠️') && degradeMode) {
         try { appendEvent('gateway.message', { direction: 'spooled', text: text.slice(0, 1000), chatId, reason: 'degrade_mode' }) } catch {}
-        response = '⚠️ Degrade mode — hub and LLM unavailable. Message spooled for later processing.'
+        response = '⚠️ Degrade mode — all LLM providers unavailable. Message spooled for later processing.'
+        if (msgId) await editMessage(token, chatId, msgId, response)
       }
+
     } else {
+      // Claude mode — unchanged
       const thinkMsg = await send(token, chatId, '🤖 Claude _thinking..._') as any
       const thinkId = thinkMsg?.result?.message_id
       response = thinkId
