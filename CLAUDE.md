@@ -832,20 +832,27 @@ rex doctor --fix     # Auto-fix then health check
 | Confirmation : rex train, rex debt, stuck ingest, security scanner blocking tous ✅ | `index.ts`, `daemon.ts`, `mcp-discover.ts` |
 | Confirmation : tous les 50+ CLI commands appelés par Flutter existent | `index.ts` vérifié |
 
+### ✅ Terminé (session 2026-03-XX — Blockers audit + account pool)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| Hub server-level socket timeout (`server.setTimeout(30_000)`) | `hub.ts` |
+| Account pool wired dans orchestrator (selectAccount → acquireAccount → releaseAccount + rate-limit flag) | `orchestrator.ts` |
+| FTS drift detection dans memory-check (ftsDrift field) | `memory-check.ts` |
+| Doctor --fix : auto-rebuild FTS si drift détecté | `index.ts` |
+| Confirmation : `rex models setup` existait déjà (`index.ts:498`, RAM-aware + `--pull` flag) | `index.ts` |
+| Audit doc updated : tous les points bloquants résiduels → ✅ | `docs/audit-complet-2026-03.md` |
+
 ### 🔄 En cours / A faire
 
-**Phase 4 COMPLETE (cross-platform + LangGraph deferred)**:
-- Cross-platform Flutter (Windows/Linux) — explicitly deferred to Phase 4 later
-- Tunnels + fallback (SSH/RustDesk) — explicitly deferred
+**Phase 3 COMPLETE (99%), Phase 4 DEFERRED** :
+- Cross-platform Flutter (Windows/Linux) — deferred to Phase 4 later
+- Tunnels + fallback (SSH/RustDesk) — deferred
 - @libsql/client sync (Turso replica) — when VPS configured
 
 **Prochaines priorités opérationnelles** :
-- [ ] Installer REX sur VPS (`docs/vps-install.md`)
-- [ ] Migrer mémoire Garry → REX (`docs/garry-migration.md`)
-- [ ] HTTP server timeout hub (`hub.ts` — `server.setTimeout(30000)`)
-- [ ] Account pool wired dans orchestrator (`account-pool.ts` → `orchestrator.ts`)
-- [ ] FTS auto-rebuild si drift (appel `rebuildFtsIndex()` dans doctor)
-- [ ] `rex models setup` (auto-pull Ollama models selon RAM disponible)
+- [ ] Installer REX sur VPS (`docs/vps-install.md`) — requires SSH access
+- [ ] Migrer mémoire Garry → REX (`docs/garry-migration.md`) — requires Garry machine access
 
 ---
 

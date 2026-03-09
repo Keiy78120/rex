@@ -196,10 +196,10 @@
 
 | Point | Impact | Fix requis |
 |-------|--------|-----------|
-| HTTP server timeout hub | Faible | `server.setTimeout(30000)` |
-| FTS auto-rebuild si drift | Faible | Appeler rebuildFtsIndex dans doctor si memories > fts_count |
-| Account pool non wired | Moyen | Appeler selectAccount() dans orchestrator |
-| `rex models setup` absent | Faible | Ajouter subcommand |
+| ~~HTTP server timeout hub~~ | ~~Faible~~ | **✅ FIXÉ** — `server.setTimeout(30_000)` dans `hub.ts` |
+| ~~FTS auto-rebuild si drift~~ | ~~Faible~~ | **✅ FIXÉ** — `checkMemoryHealth()` + `doctor --fix` rebuild auto |
+| ~~Account pool non wired~~ | ~~Moyen~~ | **✅ FIXÉ** — `executeClaudeCode()` passe par account-pool |
+| ~~`rex models setup` absent~~ | ~~Faible~~ | **Était déjà là** — `index.ts:498` RAM-aware + `--pull` flag |
 
 ---
 
@@ -208,7 +208,7 @@
 ```
 Phase 1 (Core)         : ✅ COMPLET
 Phase 2 (Integration)  : ✅ COMPLET
-Phase 3 (Hub/Fleet)    : ✅ COMPLET (95%)
+Phase 3 (Hub/Fleet)    : ✅ COMPLET (99%)
 Phase 4 (Advanced)     : ✅ COMPLET (agent-runtime, training, routing-policy, lang-graph)
                        : ⏭️ DÉFERRÉ (cross-platform Flutter, B2B factory, meeting bots)
 
