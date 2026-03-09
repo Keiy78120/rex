@@ -216,6 +216,7 @@ class RexService extends ChangeNotifier {
   Map<String, dynamic>? inventoryData;
   Map<String, dynamic>? budgetSummary;
   List<Map<String, dynamic>> runbooks = [];
+  List<Map<String, dynamic>> lessons = [];
 
   // Observer
   List<Map<String, dynamic>> observations = [];
@@ -2123,6 +2124,17 @@ $transcript
       if (parsed is Map<String, dynamic>) budgetSummary = parsed;
     } catch (_) {}
     notifyListeners();
+  }
+
+  Future<void> loadLessons() async {
+    final out = await _runRexArgs(['self-review', '--list', '--json'], timeout: 10);
+    try {
+      final parsed = jsonDecode(_extractJson(out));
+      if (parsed is Map && parsed['lessons'] is List) {
+        lessons = (parsed['lessons'] as List).whereType<Map<String, dynamic>>().toList();
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   Future<void> loadRunbooks() async {

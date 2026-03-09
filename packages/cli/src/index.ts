@@ -707,7 +707,16 @@ async function main() {
     }
 
     case 'self-review': {
-      const { selfReview } = await import('./self-improve.js')
+      const { selfReview, listLessons } = await import('./self-improve.js')
+      if (process.argv.includes('--list')) {
+        const lessons = listLessons()
+        if (process.argv.includes('--json')) {
+          console.log(JSON.stringify({ lessons }))
+        } else {
+          lessons.slice(0, 10).forEach((l, i) => console.log(`${i + 1}. [${l.category}] ${l.text} (×${l.occurrences})`))
+        }
+        break
+      }
       await selfReview()
       break
     }

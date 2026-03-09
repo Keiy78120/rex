@@ -31,6 +31,8 @@ interface ErrorPattern {
   suggestedRule?: string
 }
 
+export function listLessons(): Lesson[] { return loadLessons() }
+
 function loadLessons(): Lesson[] {
   const path = join(SELF_IMPROVEMENT_DIR, 'lessons.json')
   if (!existsSync(path)) return []

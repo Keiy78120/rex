@@ -48,6 +48,8 @@ class _MemoryPageState extends State<MemoryPage> {
       _loadStats();
       context.read<RexService>().loadMemoryHealth();
       context.read<RexService>().loadSnapshots();
+      context.read<RexService>().loadLessons();
+      context.read<RexService>().loadRunbooks();
     });
   }
 
@@ -531,6 +533,102 @@ class _MemoryPageState extends State<MemoryPage> {
                 ),
               ),
             ],
+
+            // Lessons from self-review
+            Consumer<RexService>(
+              builder: (context, rex, _) {
+                final items = rex.lessons.where((l) => l['promoted'] != true && l['dismissed'] != true).take(5).toList();
+                if (items.isEmpty) return const SizedBox.shrink();
+                return Column(children: [
+                  const SizedBox(height: 8),
+                  RexCard(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      RexSection(
+                        title: 'Lessons',
+                        icon: CupertinoIcons.lightbulb_fill,
+                        action: RexStatusChip(label: '${rex.lessons.length}', status: RexChipStatus.pending, small: true),
+                      ),
+                      ...items.asMap().entries.map((e) {
+                        final i = e.key;
+                        final l = e.value;
+                        final text = (l['text'] as String?) ?? '';
+                        final cat = (l['category'] as String?) ?? '';
+                        final occ = (l['occurrences'] as int?) ?? 1;
+                        return Column(children: [
+                          if (i > 0) Container(height: 0.5, color: context.rex.separator),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Container(
+                                width: 6, height: 6,
+                                margin: const EdgeInsets.only(top: 5, right: 10),
+                                decoration: BoxDecoration(color: const Color(0xFFFF5722), shape: BoxShape.circle),
+                              ),
+                              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(text, style: TextStyle(fontSize: 12, color: context.rex.text, height: 1.4)),
+                                const SizedBox(height: 3),
+                                Row(children: [
+                                  if (cat.isNotEmpty) Text(cat, style: TextStyle(fontSize: 10, color: context.rex.textTertiary)),
+                                  if (occ > 1) ...[
+                                    const SizedBox(width: 8),
+                                    Text('×$occ', style: TextStyle(fontSize: 10, color: context.rex.textTertiary)),
+                                  ],
+                                ]),
+                              ])),
+                            ]),
+                          ),
+                        ]);
+                      }),
+                    ]),
+                  ),
+                ]);
+              },
+            ),
+
+            // Runbooks
+            Consumer<RexService>(
+              builder: (context, rex, _) {
+                final items = rex.runbooks.take(3).toList();
+                if (items.isEmpty) return const SizedBox.shrink();
+                return Column(children: [
+                  const SizedBox(height: 8),
+                  RexCard(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      RexSection(
+                        title: 'Runbooks',
+                        icon: CupertinoIcons.doc_checkmark_fill,
+                        action: RexStatusChip(label: '${rex.runbooks.length}', status: RexChipStatus.ok, small: true),
+                      ),
+                      ...items.asMap().entries.map((e) {
+                        final i = e.key;
+                        final r = e.value;
+                        final name = (r['name'] as String?) ?? '';
+                        final desc = (r['description'] as String?) ?? '';
+                        final count = (r['successCount'] as int?) ?? 0;
+                        return Column(children: [
+                          if (i > 0) Container(height: 0.5, color: context.rex.separator),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(children: [
+                              Icon(CupertinoIcons.checkmark_circle, size: 13, color: context.rex.success),
+                              const SizedBox(width: 8),
+                              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: context.rex.text)),
+                                if (desc.isNotEmpty)
+                                  Text(desc.length > 80 ? '${desc.substring(0, 80)}…' : desc,
+                                      style: TextStyle(fontSize: 11, color: context.rex.textTertiary)),
+                              ])),
+                              if (count > 0)
+                                Text('$count✓', style: TextStyle(fontSize: 11, color: context.rex.success)),
+                            ]),
+                          ),
+                        ]);
+                      }),
+                    ]),
+                  ),
+                ]);
+              },
+            ),
 
             // Database raw output
             if (_statsOutput.isNotEmpty) ...[
