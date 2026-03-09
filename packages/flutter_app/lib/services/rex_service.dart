@@ -2059,6 +2059,11 @@ $transcript
     notifyListeners();
   }
 
+  Future<bool> wakeNode(String macAddress) async {
+    final result = await _runRexArgs(['wake', macAddress], timeout: 10);
+    return result.contains('✓') || result.contains('sent');
+  }
+
   // --- Providers & Budget ---
 
   Future<List<Map<String, dynamic>>> getFreeTiers() async {

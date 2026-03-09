@@ -408,16 +408,37 @@ class _MeshPeersCard extends StatelessWidget {
   }
 }
 
-class _MeshPeerRow extends StatelessWidget {
+class _MeshPeerRow extends StatefulWidget {
   final Map<String, dynamic> peer;
   const _MeshPeerRow({required this.peer});
   @override
+  State<_MeshPeerRow> createState() => _MeshPeerRowState();
+}
+
+class _MeshPeerRowState extends State<_MeshPeerRow> {
+  bool _waking = false;
+
+  Future<void> _wake() async {
+    final mac = (widget.peer['mac'] as String?) ?? '';
+    if (mac.isEmpty) return;
+    setState(() => _waking = true);
+    final ok = await context.read<RexService>().wakeNode(mac);
+    if (mounted) {
+      setState(() => _waking = false);
+      if (!ok) {
+        // ignore silently — wake packet is fire-and-forget
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = context.rex;
-    final hostname = (peer['hostname'] as String?) ?? '';
-    final ip = (peer['ip'] as String?) ?? '';
-    final online = peer['online'] == true;
-    final direct = peer['direct'] == true;
+    final hostname = (widget.peer['hostname'] as String?) ?? '';
+    final ip = (widget.peer['ip'] as String?) ?? '';
+    final mac = (widget.peer['mac'] as String?) ?? '';
+    final online = widget.peer['online'] == true;
+    final direct = widget.peer['direct'] == true;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(children: [
@@ -437,7 +458,22 @@ class _MeshPeerRow extends StatelessWidget {
         if (online && direct)
           RexStatusChip(label: 'direct', status: RexChipStatus.ok, small: true)
         else if (online)
-          RexStatusChip(label: 'relay', status: RexChipStatus.pending, small: true),
+          RexStatusChip(label: 'relay', status: RexChipStatus.pending, small: true)
+        else if (mac.isNotEmpty)
+          GestureDetector(
+            onTap: _waking ? null : _wake,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: c.card,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: c.separator),
+              ),
+              child: _waking
+                  ? const CupertinoActivityIndicator(radius: 6)
+                  : Text('Wake', style: TextStyle(fontSize: 11, color: c.textSecondary)),
+            ),
+          ),
       ]),
     );
   }
