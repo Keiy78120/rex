@@ -12,7 +12,7 @@ import { purgeOldEvents } from './sync-queue.js'
 import { appendEvent as journalAppend, purgeOldJournalEvents } from './event-journal.js'
 import { cacheClean } from './semantic-cache.js'
 import { getRoutableProviders } from './free-tiers.js'
-import { buildLocalNodeInfo, registerWithHub } from './node-mesh.js'
+import { buildLocalNodeInfo, registerWithHub, autoDiscoverHubs, persistDiscoveredHub } from './node-mesh.js'
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 const log = createLogger('daemon')
@@ -491,6 +491,29 @@ async function reflectorCycle(): Promise<void> {
   }
 }
 
+// ─── Tailscale Mesh Auto-join (every 5 min) ───────────────
+let lastKnownMeshHubUrl: string | null = process.env.REX_HUB_URL ?? null
+
+async function tailscaleMeshCycle(): Promise<void> {
+  try {
+    const hubs = await autoDiscoverHubs()
+    if (hubs.length === 0) return
+
+    const discovered = hubs[0]
+    if (discovered === lastKnownMeshHubUrl) return  // no change
+
+    const persisted = persistDiscoveredHub(discovered)
+    if (persisted) {
+      lastKnownMeshHubUrl = discovered
+      log.info(`Tailscale: joined new hub at ${discovered}`)
+      journalAppend('daemon_action', 'mesh', { action: 'hub_joined', url: discovered })
+      await sendTelegramNotify(`🌐 REX Mesh: joined Commander at ${discovered}`)
+    }
+  } catch (e: any) {
+    log.debug(`Tailscale mesh cycle skipped: ${e.message?.slice(0, 80)}`)
+  }
+}
+
 // ─── Main Loop ────────────────────────────────────────────
 export async function daemon(): Promise<void> {
   ensureRexDirs()
@@ -532,6 +555,7 @@ export async function daemon(): Promise<void> {
   let lastFullBackup = Date.now()
   let lastNodeRegister = 0  // register immediately on start
   let lastSessionGuard = 0  // check immediately
+  let lastTailscaleMesh = 0  // discover Tailscale hubs immediately on start
   let lastCurious = Date.now() - 23 * 60 * 60 * 1000  // run ~1h after daemon start
   let lastDailySummaryDate = ''  // tracks 'YYYY-MM-DD' to send once per day
   let lastAlertDate = ''  // disk/backlog alerts — max once per day
@@ -656,6 +680,12 @@ export async function daemon(): Promise<void> {
         log.warn(`Smart alerts sent: ${alerts.join(' | ')}`)
         lastAlertDate = todayStr
       }
+    }
+
+    // Tailscale mesh auto-join every 5 min
+    if (now - lastTailscaleMesh >= 5 * 60_000) {
+      await tailscaleMeshCycle()
+      lastTailscaleMesh = now
     }
 
     // Session guard — check context window + daily budget every 5 min

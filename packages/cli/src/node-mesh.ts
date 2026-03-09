@@ -272,6 +272,37 @@ function getHubUrl(): string | null {
 }
 
 /**
+ * Persist a discovered hub URL to ~/.claude/settings.json env.REX_HUB_URL
+ * so it survives daemon restarts and is available to all rex commands.
+ * Also updates process.env immediately for the current process.
+ *
+ * No-op if the URL is already configured (avoids unnecessary writes).
+ */
+export function persistDiscoveredHub(url: string): boolean {
+  const current = getHubUrl()
+  if (current === url) return false  // already set, skip
+
+  try {
+    const settingsPath = join(homedir(), '.claude', 'settings.json')
+    const settings = existsSync(settingsPath)
+      ? JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>
+      : {}
+
+    const env = (settings.env as Record<string, string> | undefined) ?? {}
+    env.REX_HUB_URL = url
+    settings.env = env
+
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
+    process.env.REX_HUB_URL = url
+    log.info(`Persisted hub URL: ${url}`)
+    return true
+  } catch (e: any) {
+    log.warn(`Failed to persist hub URL: ${e.message?.slice(0, 80)}`)
+    return false
+  }
+}
+
+/**
  * Probe a candidate URL to check if it's a REX hub.
  * Returns the URL if it responds to /api/health, otherwise null.
  */
@@ -326,6 +357,10 @@ export async function registerWithHub(nodeInfo?: MeshNode): Promise<boolean> {
       if (res.ok) {
         log.info(`Registered with hub ${hubUrl}: ${info.id} (${info.capabilities.join(', ') || 'no caps'})`)
         try { saveMeshCache(await fetchMeshNodes(hubUrl)) } catch {}
+        // Auto-persist Tailscale-discovered hubs (not localhost fallback)
+        if (!configured && !hubUrl.includes('localhost')) {
+          persistDiscoveredHub(hubUrl)
+        }
         return true
       }
       log.warn(`Hub registration failed at ${hubUrl}: HTTP ${res.status}`)
