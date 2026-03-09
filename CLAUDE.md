@@ -782,6 +782,14 @@ rex doctor --fix     # Auto-fix then health check
 | **Audit plans complet** : action.md, frontend-design.md, backend-functions.md, sources.md, living-rex-vision.md, install-optimization-plan.md → tous Phase 1/2/3 ✅ | docs/plans/ |
 | CLI build ✅ zero errors | — |
 
+### ✅ Terminé (session 2026-03-15 — MCP fix + FilesPage wiring)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **MCP page blank fix** — `initState()` appelait `loadMcpServers()` directement (violait le lifecycle Flutter) → wrappé dans `addPostFrameCallback` | `pages/mcp_page.dart` |
+| **FilesPage wired** — `FilesPage()` ajoutée à l'IndexedStack à l'index 22 + item `Files` (doc_text_fill) dans la sidebar ADMIN group | `main.dart`, `rex_sidebar.dart` |
+| Flutter build ✅ zero errors, CLI build ✅ zero errors | — |
+
 ### 🔄 En cours / A faire
 
 **ALL PHASES DONE (Phase 2 ✅, Phase 3 ✅, Phase 3 extras ✅). Phase 4 = LATER**:

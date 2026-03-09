@@ -25,6 +25,7 @@ import 'pages/sandbox_page.dart';
 import 'pages/curious_page.dart';
 import 'pages/logs_page.dart';
 import 'pages/settings_page.dart';
+import 'pages/files_page.dart';
 import 'widgets/rex_sidebar.dart';
 
 void main() {
@@ -115,9 +116,10 @@ class _RexMainWindowState extends State<RexMainWindow> {
                   GatewayPage(),
                   VoicePage(),
                   AudioPage(),
-                  // ADMIN (20-21)
+                  // ADMIN (20-22)
                   LogsPage(),
                   SettingsPage(),
+                  FilesPage(),
                 ],
               ),
             ),

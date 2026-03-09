@@ -39,9 +39,10 @@ const List<_NavItem> _items = [
   (index: 17, icon: CupertinoIcons.paperplane_fill, label: 'Gateway'),
   (index: 18, icon: CupertinoIcons.mic_fill, label: 'Voice'),
   (index: 19, icon: CupertinoIcons.waveform, label: 'Audio'),
-  // ADMIN (20-21)
+  // ADMIN (20-22)
   (index: 20, icon: CupertinoIcons.doc_text, label: 'Logs'),
   (index: 21, icon: CupertinoIcons.gear, label: 'Settings'),
+  (index: 22, icon: CupertinoIcons.doc_text_fill, label: 'Files'),
 ];
 
 const Map<int, String?> _groupHeaders = {

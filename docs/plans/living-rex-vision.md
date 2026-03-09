@@ -444,6 +444,9 @@ Il est curieux : il cherche activement de nouvelles solutions.
 | Guards v2 (secret-guard BLOCK + consolidated post-edit) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Switchable LLM backends (ollama/llama-cpp/localai/vllm/llamafile) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Platform warnings (Linux/Docker/WSL2 feature gap detection) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Cockpit Flutter UI (22 pages, 7 sidebar groups, KPI strips, RexListRow) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Commander/Fleet hub page (HQSnapshot, fleet KPIs, agent profiles, alerts) | ❌ | ❌ | ❌ | ❌ | ✅ |
+| HQ dashboard data mapping (burn-rate + agents list → correct field names) | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 ---
 

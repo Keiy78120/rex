@@ -33,7 +33,9 @@ class _McpPageState extends State<McpPage> {
   @override
   void initState() {
     super.initState();
-    context.read<RexService>().loadMcpServers();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<RexService>().loadMcpServers();
+    });
   }
 
   Future<void> _addStdio() async {
