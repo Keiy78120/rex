@@ -2833,6 +2833,77 @@ $transcript
 
   // ── End Guards ────────────────────────────────────────────────────────────────
 
+  // ── Resource Hub ─────────────────────────────────────────────────────────────
+
+  List<Map<String, dynamic>> _hubResources = [];
+  bool _isHubLoading = false;
+  String _hubError = '';
+  String _hubFilter = 'all'; // all | mcp | guard | skill | script | boilerplate | tool
+
+  List<Map<String, dynamic>> get hubResources => _hubResources;
+  bool get isHubLoading => _isHubLoading;
+  String get hubError => _hubError;
+  String get hubFilter => _hubFilter;
+
+  List<Map<String, dynamic>> get filteredHubResources {
+    if (_hubFilter == 'all') return _hubResources;
+    return _hubResources.where((r) => r['type'] == _hubFilter).toList();
+  }
+
+  void setHubFilter(String filter) {
+    _hubFilter = filter;
+    notifyListeners();
+  }
+
+  Future<void> loadHubResources({bool forceRefresh = false}) async {
+    _isHubLoading = true;
+    _hubError = '';
+    notifyListeners();
+    try {
+      final args = ['hub', 'list', '--json'];
+      if (forceRefresh) {
+        await _runRexArgs(['hub', 'update'], timeout: 30);
+      }
+      final result = await _runRexArgs(args, timeout: 30);
+      final parsed = jsonDecode(_extractJson(result));
+      if (parsed is Map<String, dynamic>) {
+        _hubResources = (parsed['resources'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+      }
+    } catch (e) {
+      _hubError = e.toString();
+    } finally {
+      _isHubLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> searchHubResources(String query, {String? type}) async {
+    try {
+      final args = ['hub', 'search', query, '--json'];
+      if (type != null && type != 'all') args.addAll(['--type=$type']);
+      final result = await _runRexArgs(args, timeout: 20);
+      final parsed = jsonDecode(_extractJson(result));
+      if (parsed is Map<String, dynamic>) {
+        return (parsed['resources'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<String> installHubResource(String id) async {
+    try {
+      final result = await _runRexArgs(['hub', 'install', id], timeout: 30);
+      await loadHubResources();
+      return result.trim();
+    } catch (e) {
+      return 'Error: $e';
+    }
+  }
+
   // ── Training ──────────────────────────────────────────────────────────────────
 
   Map<String, dynamic> _trainingStats = {};

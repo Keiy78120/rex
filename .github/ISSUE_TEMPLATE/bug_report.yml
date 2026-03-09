@@ -1,0 +1,78 @@
+name: Bug Report
+description: Report a bug in REX
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, run `rex doctor` and check existing issues.
+
+  - type: input
+    id: version
+    attributes:
+      label: REX version
+      description: Output of `rex --version`
+      placeholder: "e.g. 6.3.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS (arm64)
+        - macOS (x86_64)
+        - Ubuntu 22.04
+        - Ubuntu 24.04
+        - Debian
+        - Other Linux
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: area
+    attributes:
+      label: Area
+      options:
+        - label: CLI command
+        - label: Daemon / background service
+        - label: Memory / ingest
+        - label: Gateway (Telegram)
+        - label: Flutter app
+        - label: Hub API
+        - label: Guards / hooks
+        - label: VPS / headless
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      placeholder: |
+        1. Run `rex ...`
+        2. ...
+        3. Error appears
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / rex doctor output
+      description: Paste relevant output from `rex doctor` or `rex logs --lines=50`
+      render: shell

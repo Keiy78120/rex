@@ -1,3 +1,4 @@
+/** @module CORE */
 import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs'
 import { CONFIG_PATH } from './paths.js'
 

@@ -1,3 +1,4 @@
+/** @module GATEWAY */
 import { homedir } from 'node:os'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'

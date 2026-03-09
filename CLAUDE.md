@@ -853,6 +853,17 @@ rex doctor --fix     # Auto-fix then health check
 | `rex workflow feature`: appends ticket to CLAUDE.md if present (BLOC 7.1 complete) | `workflow.ts` |
 | Audit doc updated: all BLOC items now ✅ (except clipboard logger — native layer required) | `docs/audit-complet-2026-03.md` |
 
+### ✅ Terminé (session 2026-03-13 — Resource Hub + GitHub OSS)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| `resource-hub.ts`: unified catalog (MCPs, guards, skills, scripts, boilerplates, tools) — built-in 20+ resources + fetch awesome-mcp-servers + awesome-claude-code, 24h cache `~/.claude/rex/hub-catalog.json` | `packages/cli/src/resource-hub.ts` |
+| `rex hub list/search/install/update` — routed before Fleet Commander in index.ts | `packages/cli/src/index.ts` |
+| `resource_hub_page.dart`: filter chips (All/MCP/Guard/Skill/Script/Boilerplate/Tool), search field, resource cards with install buttons + built-in badges, star counts | `packages/flutter_app/lib/pages/resource_hub_page.dart` |
+| Sidebar index 16: "Clients" (deferred B2B) → "Hub" (CupertinoIcons.square_grid_2x2_fill) | `widgets/rex_sidebar.dart`, `main.dart` |
+| rex_service.dart: Hub state (isHubLoading, hubError, filteredHubResources) + loadHubResources, searchHubResources, installHubResource, setHubFilter | `rex_service.dart` |
+| `.github/`: CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, PULL_REQUEST_TEMPLATE.md, issue templates, CI/CD workflows for OSS collaboration | `.github/` |
+
 ### 🔄 En cours / A faire
 
 **Tous les plans sont COMPLETS. Seuls items déférés restants** :

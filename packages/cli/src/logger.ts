@@ -1,3 +1,4 @@
+/** @module CORE */
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { DAEMON_LOG_PATH, ensureRexDirs } from './paths.js'
 

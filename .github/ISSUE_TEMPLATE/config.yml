@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation & Roadmap
+    url: https://github.com/Keiy78120/rex/blob/main/docs/plans/action.md
+    about: Read the execution plan and roadmap before opening an issue.
+  - name: Telegram Gateway
+    url: https://t.me/claude_keiy_bot
+    about: Quick questions and real-time support via the REX Telegram gateway.

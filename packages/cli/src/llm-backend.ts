@@ -1,3 +1,4 @@
+/** @module BUDGET */
 /**
  * REX LLM Backend Adapter
  * Switchable backend: ollama | llama-cpp | localai | vllm | llamafile
