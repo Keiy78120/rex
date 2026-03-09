@@ -1203,3 +1203,54 @@ export function generateReviewConfig(projectDir = process.cwd()): void {
   console.log(`  ${COLORS.cyan}i${COLORS.reset} CodeRabbit: enable at https://coderabbit.ai (free for open source)`)
   console.log(`  ${COLORS.cyan}i${COLORS.reset} DeepSource: enable at https://deepsource.io (free for open source)`)
 }
+
+// ── Pre-commit hooks (husky + lint-staged) ────────────────────────────────
+
+/**
+ * Generate husky + lint-staged pre-commit configuration.
+ * Installs .husky/pre-commit and adds lint-staged config to package.json.
+ */
+export function generatePreCommitHooks(projectDir = process.cwd()): void {
+  const pkgPath = join(projectDir, 'package.json')
+  if (!existsSync(pkgPath)) {
+    console.log(`  ${COLORS.yellow}!${COLORS.reset} No package.json found in ${projectDir}`)
+    return
+  }
+
+  // Add lint-staged config to package.json
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as Record<string, unknown>
+    if (!pkg['lint-staged']) {
+      pkg['lint-staged'] = {
+        '*.{ts,tsx}': ['npx biome check --apply', 'npx tsc --noEmit --skipLibCheck'],
+        '*.{dart}': ['dart format', 'dart analyze'],
+      }
+      writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+      ok('Added lint-staged config to package.json')
+    } else {
+      console.log(`  ${COLORS.yellow}!${COLORS.reset} lint-staged already configured in package.json — skipped`)
+    }
+  } catch (e: any) {
+    console.log(`  ${COLORS.yellow}!${COLORS.reset} Could not update package.json: ${e.message}`)
+  }
+
+  // Create .husky directory and pre-commit hook
+  const huskyDir = join(projectDir, '.husky')
+  if (!existsSync(huskyDir)) mkdirSync(huskyDir, { recursive: true })
+
+  const preCommitPath = join(huskyDir, 'pre-commit')
+  if (!existsSync(preCommitPath)) {
+    const preCommitScript = `#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+npx lint-staged
+`
+    writeFileSync(preCommitPath, preCommitScript)
+    chmodSync(preCommitPath, 0o755)
+    ok('Generated .husky/pre-commit hook')
+  } else {
+    console.log(`  ${COLORS.yellow}!${COLORS.reset} .husky/pre-commit already exists — skipped`)
+  }
+
+  console.log(`  ${COLORS.cyan}i${COLORS.reset} Run: npm install husky lint-staged --save-dev && npx husky install`)
+}
