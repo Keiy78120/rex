@@ -690,12 +690,33 @@ rex doctor --fix     # Auto-fix then health check
 | `honesty-guard.sh` — UserPromptSubmit: "c'est fait" without evidence → inject verification prompt | `src/guards/`, `~/.claude/rex-guards/` |
 | All 6 guards wired in `~/.claude/settings.json` hooks | `settings.json` |
 
+### ✅ Terminé (session 2026-03-14 — BLOC 6.3/6.4/7.3 + provider test)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **BLOC 6.3: Guard CLI extensions** — `rex guard add/create/registry` subcommands | `guard-manager.ts`, `index.ts` |
+| **`listRegistry()`** — lists built-in guard templates from `src/guards/` | `guard-manager.ts` |
+| **`addGuard(name)`** — copies guard from registry to `~/.claude/rex-guards/`, chmod 755 | `guard-manager.ts` |
+| **`createGuard(name)`** — writes template shell script for custom guards | `guard-manager.ts` |
+| **`getRegistryDir()`** — resolves guard template dir from `import.meta.url` (dist + source + npm fallback) | `guard-manager.ts` |
+| **`rex guard list --json`** — returns `{ guards, total }` for Flutter consumption | `index.ts` |
+| **`rex free-tiers --test --provider=ENVKEY --json`** — single-provider test, returns `{ ok, latencyMs }` | `index.ts` |
+| **BLOC 7.3: Git hooks** — `installGitHooks()` installs post-commit/post-merge/pre-push in current repo `.git/hooks/` | `init.ts` |
+| **`rex git-hooks`** command — manually installs git hooks for current project | `index.ts` |
+| **`rex init`** now calls `installGitHooks()` as step 9 | `init.ts` |
+| **BLOC 6.4: Flutter Guards page** — 3-tab UI: Guards list+toggle, Logs, Registry+install | `guards_page.dart` |
+| **Guards sidebar item** — index 15, `lock_shield_fill` icon, wired in IndexedStack (21 pages total) | `main.dart`, `rex_sidebar.dart` |
+| **RexService guards methods** — loadGuards, toggleGuard, addGuardFromRegistry, loadGuardLogs, loadGuardRegistry | `rex_service.dart` |
+| **Provider test connection** — Test button per API key row, real-time validation via `validateProvider()` | `providers_page.dart`, `rex_service.dart` |
+
 ### 🔄 En cours / A faire
 
-**Phase 2 DONE, Phase 3 DONE ✅, BLOC 6.2 DONE ✅, Phase 4 (LATER)**:
+**Phase 2 DONE ✅, Phase 3 DONE ✅, BLOC 6.2/6.3/6.4 DONE ✅, BLOC 7.3 DONE ✅, Phase 4 (LATER)**:
 - All 28 action.md sections implemented
 - All Phase 3 items complete (hub, sync, mesh, VPS deploy, Tailscale auto-join)
-- All BLOC 6.2 guards implemented (6/6)
+- All BLOC 6 guards implemented (6.1 existing + 6.2 new + 6.3 CLI + 6.4 Flutter UI)
+- BLOC 7.3 git hooks done (post-commit, post-merge, pre-push)
+- Provider test connection per key row done
 - Cross-platform Flutter (Windows/Linux) — Phase 4 later
 - LangGraph spike — Phase 4 later
 - Training pipeline — Phase 4 later
