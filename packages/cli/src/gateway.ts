@@ -532,6 +532,9 @@ function advancedMenu() {
       { text: '🔭 Curious', callback_data: 'curious_check' },
       { text: '📊 Monitor', callback_data: 'dev_monitor' },
     ],
+    [
+      { text: '🌐 Fleet', callback_data: 'fleet_status' },
+    ],
     [{ text: '◀️ Menu', callback_data: 'menu' }],
   ]
 }
@@ -1830,6 +1833,28 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
       break
     }
 
+    case 'fleet_status': {
+      await editMessage(token, chatId, messageId, '🌐 Checking fleet…', backMenu())
+      try {
+        const { getMeshStatus } = await import('./node-mesh.js')
+        const { nodes, healthy, stale, offline } = await getMeshStatus(new Map())
+        if (nodes.length === 0) {
+          await editMessage(token, chatId, messageId, '🌐 *Fleet*: no registered nodes\\. Running solo\\.', advancedMenu())
+        } else {
+          const lines = [`🌐 *Fleet — ${nodes.length} Specialists* \\(${healthy}✅ ${stale}⚠️ ${offline}❌\\)`, '']
+          for (const n of nodes) {
+            const icon = n.status === 'healthy' ? '✅' : n.status === 'stale' ? '⚠️' : '❌'
+            const caps = n.capabilities.slice(0, 4).join(', ')
+            lines.push(`${icon} \`${n.hostname}\` \\(${n.platform}\\)\n   ${caps}`)
+          }
+          await editMessage(token, chatId, messageId, lines.join('\n'), advancedMenu())
+        }
+      } catch (e: any) {
+        await editMessage(token, chatId, messageId, `⚠️ Fleet failed: ${e.message?.slice(0, 100)}`, advancedMenu())
+      }
+      break
+    }
+
     case 'standup': {
       await editMessage(token, chatId, messageId, '📋 Generating standup…', backMenu())
       try {
@@ -2415,6 +2440,31 @@ async function handleText(token: string, chatId: string, text: string, from: str
       await editMessage(token, chatId, loading.message_id, `⚠️ Monitor failed: ${e.message?.slice(0, 100)}`)
     }
     logCommand(from, '/monitor', 'shown')
+    return
+  }
+
+  if (cmd === '/mesh' || cmd === '/nodes' || cmd === '/fleet') {
+    const loading = await send(token, chatId, '🌐 Checking fleet status…')
+    try {
+      const { getMeshStatus } = await import('./node-mesh.js')
+      const { nodes, healthy, stale, offline } = await getMeshStatus(new Map())
+      if (nodes.length === 0) {
+        await editMessage(token, chatId, loading.message_id, '🌐 *Fleet*: no registered nodes\\. Running solo\\.')
+      } else {
+        const lines = [`🌐 *Fleet — ${nodes.length} Specialists* \\(${healthy}✅ ${stale}⚠️ ${offline}❌\\)`, '']
+        for (const n of nodes) {
+          const statusIcon = n.status === 'healthy' ? '✅' : n.status === 'stale' ? '⚠️' : '❌'
+          const caps = n.capabilities.slice(0, 4).join(', ')
+          lines.push(`${statusIcon} \`${n.hostname}\` \\(${n.platform}\\)`)
+          lines.push(`   Caps: ${caps}`)
+          if (n.lastSeen) lines.push(`   Last: ${new Date(n.lastSeen).toLocaleTimeString()}`)
+        }
+        await editMessage(token, chatId, loading.message_id, lines.join('\n'))
+      }
+    } catch (e: any) {
+      await editMessage(token, chatId, loading.message_id, `⚠️ Fleet status failed: ${e.message?.slice(0, 100)}`)
+    }
+    logCommand(from, cmd, 'shown')
     return
   }
 

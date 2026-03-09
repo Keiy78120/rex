@@ -545,16 +545,13 @@ rex doctor --fix     # Auto-fix then health check
 
 ### 🔄 En cours / A faire
 
-**Phase 2 DONE, Phase 3 ~95% DONE — All 28 sections implemented**:
-- Cross-platform Flutter (Windows/Linux) — Phase 3 later
-- VPS brain: hub API done ✅, sync done ✅, Tailscale mesh done ✅
-- Fleet routing with capacity: done ✅
-- Multi-account OAuth rotation (account-pool.ts) — wired, ready to activate
-- REX as MCP server: done ✅ (`rex mcp serve` + `rex mcp register`)
-- Security fleet (§27): scanner done ✅, MCP pre-install scan done ✅
-- Lint loop (§28): done ✅
-- §25 Fleet terminology: done ✅
-- §26 Orchestrator relay race + SPECIALIST_PROFILES: done ✅
+**Phase 2 DONE, Phase 3 DONE ✅, Phase 4 (LATER)**:
+- All 28 action.md sections implemented
+- All Phase 3 items complete (hub, sync, mesh, VPS deploy, Tailscale auto-join)
+- Cross-platform Flutter (Windows/Linux) — Phase 4 later
+- LangGraph spike — Phase 4 later
+- Training pipeline — Phase 4 later
+- Tunnels + fallback (SSH/RustDesk) — Phase 4 later
 
 ---
 
