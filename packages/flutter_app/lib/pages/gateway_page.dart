@@ -182,6 +182,17 @@ class _GatewayPageState extends State<GatewayPage> {
                         valueColor: degraded ? c.warning : c.success,
                         icon: CupertinoIcons.square_stack_3d_up,
                       ),
+                      Builder(builder: (ctx) {
+                        final qs = ctx.watch<RexService>().queueStats;
+                        final spooled = ((qs?['byType'] as Map<String, dynamic>?)?['gateway.message'] as int?) ?? 0;
+                        if (spooled == 0) return const SizedBox.shrink();
+                        return RexStatRow(
+                          label: 'Spooled',
+                          value: '$spooled msg pending replay',
+                          valueColor: c.warning,
+                          icon: CupertinoIcons.clock_fill,
+                        );
+                      }),
                       const SizedBox(height: 12),
                       Row(
                         children: [
