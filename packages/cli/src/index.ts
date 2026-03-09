@@ -1250,6 +1250,108 @@ async function main() {
       break
     }
 
+    case 'delegate': {
+      // BLOC 2.3 — complexity detection (0 LLM) → model selection → orchestrate
+      const taskArgs = process.argv.slice(3).filter(a => !a.startsWith('--'))
+      const task = taskArgs.join(' ')
+      const dryRun = process.argv.includes('--dry-run')
+      const jsonFlag = process.argv.includes('--json')
+
+      if (!task) {
+        console.log('Usage: rex delegate "<task description>" [--dry-run] [--json]')
+        console.log('\nExamples:')
+        console.log('  rex delegate "What is 2+2?"')
+        console.log('  rex delegate "Review this code for security issues and refactor" --dry-run')
+        break
+      }
+
+      // Complexity detection — 0 LLM heuristics
+      type Complexity = 'TRIVIAL' | 'LOW' | 'MED' | 'HIGH' | 'CRIT'
+      function detectComplexity(t: string): { level: Complexity; reason: string; provider: string } {
+        const lower = t.toLowerCase()
+        const words = t.split(/\s+/).length
+
+        // CRIT: architecture, multi-step, long tasks
+        if (words > 80 || /architect|design system|refactor.*entire|migrate|large|complex|production|security audit|full review/.test(lower)) {
+          return { level: 'CRIT', reason: 'Long or architecture-level task', provider: 'claude' }
+        }
+        // HIGH: code review, bug investigation, multi-file changes
+        if (words > 40 || /review|investigate|debug|implement|build|create|generate|analyze|explain.*why/.test(lower)) {
+          return { level: 'HIGH', reason: 'Code or multi-step reasoning task', provider: 'groq-llama3-70b' }
+        }
+        // MED: explanations, summaries, short implementations
+        if (words > 15 || /summarize|translate|convert|format|fix|update|change|improve/.test(lower)) {
+          return { level: 'MED', reason: 'Medium reasoning or transformation', provider: 'groq-llama3-8b' }
+        }
+        // LOW: simple questions, classifications, lookups
+        if (words > 5 || /what is|list|show|find|get|check|is there|does|can/.test(lower)) {
+          return { level: 'LOW', reason: 'Simple question or lookup', provider: 'ollama' }
+        }
+        // TRIVIAL: very short, single-word queries
+        return { level: 'TRIVIAL', reason: 'Trivial — can be answered without LLM', provider: 'script' }
+      }
+
+      const { level, reason, provider } = detectComplexity(task)
+      const providerMap: Record<string, string> = {
+        TRIVIAL: 'script',
+        LOW: 'ollama',
+        MED: 'free-tier',
+        HIGH: 'free-tier',
+        CRIT: 'claude',
+      }
+      const chosenProvider = providerMap[level]
+      const levelColors: Record<Complexity, string> = {
+        TRIVIAL: COLORS.dim,
+        LOW: COLORS.green,
+        MED: COLORS.cyan,
+        HIGH: COLORS.yellow,
+        CRIT: COLORS.red,
+      }
+
+      if (jsonFlag) {
+        const out: Record<string, unknown> = { task, complexity: level, reason, provider: chosenProvider }
+        if (!dryRun) {
+          const { orchestrate } = await import('./orchestrator.js')
+          try {
+            const result = await orchestrate(task, { preferProvider: provider })
+            out['response'] = result.response
+            out['actualProvider'] = result.provider
+            out['durationMs'] = result.durationMs
+          } catch (e: any) { out['error'] = e.message }
+        }
+        console.log(JSON.stringify(out, null, 2))
+        break
+      }
+
+      console.log()
+      console.log(`${COLORS.bold}REX Delegate${COLORS.reset}`)
+      console.log(`${COLORS.dim}Task:${COLORS.reset} ${task}`)
+      console.log(`${COLORS.dim}Complexity:${COLORS.reset} ${levelColors[level]}${level}${COLORS.reset}  ${COLORS.dim}(${reason})${COLORS.reset}`)
+      console.log(`${COLORS.dim}Provider:${COLORS.reset} ${COLORS.cyan}${chosenProvider}${COLORS.reset}`)
+      console.log()
+
+      if (dryRun) {
+        console.log(`${COLORS.dim}[dry-run] No LLM call made${COLORS.reset}`)
+        break
+      }
+
+      if (level === 'TRIVIAL') {
+        console.log(`${COLORS.dim}TRIVIAL task — no LLM needed. Handle in script/CLI directly.${COLORS.reset}`)
+        break
+      }
+
+      const { orchestrate } = await import('./orchestrator.js')
+      try {
+        const result = await orchestrate(task, { preferProvider: provider })
+        console.log(result.response)
+        console.log(`\n${COLORS.dim}[${result.provider}${result.fallbackUsed ? ' (fallback)' : ''} — ${result.durationMs}ms]${COLORS.reset}`)
+      } catch (e: any) {
+        log.error(`Delegate failed: ${e.message}`)
+        console.log(`${COLORS.red}✗${COLORS.reset} ${e.message}`)
+      }
+      break
+    }
+
     case 'reflect': {
       const logPath = process.argv[3]
       const { reflectOnSession, showReflection, suggestRunbooks } = await import('./reflector.js')
