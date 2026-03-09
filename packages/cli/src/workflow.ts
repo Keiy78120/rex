@@ -1,5 +1,5 @@
 /** @module HQ */
-import { existsSync, writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync, appendFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 import { createLogger } from './logger.js'
@@ -54,6 +54,15 @@ export function startFeature(name: string): void {
 `
     writeFileSync(featureMd, template)
     log.info('Created FEATURE.md template')
+  }
+
+  // Append feature ticket to CLAUDE.md if present
+  const claudeMd = join(process.cwd(), 'CLAUDE.md')
+  if (existsSync(claudeMd)) {
+    const ticket = `\n\n## Feature in Progress: ${name}\n\n- Branch: \`${branch}\`\n- Started: ${new Date().toISOString().slice(0, 10)}\n- Status: 🔄 In Progress\n`
+    appendFileSync(claudeMd, ticket)
+    log.info('Appended feature ticket to CLAUDE.md')
+    console.log(`CLAUDE.md updated with feature ticket.`)
   }
 
   console.log(`Branch: ${branch}`)
