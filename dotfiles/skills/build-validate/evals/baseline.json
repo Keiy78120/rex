@@ -1,0 +1,22 @@
+{
+  "skill": "build-validate",
+  "type": "capability_uplift",
+  "last_evaluated": "2026-03-13",
+  "tests": [
+    {
+      "name": "Standard CLI change verification",
+      "pass_rate": 0.95,
+      "notes": "Models reliably run the build and paste output when explicitly instructed by the skill. Without the skill, ~40% of the time models assert pass without running."
+    },
+    {
+      "name": "Flutter UI change with screenshot requirement",
+      "pass_rate": 0.65,
+      "notes": "Screenshot step is the weak point. Models often describe UI from code without visual evidence. Skill prompt improves compliance but cannot guarantee capture in all envs."
+    },
+    {
+      "name": "Partial environment — no test suite",
+      "pass_rate": 0.8,
+      "notes": "Models correctly check for test suite existence ~80% of the time. Main failure: fabricating a PASS for a TESTS step that was never run."
+    }
+  ]
+}

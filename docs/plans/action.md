@@ -985,112 +985,89 @@ if (result.recommendation === 'warn') await confirmWithUser()
 
 ---
 
-## Section 28 — Lint Loop (script-first feedback)
-
-**Pattern validé en prod** (Factory.ai, DoorDash ZenML 2025).
-
-### Boucle
-
-```
-1. Script analyse (ESLint/TSC/Semgrep/custom)
-2. LLM reçoit rapport → correction minimale ciblée
-3. Script re-analyse
-4. Si diff → retour 2
-5. Si no diff → done (0 LLM si script suffit dès étape 1)
-```
-
-### Convergence
-
-Arrêt si : aucun diff | max 5 iterations | LLM dit "rien à corriger"
-
-### Fichier à créer : `lint-loop.ts`
-
-```typescript
-export async function lintLoop(opts: {
-  targetPath: string
-  analyzer: () => Promise<string>  // script qui retourne rapport
-  maxIterations?: number           // default: 5
-}): Promise<{ converged: boolean; iterations: number; finalReport: string }>
-```
-
-Utilise `orchestrate()` en interne pour les corrections LLM.
 
 
 ---
 
-## Section 29 — Architecture Globale REX (vision finale)
+## Section 28 — Lint Loop & Agent Skills (mise à jour mars 2026)
+
+### Contexte : Claude Code Skills 2.0 (sorti début mars 2026)
+
+Anthropic a intégré nativement dans `skill-creator` ce qu'on allait builder manuellement :
+- Evals sans code (définir test cases + critères de succès)
+- Benchmark mode (pass rate, token usage, latency trackés automatiquement)
+- Parallel multi-agent testing (pas de context bleed entre tests)
+- Blind A/B testing (comparateur objectif entre deux versions d'un skill)
+- Triggering accuracy analysis (corrige les descriptions pour éviter faux positifs)
+
+**Conséquence directe : `lint-loop.ts` pour les skills REX → ne pas builder manuellement.**
+Utiliser le système d'evals officiel à la place.
+
+---
+
+### Format Agent Skills pour REX
+
+Chaque skill REX doit adopter le format officiel :
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    THE BRAIN                         │
-│  VPS / Mac Mini / PC / RPi — always-on 24/7         │
-│  Fleet Commander · Memory/RAG · Event Bus · Daemon  │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│                    THE FLEET                         │
-│  Mac · PC · NAS (storage/memory/backups/logs)        │
-│  iPhone · Android (capteurs : caméra/GPS/notifs)    │
-│  Tout nœud accessible via Tailscale tunnel          │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│              THE ORCHESTRATOR MODEL                  │
-│  Codex OAuth  /  Claude Code Pro OAuth              │
-│  → Le vrai cerveau décisionnel avec compte réel     │
-│  → Spawn via rex-launcher.ts avec profil adapté     │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│                   SOLDIERS                           │
-│  Local LLMs (Ollama : qwen, deepseek, nomic)        │
-│  Free APIs (Groq, Together, Cerebras, Gemini)       │
-│  Paid APIs (Anthropic, OpenAI) — dernier recours    │
-│  DGX Spark / GPU box — inference haute perf         │
-│  → Routing via orchestrator.ts + SPECIALIST_PROFILES│
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│                     TOOLS                            │
-│  MCPs · Skills · Open Source · Templates            │
-│  Boilerplates · Docs · GitHub setup                 │
-│  Security setup · Project setup · REX setup         │
-│  → Install via mcp-discover.ts + security-scanner   │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│                  UNDERLAYER                          │
-│  (100% scripts — JAMAIS de LLM ici)                 │
-│                                                     │
-│  Compression · Deps (ffmpeg, pdf, zip/unzip)        │
-│  Batch · Temp storage · Sync · Ingest               │
-│  Messages · Audio logs · Logs · Hammerspoon         │
-│  CSV · Docs · TXT · Python scripts · Scrapers       │
-│  RSS/poll/fetch/web search → scripts pas LLM        │
-│  Docs auto-update via fetch/RSS                     │
-│  Vérification · Lint · Security                     │
-│  Docker · YOLO Sandbox (container jetable)          │
-│  Organizer · Prune                                  │
-└─────────────────────────────────────────────────────┘
+skills/
+  mon-skill/
+    SKILL.md          ← description + instructions
+    evals/
+      test-cases.md   ← prompts de test + critères de succès
+      baseline.json   ← résultats de référence (pass rate, tokens, latency)
 ```
 
-### Règles absolues de cette architecture
+Avec ce format, Claude Code valide automatiquement le skill après chaque mise à jour du modèle.
 
-1. **Underlayer = 0 LLM** — scripts, cron, fetch, RSS. Le LLM reçoit le résultat propre, pas la donnée brute.
-2. **Soldiers = économie max** — Ollama d'abord, free tier ensuite, subscription en dernier, pay jamais par défaut.
-3. **Orchestrator = un seul** — Claude Code ou Codex avec vrai compte OAuth. C'est lui qui décide, pas les soldiers.
-4. **Fleet = tout ce qui est connecté** — iPhone/Android = capteurs (pas CPU). NAS = Storage Specialist.
-5. **Brain = toujours allumé** — si le Brain est down, la fleet tourne en mode dégradé local.
-6. **YOLO Sandbox** — toute opération risquée (install inconnu, script externe, test destructif) passe par container Docker jetable.
+---
 
-### Mapping fichiers REX
+### Deux types de skills REX
 
-| Couche | Fichiers |
+**Capability uplift** — compensent une lacune actuelle du modèle.
+- Exemple : guard-ast.ts, config-lint.ts
+- À surveiller : si le base model passe les evals sans le skill → le skill est obsolète, le retirer
+- Les evals le détectent automatiquement
+
+**Encoded preference** — séquencent des comportements selon les préférences REX.
+- Exemple : guards de workflow (test-protect, completion-guard), project-intent.ts
+- Plus durables, mais à vérifier que le workflow est toujours d'actualité
+
+---
+
+### Lint loop pour le CODE (pas les skills)
+
+Pour le code source des projets, la boucle reste manuelle via `lint-loop.ts` :
+
+```
+1. Script analyse (ESLint/TSC/Semgrep/custom)
+2. LLM reçoit rapport propre → correction minimale ciblée
+3. Script re-analyse
+4. Si diff → retour 2
+5. Si no diff → convergence (0 LLM si script suffit dès étape 1)
+```
+
+Convergence : arrêt si no diff | max 5 iterations | LLM dit "rien à corriger"
+
+```typescript
+// lint-loop.ts spec
+export async function lintLoop(opts: {
+  targetPath: string
+  analyzer: () => Promise<string>  // script → rapport
+  maxIterations?: number           // default: 5
+}): Promise<{ converged: boolean; iterations: number; finalReport: string }>
+```
+
+Utilise `orchestrate()` en interne (Haiku en priorité, 0 token si script converge seul).
+
+---
+
+### Résumé
+
+| Besoin | Solution |
 |--------|----------|
-| Brain | `daemon.ts`, `hub.ts` (Commander API) |
-| Fleet | `node-mesh.ts` |
-| Orchestrator | `rex-launcher.ts`, `account-pool.ts` |
-| Soldiers | `orchestrator.ts`, `SPECIALIST_PROFILES`, `free-tiers.ts` |
-| Memory/RAG | `memory.ts`, `semantic-cache.ts`, SQLite + Ollama embeddings |
-| Tools | `mcp-discover.ts`, `setup-wizard.ts`, `security-scanner.ts` |
-| Underlayer | `guard-ast.ts`, `lint-loop.ts`, `sync-queue.ts`, `event-journal.ts` |
+| Valider skills REX | skill-creator evals (natif, pas à builder) |
+| Détecter skills obsolètes | evals + benchmark mode (automatique) |
+| A/B tester versions de skills | skill-creator comparator agents |
+| Corriger code source en boucle | lint-loop.ts (à builder, différent des skills) |
+| Décider quand retirer un skill | evals passent sans le skill → obsolète |

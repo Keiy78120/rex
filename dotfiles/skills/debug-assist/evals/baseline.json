@@ -1,0 +1,22 @@
+{
+  "skill": "debug-assist",
+  "type": "capability_uplift",
+  "last_evaluated": "2026-03-13",
+  "tests": [
+    {
+      "name": "TypeScript compile error",
+      "pass_rate": 0.9,
+      "notes": "Models reliably read the error site and type definition before fixing. Main failure mode: proposing fix before explicitly stating root cause."
+    },
+    {
+      "name": "Silent runtime failure",
+      "pass_rate": 0.7,
+      "notes": "Without a stack trace, models tend to guess rather than instrument. Stale lockfile gotcha is missed ~30% of the time without the skill prompt enforcing Phase 1."
+    },
+    {
+      "name": "Flutter crash on startup",
+      "pass_rate": 0.75,
+      "notes": "Known crash pattern (window_manager) is recalled correctly when skill forces reading main.dart first. Without skill, models often suggest clean rebuild instead."
+    }
+  ]
+}

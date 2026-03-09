@@ -1,0 +1,22 @@
+{
+  "skill": "code-review",
+  "type": "encoded_preference",
+  "last_evaluated": "2026-03-13",
+  "tests": [
+    {
+      "name": "Spec violation detected in Stage 1",
+      "pass_rate": 0.8,
+      "notes": "Two-stage sequencing is the core preference. Models comply with the stop-at-Stage-1 rule ~80% of the time. Without the skill, models almost always blend spec and quality in one pass."
+    },
+    {
+      "name": "Security finding in Stage 2",
+      "pass_rate": 0.85,
+      "notes": "Shell injection is caught reliably. Main failure: downgrading severity to 'warning' for internal tools — the skill's NEVER rule addresses this explicitly."
+    },
+    {
+      "name": "Missing UI states — warning-level finding",
+      "pass_rate": 0.7,
+      "notes": "Models frequently mark missing empty/error states as suggestions rather than warnings. The skill's severity taxonomy (critical/warning/suggestion) needs reinforcement."
+    }
+  ]
+}

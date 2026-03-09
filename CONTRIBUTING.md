@@ -1,53 +1,118 @@
 # Contributing to REX
 
-Thanks for your interest in REX! Here's how to get started.
+Thanks for your interest! REX is a CLI + desktop app companion for Claude Code.
 
-## Development Setup
+---
 
-1. **Prerequisites**: Node.js 20+, pnpm 10+, Flutter 3.x (macOS toolchain)
-2. **Clone**: `git clone https://github.com/Keiy78120/rex.git && cd rex`
-3. **Install**: `pnpm install`
-4. **Build**: `pnpm build`
-5. **Test**: `pnpm test`
-6. **App dev**: `cd packages/flutter_app && flutter run -d macos`
+## What you need
 
-## Project Structure
+| Tool | Version | Why |
+|------|---------|-----|
+| Node.js | 22+ | CLI runtime |
+| pnpm | 10+ | Package manager |
+| Flutter | 3.x | macOS desktop app (optional) |
+| Xcode | 15+ | For Flutter macOS builds (optional) |
+| Ollama | latest | Local embeddings (optional, recommended) |
+
+---
+
+## Setup
+
+```bash
+git clone https://github.com/Keiy78120/rex.git
+cd rex
+pnpm install
+pnpm build
+```
+
+Verify:
+```bash
+node packages/cli/dist/index.js doctor
+```
+
+Flutter app (optional):
+```bash
+cd packages/flutter_app
+flutter pub get
+flutter build macos --debug
+open build/macos/Build/Products/Debug/rex_app.app
+```
+
+---
+
+## Project structure
 
 ```
-rex/
-├── packages/
-│   ├── core/    # Shared checks engine (TypeScript)
-│   ├── cli/     # CLI tool (TypeScript)
-│   ├── memory/  # Local memory MCP + ingestion (TypeScript)
-│   └── flutter_app/ # Desktop app (Flutter macOS)
+packages/
+├── cli/         TypeScript CLI — entry: src/index.ts, build: pnpm build
+├── core/        Shared health checks (rex doctor)
+├── memory/      Embedding + semantic search (SQLite + nomic-embed-text)
+└── flutter_app/ macOS native app — entry: lib/main.dart
+
+dotfiles/
+├── skills/      Claude Code skills (SKILL.md + evals/)
+└── CLAUDE.md    Global REX instructions for Claude agents
+
+docs/plans/      Architecture and execution plans
 ```
 
-## Pull Request Process
+Key files:
+- `packages/cli/src/index.ts` — all CLI commands
+- `packages/cli/src/daemon.ts` — background service
+- `packages/cli/src/hub.ts` — HTTP API (port 7420)
+- `packages/cli/src/free-tiers.ts` — free tier provider catalog
+- `packages/flutter_app/lib/services/rex_service.dart` — all app business logic
 
-1. Fork the repo and create a feature branch (`feat/my-feature`)
-2. Write tests for new functionality
-3. Ensure all tests pass (`pnpm test`)
-4. Ensure the build succeeds (`pnpm build`)
-5. Submit a PR with a clear description
+---
 
-## Commit Convention
+## Code rules
 
-We use conventional commits:
-- `feat:` — new feature
-- `fix:` — bug fix
-- `chore:` — maintenance
-- `docs:` — documentation
-- `test:` — tests
+### TypeScript (CLI)
+- Explicit types — no `any`
+- Logs via `createLogger('source')` from `logger.ts` — never `console.log`
+- Paths via `paths.ts` — never hardcode `~/.claude/rex/`
+- ESM imports with `.js` extensions
 
-## Code Style
+### Dart (Flutter)
+- Business logic in `rex_service.dart` only — pages are UI only
+- `ValueListenableBuilder` for state — no `setState` in complex widgets
+- Colors from `RexColors` in `theme.dart` — never hardcode hex
+- `addPostFrameCallback` for service calls in `initState`
 
-- TypeScript strict mode
-- No `any` types without justification
-- Tests for all public APIs
+---
 
-## Reporting Issues
+## Workflow
 
-Use GitHub Issues with the provided templates. Include:
-- OS version and architecture
-- Node.js and Flutter versions
-- Steps to reproduce
+```bash
+# 1. Branch
+git checkout -b feat/my-feature
+
+# 2. Make changes
+
+# 3. Verify build
+pnpm build              # must be zero errors
+# flutter build macos --debug  (if you touched flutter_app/)
+
+# 4. Commit
+git commit -m "feat(cli): add my feature"
+```
+
+Commit format (conventional commits): `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`
+
+---
+
+## Architecture notes
+
+**Provider routing order**: cache → local script → Ollama → free tier (Groq/Cerebras/Together/Mistral/OpenRouter/DeepSeek) → subscription
+
+**Memory flow**: sessions → `~/.claude/rex/memory/pending/` → embedded lazily by daemon → SQLite vector search
+
+**Guards**: hooks in `~/.claude/settings.json` call scripts in `~/.claude/rex-guards/`
+
+**Hub**: HTTP API on port 7420, `REX_HUB_TOKEN`-protected (dashboard `/` is public)
+
+---
+
+## Questions?
+
+Open a GitHub Issue with the provided templates, or start a Discussion.

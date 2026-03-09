@@ -1,0 +1,22 @@
+{
+  "skill": "doctor",
+  "type": "encoded_preference",
+  "last_evaluated": "2026-03-13",
+  "tests": [
+    {
+      "name": "Full diagnostic sequence on a degraded system",
+      "pass_rate": 0.85,
+      "notes": "The three-command Phase 1 sequence is followed correctly most of the time. Main failure: skipping rex memory-check and jumping to repair. Phase 4 re-verification is skipped ~20% of the time."
+    },
+    {
+      "name": "Specific known gotcha — embed count zero",
+      "pass_rate": 0.75,
+      "notes": "The sqlite-vec gotcha is only reliably caught when the skill's table is in context. Without it, models tend to suggest re-ingesting. Destructive-first responses drop to ~5% with the skill active."
+    },
+    {
+      "name": "Ingest lock file investigation",
+      "pass_rate": 0.8,
+      "notes": "The lsof-before-delete rule is the key encoded preference here. Models respect it ~80% of the time when the skill is active. Without the skill, lock deletion without lsof happens ~60% of the time."
+    }
+  ]
+}

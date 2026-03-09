@@ -1,0 +1,22 @@
+{
+  "skill": "rex-monitor",
+  "type": "encoded_preference",
+  "last_evaluated": "2026-03-13",
+  "tests": [
+    {
+      "name": "Health monitoring during deployment",
+      "pass_rate": 0.85,
+      "notes": "Skill reliably triggers CronCreate usage. Main failure mode: models describe the loop pattern instead of creating it. Interval selection (5m) is correct ~90% of the time."
+    },
+    {
+      "name": "Memory backlog watch during ingest",
+      "pass_rate": 0.75,
+      "notes": "30-minute interval is respected. The sub-minute → use daemon rule is recalled correctly ~75% of the time. Conditional alerting (pending < 10) is noted as a limitation of the current /loop implementation in most responses."
+    },
+    {
+      "name": "Multi-system monitoring setup",
+      "pass_rate": 0.7,
+      "notes": "Three separate loops with correct intervals is the encoded preference. Models merge into one loop ~30% of the time. Job ID reporting is consistent when CronCreate is actually called."
+    }
+  ]
+}
