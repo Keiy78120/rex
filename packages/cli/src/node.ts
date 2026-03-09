@@ -87,8 +87,8 @@ function loadInventoryCliNames(): string[] {
 
 // ── Registration ──────────────────────────────────────
 
-export async function registerWithHub(hubUrl?: string): Promise<boolean> {
-  const url = hubUrl || await discoverHub()
+export async function registerWithCommander(commanderUrl?: string): Promise<boolean> {
+  const url = commanderUrl || await discoverHub()
   if (!url) {
     log.warn('No hub available — running in solo mode')
     return false
@@ -126,14 +126,14 @@ export async function registerWithHub(hubUrl?: string): Promise<boolean> {
 let heartbeatInterval: NodeJS.Timeout | null = null
 let consecutiveFailures = 0
 
-export function startHeartbeat(hubUrl?: string, intervalMs = 60_000): void {
+export function startHeartbeat(commanderUrl?: string, intervalMs = 60_000): void {
   stopHeartbeat()
   consecutiveFailures = 0
 
   let inSoloMode = false
 
   const sendHeartbeat = async () => {
-    const url = hubUrl || await discoverHub()
+    const url = commanderUrl || await discoverHub()
     if (!url) {
       consecutiveFailures++
       if (consecutiveFailures >= 3 && !inSoloMode) {
@@ -146,7 +146,7 @@ export function startHeartbeat(hubUrl?: string, intervalMs = 60_000): void {
     // Auto-rejoin: hub came back after being in solo mode
     if (inSoloMode) {
       log.info('Hub reachable again, re-registering...')
-      const registered = await registerWithHub(url)
+      const registered = await registerWithCommander(url)
       if (registered) {
         inSoloMode = false
         consecutiveFailures = 0
@@ -252,24 +252,24 @@ export async function wakeNode(mac: string): Promise<boolean> {
 let cachedHubUrl: string | null = null
 let cachedLastHeartbeat: string | null = null
 
-export interface NodeStatus {
+export interface SpecialistStatus {
   id: string
   hostname: string
   platform: string
-  hubUrl: string | null
+  commanderUrl: string | null
   hubConnected: boolean
   lastHeartbeat: string | null
   tailscalePeers: TailscalePeer[]
   mode: 'solo' | 'cluster' | 'fleet'
 }
 
-export async function getNodeStatus(): Promise<NodeStatus> {
-  const hubUrl = cachedHubUrl || await discoverHub()
+export async function getSpecialistStatus(): Promise<SpecialistStatus> {
+  const commanderUrl = cachedHubUrl || await discoverHub()
   const peers = await getTailscalePeers()
   const onlinePeers = peers.filter(p => p.online).length
 
-  let mode: NodeStatus['mode'] = 'solo'
-  if (hubUrl) {
+  let mode: SpecialistStatus['mode'] = 'solo'
+  if (commanderUrl) {
     mode = onlinePeers >= 5 ? 'fleet' : 'cluster'
   }
 
@@ -277,8 +277,8 @@ export async function getNodeStatus(): Promise<NodeStatus> {
     id: getNodeId(),
     hostname: hostname(),
     platform: platform(),
-    hubUrl: hubUrl,
-    hubConnected: hubUrl !== null,
+    commanderUrl: commanderUrl,
+    hubConnected: commanderUrl !== null,
     lastHeartbeat: cachedLastHeartbeat,
     tailscalePeers: peers,
     mode,
@@ -294,11 +294,11 @@ const RED = '\x1b[31m'
 const BOLD = '\x1b[1m'
 const RESET = '\x1b[0m'
 
-export async function showNodeStatus(): Promise<void> {
-  const status = await getNodeStatus()
+export async function showSpecialistStatus(): Promise<void> {
+  const status = await getSpecialistStatus()
 
   const commanderDisplay = status.hubConnected
-    ? `${GREEN}\u25CF${RESET} connected (${status.hubUrl})`
+    ? `${GREEN}\u25CF${RESET} connected (${status.commanderUrl})`
     : `${RED}\u25CB${RESET} disconnected`
 
   const heartbeatDisplay = status.lastHeartbeat || `${DIM}never${RESET}`

@@ -1836,8 +1836,8 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
     case 'fleet_status': {
       await editMessage(token, chatId, messageId, '🌐 Checking fleet…', backButton())
       try {
-        const { getMeshStatus } = await import('./node-mesh.js')
-        const { nodes, healthy, stale, offline } = await getMeshStatus(new Map())
+        const { getFleetStatus } = await import('./node-mesh.js')
+        const { nodes, healthy, stale, offline } = await getFleetStatus(new Map())
         if (nodes.length === 0) {
           await editMessage(token, chatId, messageId, '🌐 *Fleet*: no registered nodes\\. Running solo\\.', advancedMenu())
         } else {
@@ -2469,8 +2469,8 @@ async function handleText(token: string, chatId: string, text: string, from: str
   if (cmd === '/mesh' || cmd === '/nodes' || cmd === '/fleet') {
     const loading = await send(token, chatId, '🌐 Checking fleet status…')
     try {
-      const { getMeshStatus } = await import('./node-mesh.js')
-      const { nodes, healthy, stale, offline } = await getMeshStatus(new Map())
+      const { getFleetStatus } = await import('./node-mesh.js')
+      const { nodes, healthy, stale, offline } = await getFleetStatus(new Map())
       if (nodes.length === 0) {
         await editMessage(token, chatId, loading.message_id, '🌐 *Fleet*: no registered nodes\\. Running solo\\.')
       } else {

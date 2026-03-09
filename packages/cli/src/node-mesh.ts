@@ -40,14 +40,14 @@ export interface NodeCapacity {
   ollamaModels: string[] // model names loaded in Ollama (non-embed)
 }
 
-export interface MeshNode {
+export interface FleetNode {
   id: string
   hostname: string
   platform: string
   ip: string
   capabilities: string[]   // keys of NodeCapabilities that are true
   score: number            // weighted score — higher = preferred
-  capacity?: NodeCapacity  // hardware capacity (set by buildLocalNodeInfo)
+  capacity?: NodeCapacity  // hardware capacity (set by buildLocalFleetNode)
   lastSeen: string
   registeredAt: string
   status?: 'healthy' | 'stale' | 'offline'
@@ -233,9 +233,9 @@ export function detectLocalCapabilities(): NodeCapabilities {
 }
 
 /**
- * Build a MeshNode descriptor for this local machine.
+ * Build a FleetNode descriptor for this local machine.
  */
-export function buildLocalNodeInfo(): MeshNode {
+export function buildLocalFleetNode(): FleetNode {
   const caps = detectLocalCapabilities()
   const active = Object.entries(caps)
     .filter(([, v]) => v)
@@ -278,7 +278,7 @@ function getHubUrl(): string | null {
  *
  * No-op if the URL is already configured (avoids unnecessary writes).
  */
-export function persistDiscoveredHub(url: string): boolean {
+export function persistDiscoveredCommander(url: string): boolean {
   const current = getHubUrl()
   if (current === url) return false  // already set, skip
 
@@ -319,7 +319,7 @@ async function probeHub(url: string): Promise<string | null> {
  * Returns an array of discovered hub URLs (e.g. ["http://100.x.x.x:7420"]).
  * Results are cached in the mesh-cache alongside node data.
  */
-export async function autoDiscoverHubs(): Promise<string[]> {
+export async function autoDiscoverCommanders(): Promise<string[]> {
   const peers = getTailscalePeerIps()
   if (peers.length === 0) return []
 
@@ -337,35 +337,35 @@ export async function autoDiscoverHubs(): Promise<string[]> {
  * Register this node with the hub (POST /api/nodes/register).
  * Priority: configured URL → Tailscale peer discovery → localhost:7420
  */
-export async function registerWithHub(nodeInfo?: MeshNode): Promise<boolean> {
-  const info = nodeInfo ?? buildLocalNodeInfo()
+export async function registerWithCommander(nodeInfo?: FleetNode): Promise<boolean> {
+  const info = nodeInfo ?? buildLocalFleetNode()
 
   // Build candidate list: configured > tailscale-discovered > localhost fallback
   const configured = getHubUrl()
   const candidates: string[] = configured
     ? [configured]
-    : [...(await autoDiscoverHubs()), 'http://localhost:7420']
+    : [...(await autoDiscoverCommanders()), 'http://localhost:7420']
 
-  for (const hubUrl of candidates) {
+  for (const commanderUrl of candidates) {
     try {
-      const res = await fetch(`${hubUrl}/api/nodes/register`, {
+      const res = await fetch(`${commanderUrl}/api/nodes/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(info),
         signal: AbortSignal.timeout(5000),
       })
       if (res.ok) {
-        log.info(`Registered with hub ${hubUrl}: ${info.id} (${info.capabilities.join(', ') || 'no caps'})`)
-        try { saveMeshCache(await fetchMeshNodes(hubUrl)) } catch {}
+        log.info(`Registered with hub ${commanderUrl}: ${info.id} (${info.capabilities.join(', ') || 'no caps'})`)
+        try { saveFleetCache(await fetchFleetNodes(commanderUrl)) } catch {}
         // Auto-persist Tailscale-discovered hubs (not localhost fallback)
-        if (!configured && !hubUrl.includes('localhost')) {
-          persistDiscoveredHub(hubUrl)
+        if (!configured && !commanderUrl.includes('localhost')) {
+          persistDiscoveredCommander(commanderUrl)
         }
         return true
       }
-      log.warn(`Hub registration failed at ${hubUrl}: HTTP ${res.status}`)
+      log.warn(`Hub registration failed at ${commanderUrl}: HTTP ${res.status}`)
     } catch (e: any) {
-      log.debug(`Hub unreachable at ${hubUrl}: ${e.message?.slice(0, 80)}`)
+      log.debug(`Hub unreachable at ${commanderUrl}: ${e.message?.slice(0, 80)}`)
     }
   }
   return false
@@ -373,29 +373,29 @@ export async function registerWithHub(nodeInfo?: MeshNode): Promise<boolean> {
 
 // ── Mesh cache (offline fallback) ─────────────────────────────────
 
-function saveMeshCache(nodes: MeshNode[]): void {
+function saveFleetCache(nodes: FleetNode[]): void {
   try {
     ensureRexDirs()
     writeFileSync(MESH_CACHE_PATH, JSON.stringify({ nodes, updatedAt: new Date().toISOString() }, null, 2))
   } catch {}
 }
 
-function readMeshCache(): MeshNode[] {
+function readFleetCache(): FleetNode[] {
   try {
     if (existsSync(MESH_CACHE_PATH)) {
-      const data = JSON.parse(readFileSync(MESH_CACHE_PATH, 'utf-8')) as { nodes: MeshNode[] }
+      const data = JSON.parse(readFileSync(MESH_CACHE_PATH, 'utf-8')) as { nodes: FleetNode[] }
       return data.nodes ?? []
     }
   } catch {}
   return []
 }
 
-async function fetchMeshNodes(hubUrl: string): Promise<MeshNode[]> {
-  const res = await fetch(`${hubUrl}/api/v1/nodes/health`, {
+async function fetchFleetNodes(commanderUrl: string): Promise<FleetNode[]> {
+  const res = await fetch(`${commanderUrl}/api/v1/nodes/health`, {
     signal: AbortSignal.timeout(5000),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const body = await res.json() as { data: MeshNode[] }
+  const body = await res.json() as { data: FleetNode[] }
   return body.data ?? []
 }
 
@@ -407,30 +407,30 @@ async function fetchMeshNodes(hubUrl: string): Promise<MeshNode[]> {
  * Prefers hub-fresh data, falls back to local cache.
  * Score = capability count (more capable = preferred).
  */
-export async function routeTask(taskType: TaskType): Promise<MeshNode | null> {
+export async function routeTask(taskType: TaskType): Promise<FleetNode | null> {
   const required = TASK_REQUIRES[taskType] ?? []
 
   // Try configured hub, then Tailscale-discovered hubs, then cache
-  let nodes: MeshNode[] = []
+  let nodes: FleetNode[] = []
   const configured = getHubUrl()
-  const hubCandidates = configured ? [configured] : await autoDiscoverHubs()
+  const commanderCandidates = configured ? [configured] : await autoDiscoverCommanders()
 
   let fetched = false
-  for (const hubUrl of hubCandidates) {
+  for (const commanderUrl of commanderCandidates) {
     try {
-      nodes = await fetchMeshNodes(hubUrl)
-      saveMeshCache(nodes)
+      nodes = await fetchFleetNodes(commanderUrl)
+      saveFleetCache(nodes)
       fetched = true
       break
     } catch { /* try next */ }
   }
   if (!fetched) {
-    nodes = readMeshCache()
+    nodes = readFleetCache()
   }
 
   if (nodes.length === 0) {
     // Only local node available
-    const local = buildLocalNodeInfo()
+    const local = buildLocalFleetNode()
     nodes = [local]
   }
 
@@ -449,16 +449,16 @@ export async function routeTask(taskType: TaskType): Promise<MeshNode | null> {
  * Upsert a node in the hub's nodes map.
  * Called from hub.ts route handlers.
  */
-export function upsertNode(
-  nodesMap: Map<string, MeshNode>,
-  info: Partial<MeshNode> & { hostname: string; platform: string; ip: string }
-): MeshNode {
+export function upsertFleetNode(
+  nodesMap: Map<string, FleetNode>,
+  info: Partial<FleetNode> & { hostname: string; platform: string; ip: string }
+): FleetNode {
   const existing = info.id ? nodesMap.get(info.id) : undefined
   const now = new Date().toISOString()
   const id = info.id ?? `${info.hostname}-${Date.now().toString(36)}`
   const caps = info.capabilities ?? []
 
-  const node: MeshNode = {
+  const node: FleetNode = {
     id,
     hostname:     info.hostname,
     platform:     info.platform,
@@ -477,8 +477,8 @@ export function upsertNode(
  * Get a summary of mesh health (healthy/stale/offline counts + node list).
  * Called from hub.ts GET /api/nodes/status handler.
  */
-export function getMeshStatus(nodesMap: Map<string, MeshNode>): {
-  nodes: MeshNode[]
+export function getFleetStatus(nodesMap: Map<string, FleetNode>): {
+  nodes: FleetNode[]
   healthy: number
   stale: number
   offline: number
@@ -487,12 +487,12 @@ export function getMeshStatus(nodesMap: Map<string, MeshNode>): {
   const OFFLINE_MS = 30 * 60 * 1000   // 30 min
   const now = Date.now()
 
-  const nodes: MeshNode[] = []
+  const nodes: FleetNode[] = []
   let healthy = 0, stale = 0, offline = 0
 
   for (const n of nodesMap.values()) {
     const ms = n.lastSeen ? now - new Date(n.lastSeen).getTime() : Infinity
-    const status: MeshNode['status'] =
+    const status: FleetNode['status'] =
       ms < STALE_MS   ? 'healthy' :
       ms < OFFLINE_MS ? 'stale'   : 'offline'
 
@@ -512,32 +512,32 @@ export function getMeshStatus(nodesMap: Map<string, MeshNode>): {
  * Print mesh node table to stdout.
  * Fetches from hub if available, falls back to cache, then local-only.
  */
-export async function printMeshStatus(): Promise<void> {
+export async function printFleetStatus(): Promise<void> {
   const bold = '\x1b[1m', reset = '\x1b[0m', dim = '\x1b[2m'
   const green = '\x1b[32m', yellow = '\x1b[33m', red = '\x1b[31m'
 
-  let nodes: MeshNode[] = []
+  let nodes: FleetNode[] = []
   // Priority: configured URL → Tailscale-discovered hubs → localhost
   const configuredUrl = getHubUrl()
-  const tailscaleHubs = configuredUrl ? [] : await autoDiscoverHubs()
+  const tailscaleCommanders = configuredUrl ? [] : await autoDiscoverCommanders()
   const candidates = configuredUrl
     ? [configuredUrl]
-    : [...tailscaleHubs, 'http://localhost:7420']
+    : [...tailscaleCommanders, 'http://localhost:7420']
   let resolved = false
 
   for (const url of candidates) {
     try {
-      nodes = await fetchMeshNodes(url)
-      saveMeshCache(nodes)
+      nodes = await fetchFleetNodes(url)
+      saveFleetCache(nodes)
       resolved = true
       break
     } catch { /* try next */ }
   }
 
   if (!resolved) {
-    nodes = readMeshCache()
+    nodes = readFleetCache()
     if (nodes.length === 0) {
-      nodes = [{ ...buildLocalNodeInfo(), status: 'healthy' }]
+      nodes = [{ ...buildLocalFleetNode(), status: 'healthy' }]
       console.log(`${dim}Hub not reachable. Showing local node only.${reset}\n`)
     } else {
       console.log(`${yellow}Hub unreachable — showing cached data${reset}\n`)

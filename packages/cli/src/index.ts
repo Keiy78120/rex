@@ -643,8 +643,8 @@ async function main() {
         break
       }
       if (sub === 'status' || (jsonFlag && sub !== 'start' && sub !== 'stop')) {
-        const { getHubStatus } = await import('./hub.js')
-        const status = await getHubStatus()
+        const { getCommanderStatus } = await import('./hub.js')
+        const status = await getCommanderStatus()
         if (jsonFlag) {
           console.log(JSON.stringify(status))
         } else {
@@ -673,8 +673,8 @@ async function main() {
         child.unref()
         // Wait a moment then check if it's running
         await new Promise(r => setTimeout(r, 1000))
-        const { getHubStatus } = await import('./hub.js')
-        const status = await getHubStatus()
+        const { getCommanderStatus } = await import('./hub.js')
+        const status = await getCommanderStatus()
         if (jsonFlag) {
           console.log(JSON.stringify(status))
         } else {
@@ -685,10 +685,10 @@ async function main() {
         break
       }
       // Default: run hub in foreground (for daemon / manual use)
-      const { startHub } = await import('./hub.js')
+      const { startCommander } = await import('./hub.js')
       const portArg = process.argv.find(a => a.startsWith('--port='))
       const port = portArg ? parseInt(portArg.split('=')[1]) : undefined
-      await startHub(port)
+      await startCommander(port)
       break
     }
 
@@ -814,12 +814,12 @@ async function main() {
 
     case 'node': {
       const sub = process.argv[3]
-      const { registerWithHub, showNodeStatus, getNodeStatus } = await import('./node.js')
+      const { registerWithCommander, showSpecialistStatus, getSpecialistStatus } = await import('./node.js')
       const jsonFlag = process.argv.includes('--json')
       switch (sub) {
         case 'register': {
           const hubUrl = process.argv[4] || undefined
-          const ok = await registerWithHub(hubUrl)
+          const ok = await registerWithCommander(hubUrl)
           if (ok) console.log(`${COLORS.green}✓${COLORS.reset} Registered with Commander`)
           else console.log(`${COLORS.yellow}!${COLORS.reset} No Commander found — running in solo mode`)
           break
@@ -827,10 +827,10 @@ async function main() {
         case 'status':
         default:
           if (jsonFlag) {
-            const status = await getNodeStatus()
+            const status = await getSpecialistStatus()
             console.log(JSON.stringify({ ...status, mode: status.hubConnected ? 'cluster' : 'solo' }))
           } else {
-            await showNodeStatus()
+            await showSpecialistStatus()
           }
           break
       }
@@ -839,8 +839,8 @@ async function main() {
 
     case 'mesh':
     case 'nodes': {
-      const { printMeshStatus } = await import('./node-mesh.js')
-      await printMeshStatus()
+      const { printFleetStatus } = await import('./node-mesh.js')
+      await printFleetStatus()
       break
     }
 

@@ -229,8 +229,8 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
 
     case 'rex_nodes': {
       try {
-        const { buildLocalNodeInfo } = await import('./node-mesh.js')
-        const node = buildLocalNodeInfo()
+        const { buildLocalFleetNode } = await import('./node-mesh.js')
+        const node = buildLocalFleetNode()
         return `${node.hostname} [${node.status ?? 'local'}] score=${node.score} caps=${node.capabilities.join(',')}`
       } catch (e: any) {
         return `Nodes unavailable: ${e.message?.slice(0, 100)}`

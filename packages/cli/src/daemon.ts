@@ -12,7 +12,7 @@ import { purgeOldEvents } from './sync-queue.js'
 import { appendEvent as journalAppend, purgeOldJournalEvents } from './event-journal.js'
 import { cacheClean } from './semantic-cache.js'
 import { getRoutableProviders, pingAllProviders } from './free-tiers.js'
-import { buildLocalNodeInfo, registerWithHub, autoDiscoverHubs, persistDiscoveredHub } from './node-mesh.js'
+import { buildLocalFleetNode, registerWithCommander, autoDiscoverCommanders, persistDiscoveredCommander } from './node-mesh.js'
 import { detectSignals, isUnderPressure } from './signal-detector.js'
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
@@ -106,8 +106,8 @@ async function checkHubHealth(): Promise<boolean> {
 async function tryRestartHub(): Promise<boolean> {
   if (hubRestartCount >= HUB_MAX_RESTARTS) return false
   try {
-    const { startHub } = await import('./hub.js')
-    startHub().catch(() => {})
+    const { startCommander } = await import('./hub.js')
+    startCommander().catch(() => {})
     await new Promise(r => setTimeout(r, 1000))
     const ok = await checkHubHealth()
     if (ok) {
@@ -503,13 +503,13 @@ let lastKnownMeshHubUrl: string | null = process.env.REX_HUB_URL ?? null
 
 async function tailscaleMeshCycle(): Promise<void> {
   try {
-    const hubs = await autoDiscoverHubs()
+    const hubs = await autoDiscoverCommanders()
     if (hubs.length === 0) return
 
     const discovered = hubs[0]
     if (discovered === lastKnownMeshHubUrl) return  // no change
 
-    const persisted = persistDiscoveredHub(discovered)
+    const persisted = persistDiscoveredCommander(discovered)
     if (persisted) {
       lastKnownMeshHubUrl = discovered
       log.info(`Tailscale: joined new hub at ${discovered}`)
@@ -534,8 +534,8 @@ export async function daemon(): Promise<void> {
 
   // Start embedded hub (auto port 7420, non-blocking)
   try {
-    const { startHub } = await import('./hub.js')
-    startHub().catch((e: any) => log.debug(`Hub start skipped: ${e.message?.slice(0, 80)}`))
+    const { startCommander } = await import('./hub.js')
+    startCommander().catch((e: any) => log.debug(`Hub start skipped: ${e.message?.slice(0, 80)}`))
     // Give it a moment to bind the port, then mark as started for crash monitoring
     setTimeout(async () => {
       if (await checkHubHealth()) {
@@ -668,8 +668,8 @@ export async function daemon(): Promise<void> {
     // Node registration every 60s (advertise capabilities to hub)
     if (now - lastNodeRegister >= 60_000) {
       try {
-        const nodeInfo = buildLocalNodeInfo()
-        await registerWithHub(nodeInfo)
+        const nodeInfo = buildLocalFleetNode()
+        await registerWithCommander(nodeInfo)
       } catch (e: any) {
         log.debug(`Node registration skipped: ${e.message?.slice(0, 80)}`)
       }

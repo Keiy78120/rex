@@ -9,7 +9,7 @@ import { createLogger } from './logger.js'
 import { getInventoryCache } from './inventory.js'
 import { getEventLog, appendEvent, getUnacked, ackEvent, getQueueStats } from './sync-queue.js'
 import type { EventType } from './sync-queue.js'
-import { getMeshStatus } from './node-mesh.js'
+import { getFleetStatus } from './node-mesh.js'
 
 const log = createLogger('hub')
 
@@ -238,7 +238,7 @@ const STALE_MS = 5 * 60 * 1000   // 5 min → stale
 const OFFLINE_MS = 30 * 60 * 1000 // 30 min → offline
 
 addRoute('GET', '/api/nodes/status', (_req, res) => {
-  const status = getMeshStatus(nodes as unknown as Map<string, import('./node-mesh.js').MeshNode>)
+  const status = getFleetStatus(nodes as unknown as Map<string, import('./node-mesh.js').FleetNode>)
   sendJson(res, 200, status, { total: status.nodes.length })
 })
 
@@ -728,7 +728,7 @@ function buildDashboardHtml(): string {
 
 // ── Server lifecycle ───────────────────────────────────
 
-export async function startHub(port?: number): Promise<void> {
+export async function startCommander(port?: number): Promise<void> {
   const listenPort = port ?? parseInt(process.env.REX_HUB_PORT ?? String(DEFAULT_PORT), 10)
 
   ensureRexDirs()
@@ -806,7 +806,7 @@ export async function startHub(port?: number): Promise<void> {
   })
 }
 
-export function stopHub(): void {
+export function stopCommander(): void {
   if (flushInterval) {
     clearInterval(flushInterval)
     flushInterval = null
@@ -819,7 +819,7 @@ export function stopHub(): void {
   }
 }
 
-export async function getHubStatus(): Promise<{
+export async function getCommanderStatus(): Promise<{
   running: boolean
   port: number
   nodesCount: number
