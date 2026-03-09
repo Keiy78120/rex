@@ -2443,6 +2443,29 @@ async function handleText(token: string, chatId: string, text: string, from: str
     return
   }
 
+  if (cmd === '/metrics') {
+    const loading = await send(token, chatId, '📊 Collecting metrics…')
+    try {
+      const { collectMetrics } = await import('./metrics.js')
+      const m = await collectMetrics()
+      const pendingColor = m.ingest.pendingCount > 100 ? '⚠️' : '✅'
+      const hubIcon = m.hub.reachable ? '✅' : '❌'
+      const msg = [
+        `📊 *REX Metrics*`,
+        ``,
+        `🖥 *System*: ${m.system.ramUsedPct}% RAM \\| ${m.system.cpuCount} CPUs \\| up ${Math.round(m.system.uptimeSec / 60)} min`,
+        `${pendingColor} *Ingest*: ${m.ingest.pendingCount} pending chunks`,
+        `${hubIcon} *Hub*: ${m.hub.reachable ? `${m.hub.healthyNodes}/${m.hub.nodeCount} nodes` : 'offline'}`,
+        `💾 *DB*: ${(m.memory.dbSizeBytes / (1024 * 1024)).toFixed(1)} MB`,
+      ].join('\n')
+      await editMessage(token, chatId, loading.message_id, msg)
+    } catch (e: any) {
+      await editMessage(token, chatId, loading.message_id, `⚠️ Metrics failed: ${e.message?.slice(0, 100)}`)
+    }
+    logCommand(from, '/metrics', 'shown')
+    return
+  }
+
   if (cmd === '/mesh' || cmd === '/nodes' || cmd === '/fleet') {
     const loading = await send(token, chatId, '🌐 Checking fleet status…')
     try {
