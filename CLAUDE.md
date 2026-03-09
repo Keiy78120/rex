@@ -195,6 +195,13 @@ rex doctor --fix     # Auto-fix then health check
 | BLOC 1.1: session-summary.sh upgraded to YAML format with decisions/blockers/next-steps sections + env var support | `~/.claude/rex-guards/session-summary.sh` |
 | BLOC 1.2: preload.ts injects last-session.md context (task/next-steps/blockers) at SessionStart | `packages/cli/src/preload.ts` |
 | Dependency audit step added to `rex review --full` (pnpm/npm audit, surfaces critical/high CVEs) | `packages/cli/src/review.ts` |
+| `rex decide <task>`: expose router.ts pickModel() as user-facing CLI (BLOC 11.1) | `packages/cli/src/index.ts`, `router.ts` |
+| `rex ci`: GitHub Actions local runner via act (BLOC 6.1) | `packages/cli/src/index.ts` |
+| `rex clean`: dead code detection via knip (BLOC 6.2) | `packages/cli/src/index.ts` |
+| `rex security`: standalone security scan — secrets + dep audit + SAST (BLOC 6.5) | `packages/cli/src/index.ts` |
+| `gateway-adapter.ts`: ChannelAdapter interface + TelegramAdapter + DiscordAdapter stub + createAdapter() factory | `packages/cli/src/gateway-adapter.ts` |
+| Hub WebSocket (port 7420): WS upgrade on HTTP server, auth, heartbeat, broadcastHubEvent() | `packages/cli/src/hub.ts` |
+| Flutter WebSocket clients: connectHubWs() + connectGatewayWs() via dart:io, auto-reconnect | `packages/flutter_app/lib/services/rex_service.dart` |
 
 ### ✅ Phases 1-3 complètes (sessions 2026-03-05 → 2026-03-13)
 
