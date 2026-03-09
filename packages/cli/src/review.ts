@@ -127,6 +127,44 @@ function checkSecrets(): StepResult {
   })
 }
 
+function checkDependencies(): StepResult {
+  return runStep('Dependency audit', () => {
+    const cwd = process.cwd()
+    if (!existsSync(join(cwd, 'package.json'))) {
+      return { status: 'skip', message: 'No package.json found' }
+    }
+    const pm = existsSync(join(cwd, 'pnpm-lock.yaml')) ? 'pnpm' : existsSync(join(cwd, 'yarn.lock')) ? 'yarn' : 'npm'
+    try {
+      const out = execSync(`${pm} audit --json 2>&1`, { cwd, stdio: 'pipe', timeout: 60_000 }).toString()
+      const data = JSON.parse(out)
+      // pnpm audit: { metadata: { vulnerabilities: { critical, high, ... } } }
+      // npm audit: { metadata: { vulnerabilities: { critical, high, ... } } }
+      const v = data?.metadata?.vulnerabilities ?? data?.vulnerabilities ?? {}
+      const critical = (v.critical ?? 0)
+      const high = (v.high ?? 0)
+      if (critical > 0) return { status: 'fail', message: `${critical} critical vulnerabilities found` }
+      if (high > 0) return { status: 'warn', message: `${high} high vulnerabilities found` }
+      const total = Object.values(v as Record<string, number>).reduce((s, n) => s + n, 0)
+      if (total > 0) return { status: 'warn', message: `${total} low/moderate vulnerabilities` }
+      return { status: 'ok', message: 'No known vulnerabilities' }
+    } catch (e: any) {
+      // exit code 1 from npm audit means vulnerabilities found
+      const out = e.stdout?.toString() ?? e.stderr?.toString() ?? ''
+      try {
+        const data = JSON.parse(out)
+        const v = data?.metadata?.vulnerabilities ?? data?.vulnerabilities ?? {}
+        const critical = (v.critical ?? 0)
+        const high = (v.high ?? 0)
+        if (critical > 0) return { status: 'fail', message: `${critical} critical vulnerabilities` }
+        if (high > 0) return { status: 'warn', message: `${high} high vulnerabilities` }
+        return { status: 'warn', message: 'Vulnerabilities found (check pnpm audit)' }
+      } catch {
+        return { status: 'skip', message: `Audit failed: ${e.message?.slice(0, 60) || 'unknown'}` }
+      }
+    }
+  })
+}
+
 function checkTests(): StepResult {
   return runStep('Test run', () => {
     const cwd = process.cwd()
@@ -260,6 +298,7 @@ export async function runReview(mode: 'quick' | 'full' | 'ai' | 'pre-push'): Pro
 
   if (mode === 'full') {
     results.push(checkLint())
+    results.push(checkDependencies())
     results.push(checkTests())
     results.push(checkCoverage())
   }
