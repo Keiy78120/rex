@@ -2770,6 +2770,29 @@ $transcript
     notifyListeners();
   }
 
+  List<dynamic> _rulesData = [];
+  bool _isLoadingRules = false;
+
+  List<dynamic> get rulesData => _rulesData;
+  bool get isLoadingRules => _isLoadingRules;
+
+  Future<void> loadRules() async {
+    _isLoadingRules = true;
+    notifyListeners();
+    try {
+      final result = await _runRexArgs(['rules', '--json'], timeout: 10);
+      final json = _extractJson(result);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is List) {
+          _rulesData = parsed;
+        }
+      }
+    } catch (_) {}
+    _isLoadingRules = false;
+    notifyListeners();
+  }
+
   Future<void> loadSystemMetrics() async {
     try {
       final result = await _runRexArgs(['metrics', '--json']);

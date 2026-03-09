@@ -26,6 +26,7 @@ class _HealthPageState extends State<HealthPage> {
       rex.loadDevMonitor();
       rex.loadSystemMetrics();
       rex.loadDebt();
+      rex.loadRules();
       rex.loadHqSnapshot();
     });
   }
@@ -47,6 +48,7 @@ class _HealthPageState extends State<HealthPage> {
             rex.loadDevMonitor();
             rex.loadSystemMetrics();
             rex.loadDebt();
+            rex.loadRules();
             rex.loadHqSnapshot();
           },
         ),
@@ -211,6 +213,11 @@ class _HealthPageState extends State<HealthPage> {
                 // Tech Debt
                 if (rex.techDebt.isNotEmpty || rex.isLoadingDebt) ...[
                   _TechDebtSection(items: rex.techDebt, loading: rex.isLoadingDebt),
+                  const SizedBox(height: 8),
+                ],
+                // Rules
+                if (rex.rulesData.isNotEmpty || rex.isLoadingRules) ...[
+                  _RulesSection(rules: rex.rulesData, loading: rex.isLoadingRules),
                   const SizedBox(height: 8),
                 ],
                 // Quick actions
@@ -1125,6 +1132,91 @@ class _HqAlertsSection extends StatelessWidget {
                   );
                 }),
               ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Rules Section ────────────────────────────────────────────────────────────
+
+class _RulesSection extends StatelessWidget {
+  final List<dynamic> rules;
+  final bool loading;
+  const _RulesSection({required this.rules, required this.loading});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.rex;
+    final autoCount = rules.where((r) => r['auto'] == true).length;
+    final manualCount = rules.length - autoCount;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RexSection(
+          title: 'Rules (${rules.length})',
+          icon: CupertinoIcons.lock_shield,
+          action: loading
+              ? const CupertinoActivityIndicator(radius: 8)
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (autoCount > 0)
+                      RexStatusChip(label: '$autoCount auto', status: RexChipStatus.warning, small: true),
+                    if (manualCount > 0) ...[
+                      const SizedBox(width: 6),
+                      RexStatusChip(label: '$manualCount manual', status: RexChipStatus.ok, small: true),
+                    ],
+                  ],
+                ),
+        ),
+        RexCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (rules.isEmpty)
+                Text(
+                  'No rules yet. Run rex archive promote to auto-promote patterns.',
+                  style: TextStyle(fontSize: 12, color: c.textTertiary),
+                )
+              else
+                ...rules.map((r) {
+                  final isAuto = r['auto'] == true;
+                  final title = r['title'] as String? ?? r['name'] as String? ?? 'Unknown';
+                  final excerpt = r['excerpt'] as String? ?? '';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        RexStatusChip(
+                          label: isAuto ? 'auto' : 'manual',
+                          status: isAuto ? RexChipStatus.warning : RexChipStatus.ok,
+                          small: true,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.text)),
+                              if (excerpt.isNotEmpty)
+                                Text(
+                                  excerpt,
+                                  style: TextStyle(fontSize: 11, color: c.textTertiary),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
             ],
           ),
         ),
