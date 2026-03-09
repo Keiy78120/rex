@@ -699,6 +699,12 @@ async function main() {
     case 'hub': {
       const sub = process.argv[3]
       const jsonFlag = process.argv.includes('--json')
+      // Resource Hub subcommands (list/search/install/update)
+      if (sub === 'list' || sub === 'search' || sub === 'install' || sub === 'update') {
+        const { resourceHub } = await import('./resource-hub.js')
+        await resourceHub(process.argv.slice(3))
+        break
+      }
       if (sub === 'token' || process.argv.includes('--generate-token')) {
         // Show existing token from settings or generate a new one
         const { join: joinPath } = await import('node:path')
@@ -2485,6 +2491,12 @@ ${COLORS.bold}Interactive:${COLORS.reset}
   rex menu             Interactive numbered menu (12 quick actions)
   rex devices          Display fleet nodes with role, status, and capabilities
   rex join <code|url>  Join REX network via pairing code (REX-XXXX-YYYY-ZZZZ) or hub URL
+
+${COLORS.bold}Resource Hub (skills, guards, MCPs, boilerplates, tools):${COLORS.reset}
+  rex hub list [type]         Browse all resources (mcp|guard|skill|script|boilerplate|tool)
+  rex hub search <query>      Search resources by name/description/tag
+  rex hub install <id>        Install a resource (guard/skill/mcp)
+  rex hub update              Refresh catalog from GitHub sources
 
 ${COLORS.bold}Fleet: Commander & Specialists:${COLORS.reset}
   rex hub              Start Fleet Commander API server (port 7420)

@@ -14,7 +14,7 @@ import 'pages/gateway_page.dart';
 import 'pages/agents_page.dart';
 import 'pages/mcp_page.dart';
 import 'pages/optimize_page.dart';
-import 'pages/clients_page.dart';
+import 'pages/resource_hub_page.dart';
 import 'pages/token_page.dart';
 import 'pages/observer_page.dart';
 import 'pages/workflow_page.dart';
@@ -112,7 +112,7 @@ class _RexMainWindowState extends State<RexMainWindow> {
                   SandboxPage(),
                   // RESOURCES (15-16)
                   ProvidersPage(),
-                  ClientsPage(),
+                  ResourceHubPage(),
                   // COMMS (17-19)
                   GatewayPage(),
                   VoicePage(),

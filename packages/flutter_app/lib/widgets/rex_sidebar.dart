@@ -34,7 +34,7 @@ const List<_NavItem> _items = [
   (index: 14, icon: CupertinoIcons.square_stack_3d_up, label: 'Sandbox'),
   // RESOURCES (15-16)
   (index: 15, icon: CupertinoIcons.layers_fill, label: 'Providers'),
-  (index: 16, icon: CupertinoIcons.person_2_fill, label: 'Clients'),
+  (index: 16, icon: CupertinoIcons.square_grid_2x2_fill, label: 'Hub'),
   // COMMS (17-19)
   (index: 17, icon: CupertinoIcons.paperplane_fill, label: 'Gateway'),
   (index: 18, icon: CupertinoIcons.mic_fill, label: 'Voice'),
