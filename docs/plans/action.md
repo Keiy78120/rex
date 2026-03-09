@@ -1014,3 +1014,83 @@ export async function lintLoop(opts: {
 ```
 
 Utilise `orchestrate()` en interne pour les corrections LLM.
+
+
+---
+
+## Section 29 — Architecture Globale REX (vision finale)
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    THE BRAIN                         │
+│  VPS / Mac Mini / PC / RPi — always-on 24/7         │
+│  Fleet Commander · Memory/RAG · Event Bus · Daemon  │
+└──────────────────────┬──────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────┐
+│                    THE FLEET                         │
+│  Mac · PC · NAS (storage/memory/backups/logs)        │
+│  iPhone · Android (capteurs : caméra/GPS/notifs)    │
+│  Tout nœud accessible via Tailscale tunnel          │
+└──────────────────────┬──────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────┐
+│              THE ORCHESTRATOR MODEL                  │
+│  Codex OAuth  /  Claude Code Pro OAuth              │
+│  → Le vrai cerveau décisionnel avec compte réel     │
+│  → Spawn via rex-launcher.ts avec profil adapté     │
+└──────────────────────┬──────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────┐
+│                   SOLDIERS                           │
+│  Local LLMs (Ollama : qwen, deepseek, nomic)        │
+│  Free APIs (Groq, Together, Cerebras, Gemini)       │
+│  Paid APIs (Anthropic, OpenAI) — dernier recours    │
+│  DGX Spark / GPU box — inference haute perf         │
+│  → Routing via orchestrator.ts + SPECIALIST_PROFILES│
+└──────────────────────┬──────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────┐
+│                     TOOLS                            │
+│  MCPs · Skills · Open Source · Templates            │
+│  Boilerplates · Docs · GitHub setup                 │
+│  Security setup · Project setup · REX setup         │
+│  → Install via mcp-discover.ts + security-scanner   │
+└──────────────────────┬──────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────┐
+│                  UNDERLAYER                          │
+│  (100% scripts — JAMAIS de LLM ici)                 │
+│                                                     │
+│  Compression · Deps (ffmpeg, pdf, zip/unzip)        │
+│  Batch · Temp storage · Sync · Ingest               │
+│  Messages · Audio logs · Logs · Hammerspoon         │
+│  CSV · Docs · TXT · Python scripts · Scrapers       │
+│  RSS/poll/fetch/web search → scripts pas LLM        │
+│  Docs auto-update via fetch/RSS                     │
+│  Vérification · Lint · Security                     │
+│  Docker · YOLO Sandbox (container jetable)          │
+│  Organizer · Prune                                  │
+└─────────────────────────────────────────────────────┘
+```
+
+### Règles absolues de cette architecture
+
+1. **Underlayer = 0 LLM** — scripts, cron, fetch, RSS. Le LLM reçoit le résultat propre, pas la donnée brute.
+2. **Soldiers = économie max** — Ollama d'abord, free tier ensuite, subscription en dernier, pay jamais par défaut.
+3. **Orchestrator = un seul** — Claude Code ou Codex avec vrai compte OAuth. C'est lui qui décide, pas les soldiers.
+4. **Fleet = tout ce qui est connecté** — iPhone/Android = capteurs (pas CPU). NAS = Storage Specialist.
+5. **Brain = toujours allumé** — si le Brain est down, la fleet tourne en mode dégradé local.
+6. **YOLO Sandbox** — toute opération risquée (install inconnu, script externe, test destructif) passe par container Docker jetable.
+
+### Mapping fichiers REX
+
+| Couche | Fichiers |
+|--------|----------|
+| Brain | `daemon.ts`, `hub.ts` (Commander API) |
+| Fleet | `node-mesh.ts` |
+| Orchestrator | `rex-launcher.ts`, `account-pool.ts` |
+| Soldiers | `orchestrator.ts`, `SPECIALIST_PROFILES`, `free-tiers.ts` |
+| Memory/RAG | `memory.ts`, `semantic-cache.ts`, SQLite + Ollama embeddings |
+| Tools | `mcp-discover.ts`, `setup-wizard.ts`, `security-scanner.ts` |
+| Underlayer | `guard-ast.ts`, `lint-loop.ts`, `sync-queue.ts`, `event-journal.ts` |
