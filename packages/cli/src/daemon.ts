@@ -768,8 +768,10 @@ export async function daemon(): Promise<void> {
     }
 
     // Daily dev summary push to Telegram at configurable hour (default 22:00)
+    // Uses UTC date for deduplication; converts hour to user's timezone (default Europe/Paris)
     const todayStr = new Date().toISOString().split('T')[0]
-    const currentHour = new Date().getHours()
+    const daemonTz = (config as any).daemon?.timezone ?? 'Europe/Paris'
+    const currentHour = parseInt(new Date().toLocaleString('en-US', { timeZone: daemonTz, hour: '2-digit', hour12: false }), 10)
     const summaryHour = (config as any).daemon?.summaryHour ?? 22
     if (currentHour === summaryHour && lastDailySummaryDate !== todayStr) {
       lastDailySummaryDate = todayStr
