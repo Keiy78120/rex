@@ -167,12 +167,12 @@
 
 | Item | Status | Priorité |
 |------|--------|----------|
-| Bloc 6.1 CodeRabbit/DeepSource/SonarCloud auto-config | ❌ | Moyenne |
-| Bloc 6.4 GitHub Actions CI template (`rex init --review`) | ❌ | Moyenne |
-| Bloc 6.7 Husky + lint-staged pre-commit (`rex init`) | ❌ | Faible |
-| Bloc 2.2 Clipboard logger | ❌ | Faible |
-| Bloc 3.2 `rex models setup` (auto-pull selon RAM) | ❌ | Faible |
-| Bloc 7.1 `rex workflow new-feature` full | 🔶 | Faible |
+| Bloc 6.1 CodeRabbit/DeepSource auto-config | **✅ FIXÉ** | `rex init --review` → `.coderabbit.yaml` + `.deepsource.toml` |
+| Bloc 6.4 GitHub Actions CI template | **✅ FIXÉ** | `rex init --ci` → `.github/workflows/rex-ci.yml` |
+| Bloc 6.7 Husky + lint-staged pre-commit | **✅ FIXÉ** | `rex init --pre-commit` → `.husky/pre-commit` + lint-staged config |
+| Bloc 2.2 Clipboard logger | ❌ | Faible — nécessite couche native macOS dédiée |
+| Bloc 3.2 `rex models setup` (auto-pull selon RAM) | **✅ ÉTAIT DÉJÀ LÀ** | `index.ts:498` RAM-aware + `--pull` flag |
+| Bloc 7.1 `rex workflow new-feature` full | **✅ FIXÉ** | CLAUDE.md ticket append ajouté |
 
 ### Depuis `rex-agent-factory.md`
 
@@ -212,10 +212,16 @@ Phase 3 (Hub/Fleet)    : ✅ COMPLET (99%)
 Phase 4 (Advanced)     : ✅ COMPLET (agent-runtime, training, routing-policy, lang-graph)
                        : ⏭️ DÉFERRÉ (cross-platform Flutter, B2B factory, meeting bots)
 
-Corrections session :   4 ESM require() → imports, 4 nouveaux guards auto-installés
+Corrections session 1 : 4 ESM require() → imports, 4 nouveaux guards auto-installés
+Corrections session 2 : hub timeout, account pool, FTS drift, workflow CLAUDE.md ticket
+Corrections session 3 : rex init --ci, rex init --review, rex init --pre-commit (BLOC 6.1/6.4/6.7)
 Nouveaux docs :         docs/vps-install.md, docs/garry-migration.md, docs/audit-complet-2026-03.md
+
+Items déférés (non-implémentable sans native layer) :
+  - Bloc 2.2 Clipboard logger (macOS native API requise)
+  - B2B factory / dashboard multi-tenant (produit séparé)
 ```
 
 ---
 
-*Audit généré 2026-03-* — Source : inspection code source directe, 82 fichiers TypeScript.*
+*Audit mis à jour 2026-03-13 — Source : inspection code source directe, 85+ fichiers TypeScript.*

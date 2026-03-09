@@ -843,12 +843,23 @@ rex doctor --fix     # Auto-fix then health check
 | Confirmation : `rex models setup` existait déjà (`index.ts:498`, RAM-aware + `--pull` flag) | `index.ts` |
 | Audit doc updated : tous les points bloquants résiduels → ✅ | `docs/audit-complet-2026-03.md` |
 
+### ✅ Terminé (session 2026-03-13 — CI/review/workflow completion)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| `rex init --ci`: generates `.github/workflows/rex-ci.yml` (BLOC 6.4) | `init.ts`, `index.ts` |
+| `rex init --review`: generates `.coderabbit.yaml` + `.deepsource.toml` (BLOC 6.1/6.5/6.6) | `init.ts`, `index.ts` |
+| `rex init --pre-commit`: generates `.husky/pre-commit` + lint-staged config (BLOC 6.7) | `init.ts`, `index.ts` |
+| `rex workflow feature`: appends ticket to CLAUDE.md if present (BLOC 7.1 complete) | `workflow.ts` |
+| Audit doc updated: all BLOC items now ✅ (except clipboard logger — native layer required) | `docs/audit-complet-2026-03.md` |
+
 ### 🔄 En cours / A faire
 
-**Phase 3 COMPLETE (99%), Phase 4 DEFERRED** :
-- Cross-platform Flutter (Windows/Linux) — deferred to Phase 4 later
-- Tunnels + fallback (SSH/RustDesk) — deferred
-- @libsql/client sync (Turso replica) — when VPS configured
+**Tous les plans sont COMPLETS. Seuls items déférés restants** :
+- Cross-platform Flutter (Windows/Linux) — Phase 4 later
+- B2B factory / dashboard multi-tenant — produit séparé
+- Clipboard logger — nécessite couche native macOS dédiée (hors scope CLI)
+- VPS install + Garry memory migration — tâches opérationnelles (nécessitent accès SSH)
 
 **Prochaines priorités opérationnelles** :
 - [ ] Installer REX sur VPS (`docs/vps-install.md`) — requires SSH access
