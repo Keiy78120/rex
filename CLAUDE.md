@@ -621,6 +621,19 @@ rex doctor --fix     # Auto-fix then health check
 | **Daemon: provider health cycle every 5min**: pings all providers, Telegram alert on degraded | `daemon.ts` |
 | **Flutter providers page: health strikes**: chip shows `Nx fail` (warning) before full `disabled 30m` (error) state | `providers_page.dart` |
 
+### ✅ Terminé (session 2026-03-14 — Skills 2.0 + collaboration cleanup)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **Skills 2.0 rewrite** — Iron Laws, evidence-first, two-stage review (debug-assist, build-validate, code-review) | `dotfiles/skills/*/SKILL.md` |
+| **New skills** — doctor (REX health diagnostic), rex-monitor (/loop patterns) | `dotfiles/skills/doctor/`, `dotfiles/skills/rex-monitor/` |
+| **Evals folders** — `evals/test-cases.md` + `evals/baseline.json` for 5 skills | `dotfiles/skills/*/evals/` |
+| **rex-boot skill** — Section 6 skill routing table (1% rule — invoke before work) | `~/.claude/skills/rex-boot/SKILL.md` |
+| **CONTRIBUTING.md** — Full rewrite for external contributors (prerequisites, setup, code rules, architecture notes) | `CONTRIBUTING.md` |
+| **GitHub templates** — PR template (area + verification), bug report (`rex doctor` output), feature request (area + priority) | `.github/` |
+| **action.md §28** — Updated for Skills 2.0 (native evals, lint-loop for CODE only, two skill types) | `docs/plans/action.md` |
+| **Sync to ~/.claude/skills/** — evals/ folders + rex-monitor skill deployed locally | `~/.claude/skills/` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 DONE ✅, Phase 4 (LATER)**:
