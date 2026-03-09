@@ -254,6 +254,102 @@ export function printPool(): void {
   console.log(`\n  ${accounts.length} accounts · ${available} available\n`)
 }
 
+// ── Cross-platform provisioning ─────────────────────────────────────
+
+const PLATFORM_STRATEGIES = {
+  linux: {
+    create: (n: number) => `useradd -m -s /bin/bash rex-pool-${n} 2>/dev/null || true`,
+    run: (n: number, cmd: string) => `su -c '${cmd.replace(/'/g, "'\\''")}' rex-pool-${n}`,
+    configDir: (n: number) => `/home/rex-pool-${n}/.claude`,
+    native: true,
+  },
+  darwin: {
+    create: (n: number) => `docker volume create rex-pool-${n} 2>/dev/null || true`,
+    run: (n: number, cmd: string) => `docker run --rm -v rex-pool-${n}:/root --network host claude-runner sh -c '${cmd.replace(/'/g, "'\\''")}' 2>&1`,
+    configDir: (n: number) => `docker-volume:rex-pool-${n}`,
+    native: false,
+  },
+  win32: {
+    create: (_n: number) => 'echo "WSL2 user provisioning not implemented"',
+    run: (n: number, cmd: string) => `wsl -u rex-pool-${n} -- ${cmd}`,
+    configDir: (n: number) => `\\\\wsl$\\Ubuntu\\home\\rex-pool-${n}\\.claude`,
+    native: false,
+  },
+} as const
+
+type KnownPlatform = keyof typeof PLATFORM_STRATEGIES
+
+function getPlatformStrategy() {
+  const plat = process.platform as string
+  const key: KnownPlatform = plat in PLATFORM_STRATEGIES ? (plat as KnownPlatform) : 'linux'
+  return PLATFORM_STRATEGIES[key]
+}
+
+/**
+ * Provision an isolated account slot for the given pool index.
+ * Linux: creates OS user rex-pool-N. macOS: creates Docker volume.
+ */
+export async function provisionAccount(n: number): Promise<AccountEntry> {
+  const strategy = getPlatformStrategy()
+  const { execSync } = await import('node:child_process')
+  try {
+    execSync(strategy.create(n), { stdio: 'pipe', timeout: 30_000 })
+    log.info(`Provisioned account slot rex-pool-${n} (${process.platform})`)
+  } catch (e: any) {
+    log.warn(`Provision slot ${n} warning: ${e.message?.slice(0, 80)}`)
+  }
+  const configDir = strategy.configDir(n)
+  const entry: AccountEntry = {
+    id: n,
+    configDir: typeof configDir === 'string' ? configDir : String(configDir),
+    activeTasks: 0,
+    totalTasksRun: 0,
+    totalErrors: 0,
+    rateLimitedUntil: null,
+    lastUsedAt: null,
+  }
+  const state = loadState()
+  const existing = state.accounts.findIndex(a => a.id === n)
+  if (existing >= 0) state.accounts[existing] = entry
+  else state.accounts.push(entry)
+  saveState(state)
+  return entry
+}
+
+/**
+ * Run a command as the isolated account N.
+ * Linux: su -c. macOS: docker run. Windows: wsl -u.
+ */
+export async function runAs(accountId: number, command: string): Promise<string> {
+  const { execSync } = await import('node:child_process')
+  const strategy = getPlatformStrategy()
+  const shellCmd = strategy.run(accountId, command)
+  log.debug(`runAs(${accountId}): ${shellCmd.slice(0, 80)}`)
+  try {
+    return execSync(shellCmd, { encoding: 'utf-8', timeout: 120_000, stdio: 'pipe' }).trim()
+  } catch (e: any) {
+    const errMsg = e.message?.slice(0, 200) ?? 'unknown error'
+    log.error(`runAs(${accountId}) failed: ${errMsg}`)
+    throw new Error(`runAs account ${accountId} failed: ${errMsg}`)
+  }
+}
+
+/**
+ * Rotate round-robin: pick the next available account, run command, release.
+ */
+export async function rotateRoundRobin(command: string): Promise<string> {
+  const account = await acquireAccount()
+  const id = account.id
+  try {
+    const result = await runAs(id, command)
+    releaseAccount(id)
+    return result
+  } catch (e) {
+    releaseAccount(id)
+    throw e
+  }
+}
+
 // ── Setup hint ─────────────────────────────────────────────────────
 
 export function printSetupHint(): void {
