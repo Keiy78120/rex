@@ -7,6 +7,8 @@ export interface RexConfig {
     classifyModel: string
     routing: 'ollama-first' | 'claude-only' | 'ollama-only'
     claudeFallback: string
+    backend?: string
+    backendUrl?: string
   }
   ingest: {
     scanPaths: string[]

@@ -6,10 +6,10 @@
  */
 
 import { callWithFallback } from './litellm.js'
+import { getBackend } from './llm-backend.js'
 import { createLogger } from './logger.js'
 
 const log = createLogger('llm')
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 
 // detectModel kept for backward compat (used by router.ts pickModel)
 const PREFERRED_MODELS = ['qwen2.5:1.5b', 'qwen3.5:4b', 'llama3.2', 'mistral']
@@ -17,15 +17,14 @@ const PREFERRED_MODELS = ['qwen2.5:1.5b', 'qwen3.5:4b', 'llama3.2', 'mistral']
 export async function detectModel(): Promise<string> {
   if (process.env.REX_LLM_MODEL) return process.env.REX_LLM_MODEL
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(2000) })
-    const data = await res.json() as { models: Array<{ name: string }> }
-    const available = data.models.map((m: any) => m.name)
+    const backend = getBackend()
+    const available = await backend.listModels()
     for (const pref of PREFERRED_MODELS) {
       const base = pref.split(':')[0]
-      const match = available.find((a: string) => a.includes(base))
+      const match = available.find((a) => a.includes(base))
       if (match) return match
     }
-    return available.find((a: string) => !a.includes('embed')) || available[0]
+    return available.find((a) => !a.includes('embed')) ?? available[0] ?? 'qwen3.5:4b'
   } catch {
     return 'qwen3.5:4b'
   }

@@ -687,6 +687,90 @@ async function main() {
       break
     }
 
+    case 'backend': {
+      const sub = process.argv[3] ?? 'list'
+      const { getBackend, switchBackend, BACKEND_INFO, createBackend } = await import('./llm-backend.js')
+      const jsonFlag = process.argv.includes('--json')
+
+      if (sub === 'list' || sub === 'status') {
+        const backend = getBackend()
+        const healthy = await backend.isHealthy()
+        const models = healthy ? await backend.listModels().catch(() => []) : []
+        if (jsonFlag) {
+          console.log(JSON.stringify({ type: backend.type, url: backend.url, apiFormat: backend.apiFormat, healthy, models }))
+        } else {
+          const statusIcon = healthy ? `${COLORS.green}✓${COLORS.reset}` : `${COLORS.red}✗${COLORS.reset}`
+          console.log(`\n  ${COLORS.bold}LLM Backend${COLORS.reset}`)
+          console.log(`  ${statusIcon} ${backend.type.padEnd(12)} ${COLORS.dim}${backend.url}${COLORS.reset}  ${COLORS.dim}(${backend.apiFormat} API)${COLORS.reset}`)
+          if (models.length > 0) {
+            console.log(`\n  ${COLORS.dim}Models (${models.length}):${COLORS.reset}`)
+            models.slice(0, 10).forEach(m => console.log(`    ${COLORS.cyan}•${COLORS.reset} ${m}`))
+            if (models.length > 10) console.log(`    ${COLORS.dim}... and ${models.length - 10} more${COLORS.reset}`)
+          } else if (healthy) {
+            console.log(`  ${COLORS.dim}No models listed${COLORS.reset}`)
+          } else {
+            console.log(`  ${COLORS.yellow}Backend unreachable${COLORS.reset}`)
+          }
+          console.log()
+        }
+      } else if (sub === 'switch') {
+        const type = process.argv[4] as import('./llm-backend.js').BackendType
+        const url = process.argv[5] ?? 'http://localhost:11434'
+        if (!type || !BACKEND_INFO[type]) {
+          console.error(`Usage: rex backend switch <type> [url]`)
+          console.error(`Types: ollama | llama-cpp | localai | vllm | llamafile`)
+          process.exit(1)
+        }
+        console.log(`Testing ${type} @ ${url}...`)
+        const result = await switchBackend(type, url)
+        if (result.ok) {
+          console.log(`${COLORS.green}✓${COLORS.reset} Backend switched to ${type}`)
+        } else {
+          console.error(`${COLORS.red}✗${COLORS.reset} ${result.error}`)
+          process.exit(1)
+        }
+      } else if (sub === 'info') {
+        const type = process.argv[4] as import('./llm-backend.js').BackendType
+        if (!type || !BACKEND_INFO[type]) {
+          console.log(`\n  ${COLORS.bold}Available backends:${COLORS.reset}\n`)
+          for (const [t, info] of Object.entries(BACKEND_INFO)) {
+            const cur = getBackend().type === t ? ` ${COLORS.green}← active${COLORS.reset}` : ''
+            console.log(`  ${COLORS.cyan}${t.padEnd(12)}${COLORS.reset} ${info.name}${cur}`)
+            console.log(`    ${COLORS.dim}${info.platform}${COLORS.reset}`)
+          }
+          console.log()
+        } else {
+          const info = BACKEND_INFO[type]
+          const b = createBackend(type, 'http://localhost:11434')
+          const healthy = await b.isHealthy()
+          console.log(`\n  ${COLORS.bold}${info.name}${COLORS.reset}`)
+          console.log(`  Platform : ${info.platform}`)
+          console.log(`  Install  : ${COLORS.dim}${info.install}${COLORS.reset}`)
+          console.log(`  Status   : ${healthy ? `${COLORS.green}reachable${COLORS.reset}` : `${COLORS.red}not running${COLORS.reset} (localhost:11434)`}`)
+          console.log()
+        }
+      } else if (sub === 'test') {
+        const backend = getBackend()
+        console.log(`Testing ${backend.type} @ ${backend.url}...`)
+        const healthy = await backend.isHealthy()
+        if (!healthy) { console.error(`${COLORS.red}✗ Unreachable${COLORS.reset}`); process.exit(1) }
+        try {
+          const models = await backend.listModels()
+          const testModel = models.find(m => !m.includes('embed')) ?? models[0]
+          if (!testModel) { console.error(`${COLORS.yellow}No models available${COLORS.reset}`); process.exit(1) }
+          console.log(`Testing generate with model: ${testModel}`)
+          const reply = await backend.generate('Say "pong" and nothing else.', testModel, { maxTokens: 20 })
+          console.log(`${COLORS.green}✓ Response:${COLORS.reset} ${reply.trim()}`)
+        } catch (err) {
+          console.error(`${COLORS.red}✗ Test failed:${COLORS.reset} ${String(err)}`)
+          process.exit(1)
+        }
+      } else {
+        console.log(`Usage: rex backend [list|switch|info|test]`)
+      }
+      break
+    }
+
     case 'node': {
       const sub = process.argv[3]
       const { registerWithHub, showNodeStatus, getNodeStatus } = await import('./node.js')
@@ -2000,6 +2084,12 @@ ${COLORS.bold}Event Journal & Cache:${COLORS.reset}
   rex journal replay   Replay unacked journal events
   rex cache            Show semantic cache stats (--json)
   rex cache clean      Remove expired cache entries
+
+${COLORS.bold}LLM Backend:${COLORS.reset}
+  rex backend          Show active LLM backend + models
+  rex backend switch <type> [url]  Switch backend (ollama|llama-cpp|localai|vllm|llamafile)
+  rex backend info [type]  Describe a backend (install + platform notes)
+  rex backend test     Run live generate test against active backend
 
 ${COLORS.bold}Tool Registry:${COLORS.reset}
   rex tools            List all tools with tier and status
