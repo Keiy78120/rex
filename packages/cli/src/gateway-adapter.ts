@@ -89,7 +89,37 @@ export class TelegramAdapter implements ChannelAdapter {
     return !!this.token;
   }
 
+  /**
+   * Split a message into ≤4000-char chunks at paragraph/line boundaries.
+   * Telegram max is 4096 — we use 4000 as safe margin.
+   */
+  private splitText(text: string, maxLen = 4000): string[] {
+    if (text.length <= maxLen) return [text]
+    const chunks: string[] = []
+    let remaining = text
+    while (remaining.length > maxLen) {
+      // Try to split at last double newline before limit
+      let cutAt = remaining.lastIndexOf('\n\n', maxLen)
+      if (cutAt < maxLen * 0.5) cutAt = remaining.lastIndexOf('\n', maxLen)
+      if (cutAt < maxLen * 0.5) cutAt = maxLen
+      chunks.push(remaining.slice(0, cutAt).trimEnd())
+      remaining = remaining.slice(cutAt).trimStart()
+    }
+    if (remaining) chunks.push(remaining)
+    return chunks.filter(Boolean)
+  }
+
   async send(chatId: string, msg: OutboundMessage): Promise<void> {
+    const chunks = this.splitText(msg.text)
+
+    // Send all chunks sequentially; only attach buttons to the last one
+    for (let i = 0; i < chunks.length; i++) {
+      const isLast = i === chunks.length - 1
+      await this._sendChunk(chatId, { ...msg, text: chunks[i] }, isLast ? msg.buttons : undefined)
+    }
+  }
+
+  private async _sendChunk(chatId: string, msg: OutboundMessage, buttons?: OutboundMessage['buttons']): Promise<void> {
     const payload: TelegramSendMessagePayload = {
       chat_id: chatId,
       text: msg.text,
@@ -99,9 +129,9 @@ export class TelegramAdapter implements ChannelAdapter {
       payload.parse_mode = msg.parseMode;
     }
 
-    if (msg.buttons && msg.buttons.length > 0) {
+    if (buttons && buttons.length > 0) {
       payload.reply_markup = {
-        inline_keyboard: msg.buttons.map((row) =>
+        inline_keyboard: buttons.map((row) =>
           row.map((btn) => ({
             text: btn.label,
             callback_data: btn.callbackData,
