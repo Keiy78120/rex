@@ -3,9 +3,56 @@ import { homedir, hostname as getHostname } from 'node:os'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { join, basename, extname } from 'node:path'
 import { execSync, execFileSync, spawn } from 'node:child_process'
+import { createServer } from 'node:http'
 import { appendEvent, getQueueStats, getUnacked, ackEvent } from './sync-queue.js'
 import { discoverHub } from './node.js'
 import { routeTask } from './node-mesh.js'
+
+// --- WebSocket broadcast server (port 7421) ---
+// Clients (Flutter app, Ink TUI) subscribe here for real-time gateway events.
+// Normalized message format: { channel, from, text, ts, meta }
+
+const WS_PORT = 7421
+
+export interface GatewayMessage {
+  channel: 'telegram' | 'ws' | 'internal'
+  from: string
+  text: string
+  ts: string
+  meta?: Record<string, unknown>
+}
+
+let wsClients: Set<import('ws').WebSocket> = new Set()
+
+function broadcastWs(msg: GatewayMessage): void {
+  if (wsClients.size === 0) return
+  const payload = JSON.stringify(msg)
+  for (const ws of wsClients) {
+    try {
+      if (ws.readyState === 1 /* OPEN */) ws.send(payload)
+    } catch {}
+  }
+}
+
+async function startWsServer(): Promise<void> {
+  try {
+    const { WebSocketServer } = await import('ws')
+    const httpServer = createServer((_, res) => { res.writeHead(200); res.end('REX Gateway WS') })
+    const wss = new WebSocketServer({ server: httpServer })
+
+    wss.on('connection', (ws) => {
+      wsClients.add(ws)
+      ws.send(JSON.stringify({ channel: 'internal', from: 'rex', text: 'connected', ts: new Date().toISOString() }))
+      ws.on('close', () => wsClients.delete(ws))
+      ws.on('error', () => wsClients.delete(ws))
+    })
+
+    httpServer.listen(WS_PORT, '0.0.0.0')
+    console.log(`\x1b[2mWS server: ws://0.0.0.0:${WS_PORT}\x1b[0m`)
+  } catch (e: any) {
+    console.log(`\x1b[2mWS server skipped: ${e.message?.slice(0, 60)}\x1b[0m`)
+  }
+}
 
 // --- PID lockfile (single instance guard) ---
 
@@ -148,6 +195,27 @@ function saveState(state: GatewayState) {
 let state = loadState()
 let config = loadConfig()
 let activeStreamController: AbortController | null = null
+
+// BLOC 17.2 — Multi-turn Claude conversation history (per chatId, max 20 turns)
+type ConvMessage = { role: 'user' | 'assistant'; content: string }
+const chatHistories = new Map<string, ConvMessage[]>()
+const MAX_HISTORY_TURNS = 20  // 10 user + 10 assistant turns per chat
+
+function getHistory(chatId: string): ConvMessage[] {
+  if (!chatHistories.has(chatId)) chatHistories.set(chatId, [])
+  return chatHistories.get(chatId)!
+}
+
+function addToHistory(chatId: string, role: 'user' | 'assistant', content: string): void {
+  const hist = getHistory(chatId)
+  hist.push({ role, content })
+  // Trim oldest pairs to stay within limit
+  while (hist.length > MAX_HISTORY_TURNS * 2) hist.splice(0, 2)
+}
+
+function clearHistory(chatId: string): void {
+  chatHistories.delete(chatId)
+}
 
 // --- Degrade mode ---
 
@@ -501,7 +569,7 @@ function claudeMenu() {
     ],
     [
       { text: '📋 List Sessions', callback_data: 'claude_sessions' },
-      { text: '🔄 Resume #', callback_data: 'claude_resume' },
+      { text: '🗑 Clear History', callback_data: 'claude_clear_history' },
     ],
     [{ text: '◀️ Menu', callback_data: 'menu' }],
   ]
@@ -1218,15 +1286,107 @@ function formatClaudeError(e: any, label: string): string {
   return `⚠️ ${label}: ${stderr || msg}`.slice(0, 500)
 }
 
-// Build a clean env for claude CLI — unset CLAUDECODE so it can run
-// even when the gateway itself was started inside a Claude Code session
+// Build a clean env for claude CLI — strip all CLAUDECODE / CLAUDE_CODE_* vars
+// so the subprocess is not detected as a nested Claude Code session.
+// Also ensure the common Claude CLI path is in PATH for daemon/LaunchAgent contexts.
 function claudeEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env }
+  // Remove session-detection vars
   delete env.CLAUDECODE
+  delete env.CLAUDE_CODE_SSE_PORT
+  delete env.CLAUDE_CODE_ENTRYPOINT
+  delete env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+  delete env.CLAUDE_CODE_MAX_OUTPUT_TOKENS
+  // Ensure claude CLI is findable even in LaunchAgent / systemd environments
+  const extraPaths = [
+    `${process.env.HOME ?? '/root'}/.local/bin`,
+    `/usr/local/bin`,
+    `${process.env.HOME ?? '/root'}/.nvm/versions/node/v22.20.0/bin`,
+  ]
+  const currentPath = env.PATH ?? '/usr/local/bin:/usr/bin:/bin'
+  env.PATH = [...new Set([...extraPaths, ...currentPath.split(':')])].join(':')
   return env
 }
 
 /** Run claude CLI asynchronously with animated progress edits */
+// BLOC 17.3 — Streaming Anthropic API with per-chatId conversation history
+async function askClaudeApiStream(
+  token: string, chatId: string, msgId: number,
+  userMessage: string
+): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return null  // fall back to claude CLI
+
+  addToHistory(chatId, 'user', userMessage)
+  const history = getHistory(chatId)
+
+  let accumulated = ''
+  let lastEdit = 0
+  const EDIT_INTERVAL = 900  // ms between Telegram edits (rate limit: 1/sec)
+
+  try {
+    const body = JSON.stringify({
+      model: state.claudeModel ?? 'claude-sonnet-4-20250514',
+      max_tokens: 2048,
+      stream: true,
+      messages: history.slice(-MAX_HISTORY_TURNS * 2),
+    })
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body,
+      signal: AbortSignal.timeout(120_000),
+    })
+
+    if (!res.ok || !res.body) {
+      const errText = await res.text().catch(() => res.status.toString())
+      addToHistory(chatId, 'assistant', `Error: ${errText.slice(0, 200)}`)
+      return null
+    }
+
+    const reader = res.body.getReader()
+    const dec = new TextDecoder()
+    let buf = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += dec.decode(value, { stream: true })
+
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const json = line.slice(6).trim()
+        if (json === '[DONE]' || !json) continue
+        try {
+          const event = JSON.parse(json) as { type: string; delta?: { type: string; text: string } }
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+            accumulated += event.delta.text
+            const now = Date.now()
+            if (now - lastEdit > EDIT_INTERVAL && msgId) {
+              try { await editMessage(token, chatId, msgId, `🤖 _${accumulated.slice(-800)}_`) } catch {}
+              lastEdit = now
+            }
+          }
+        } catch {}
+      }
+    }
+
+    const finalText = accumulated.trim() || '⚠️ Empty response from Claude API'
+    addToHistory(chatId, 'assistant', finalText)
+    return finalText
+  } catch (e: any) {
+    return null  // signal to fall back to claude CLI
+  }
+}
+
 async function runClaudeAsync(
   args: string[],
   timeoutMs: number,
@@ -1348,11 +1508,24 @@ async function claudeSession(
   token: string, chatId: string, msgId: number,
   prompt: string, resume?: boolean
 ): Promise<string> {
+  // BLOC 17.2 — Try Anthropic API with multi-turn history first
+  const apiResult = await askClaudeApiStream(token, chatId, msgId, prompt)
+  if (apiResult !== null) {
+    if (!apiResult.startsWith('⚠️')) {
+      state.sessionsCount++
+      saveState(state)
+    }
+    return apiResult
+  }
+
+  // Fallback: claude CLI (single-turn)
   const args = resume ? ['--continue', '-p', prompt] : ['-p', prompt]
   const result = await askClaudeWithProgress(token, chatId, msgId, args)
   if (!result.startsWith('⚠️')) {
     state.sessionsCount++
     saveState(state)
+    // Mirror CLI response into history so context is preserved across backends
+    addToHistory(chatId, 'assistant', result)
   }
   return result
 }
@@ -1551,6 +1724,15 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
       await editMessage(token, chatId, messageId,
         '🔄 *Resume Session*\nEnvoie le chemin du projet pour reprendre la session.',
         backButton()
+      )
+      break
+    }
+
+    case 'claude_clear_history': {
+      clearHistory(chatId)
+      await editMessage(token, chatId, messageId,
+        '🗑 *Conversation history cleared*\nNouvelle conversation démarrée.',
+        claudeMenu()
       )
       break
     }
@@ -2736,6 +2918,9 @@ export async function gateway() {
     process.exit(1)
   })
 
+  // Start WebSocket broadcast server (non-blocking)
+  await startWsServer()
+
   // Initial hub check
   await checkHubReachable()
 
@@ -2824,6 +3009,15 @@ export async function gateway() {
 
         const from = msg.from?.username ?? '?'
         try { appendEvent('gateway.message', { direction: 'inbound', chatId: String(msg.chat.id), text: (msg.text || msg.caption || '')?.slice(0, 500), from }) } catch {}
+
+        // Broadcast inbound message to WS clients
+        broadcastWs({
+          channel: 'telegram',
+          from,
+          text: (msg.text || msg.caption || '').slice(0, 500),
+          ts: new Date().toISOString(),
+          meta: { chatId: String(msg.chat.id), direction: 'inbound' },
+        })
         const attachment = pickAttachment(msg)
         if (attachment) {
           console.log(`${COLORS.cyan}@${from}${COLORS.reset}: [upload] ${attachment.kind} ${attachment.fileName}`)
