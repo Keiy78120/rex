@@ -316,7 +316,7 @@ async function runWithClaude(agent: AgentDef, task?: string): Promise<RunResult>
   return new Promise<RunResult>((resolve) => {
     const cwd = agent.cwd || process.cwd()
     // Remove CLAUDECODE env var to allow spawning from within CC sessions
-    const env = { ...process.env, CLAUDE_CODE_ENTRYPOINT: 'rex-agent' }
+    const env = { ...process.env, CLAUDE_CODE_ENTRYPOINT: 'rex-agent' } as NodeJS.ProcessEnv
     delete env.CLAUDECODE
     delete env.CLAUDE_CODE_SESSION
     // Use pool account dir if available, otherwise per-agent isolation

@@ -24,7 +24,7 @@ export interface CommandAnalysis {
 // ── Destructive patterns (structured) ─────────────────
 
 /** Commands that are ALWAYS blocked regardless of flags */
-const BLOCKED_COMMANDS: Array<{ cmd: string; args?: string[]; reason: string }> = [
+const BLOCKED_COMMANDS: Array<{ cmd: string; args?: string[]; flags?: string[]; reason: string }> = [
   { cmd: 'rm', args: ['-rf', '/'], reason: 'Deletes entire filesystem' },
   { cmd: 'rm', args: ['-rf', '~'], reason: 'Deletes home directory' },
   { cmd: 'rm', args: ['-rf', '$HOME'], reason: 'Deletes home directory' },

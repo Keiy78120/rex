@@ -20,3 +20,4 @@ jobs:
       - run: pnpm install
       - run: pnpm --filter @rex/core build
       - run: pnpm --filter rex-claude build
+      - run: pnpm --filter rex-claude exec tsc --noEmit

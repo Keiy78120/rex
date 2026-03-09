@@ -117,13 +117,13 @@ function scanClaudeSessionFiles(): SessionUsage[] {
             const entry = JSON.parse(line) as Record<string, unknown>
 
             // Extract token usage from various Claude Code JSONL formats
-            const usage = (entry.usage ?? entry.message?.usage) as Record<string, number> | undefined
+            const usage = (entry.usage ?? (entry.message as Record<string, unknown> | undefined)?.usage) as Record<string, number> | undefined
             if (usage) {
               inputTokens += usage.input_tokens ?? 0
               outputTokens += usage.output_tokens ?? 0
             }
 
-            const m = (entry.model ?? entry.message?.model) as string | undefined
+            const m = (entry.model ?? (entry.message as Record<string, unknown> | undefined)?.model) as string | undefined
             if (m) model = m
 
             const ts = (entry.timestamp ?? entry.created_at) as number | string | undefined
@@ -143,7 +143,7 @@ function scanClaudeSessionFiles(): SessionUsage[] {
       }
     }
   } catch (err) {
-    log.debug('scan error', err)
+    log.debug(`scan error: ${err}`)
   }
 
   return results

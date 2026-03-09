@@ -239,14 +239,15 @@ export async function callProvider(
 
   const openai = makeProvider(provider, apiKey ?? undefined)
   const useModelId = modelId ?? provider.defaultModel
-  const model: LanguageModel = openai(useModelId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const model = openai(useModelId) as any
 
   try {
     const { text } = await generateText({
       model,
       prompt,
       system,
-      maxTokens: 2048,
+      maxOutputTokens: 2048,
       abortSignal: AbortSignal.timeout(30_000),
     })
     markSuccess(provider.name)

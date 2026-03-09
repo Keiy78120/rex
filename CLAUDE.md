@@ -634,6 +634,22 @@ rex doctor --fix     # Auto-fix then health check
 | **action.md §28** — Updated for Skills 2.0 (native evals, lint-loop for CODE only, two skill types) | `docs/plans/action.md` |
 | **Sync to ~/.claude/skills/** — evals/ folders + rex-monitor skill deployed locally | `~/.claude/skills/` |
 
+### ✅ Terminé (session 2026-03-14 — TypeScript strict compliance)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **Zero TS errors** — `tsc --noEmit` now passes with 0 errors (was 57 across 21 files) | all `packages/cli/src/*.ts` |
+| `@types/better-sqlite3` added as devDependency (fixed ~13 files with TS7016) | `packages/cli/package.json` |
+| `gateway.ts`: `backMenu()` → `backButton()` (8 calls, function didn't exist) | `gateway.ts` |
+| `agents.ts`: env cast as `NodeJS.ProcessEnv` (allows delete + property assignment) | `agents.ts` |
+| `burn-rate.ts`: `entry.message` properly typed + `log.debug` 1-arg fix | `burn-rate.ts` |
+| `free-tiers.ts`: removed `: LanguageModel` annotation + `maxTokens` → `maxOutputTokens` | `free-tiers.ts` |
+| `guard-ast.ts`: added `flags?: string[]` to `BLOCKED_COMMANDS` type | `guard-ast.ts` |
+| `index.ts`: removed extra `modelFlag` arg from `optimize()` call | `index.ts` |
+| `mcp_registry.ts`: `entry.installCmd!` non-null assertion | `mcp_registry.ts` |
+| `rex-mcp-server.ts`: fixed 4 errors — `./search.js` → `spawnSync rex search`, `recordObservation` → `addObservation`, `getNodes` → `buildLocalNodeInfo`, `runReview` arg type | `rex-mcp-server.ts` |
+| **CI: `tsc --noEmit` step added** — type errors now block CI | `.github/workflows/ci.yml` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 DONE ✅, Phase 4 (LATER)**:

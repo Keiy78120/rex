@@ -235,7 +235,7 @@ async function main() {
       const applyFlag = process.argv.includes('--apply')
       const modelIdx = process.argv.indexOf('--model')
       const modelFlag = modelIdx !== -1 ? process.argv[modelIdx + 1] : undefined
-      await optimize(applyFlag, modelFlag)
+      await optimize(applyFlag)
       break
     }
 

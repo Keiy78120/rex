@@ -636,7 +636,7 @@ async function installFromMarketplace(args: string[]) {
 
   // Validate install command starts with a safe prefix
   const safePrefix = ['npx ', 'npm ', 'pip ', 'pip3 ', 'brew ', 'docker ']
-  if (!safePrefix.some(p => entry.installCmd.startsWith(p))) {
+  if (!safePrefix.some(p => entry.installCmd!.startsWith(p))) {
     console.log(`\n⚠️ Install command rejected (unsafe prefix): ${entry.installCmd}`)
     return
   }

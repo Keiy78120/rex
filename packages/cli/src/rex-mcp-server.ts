@@ -144,10 +144,11 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       const limit = Number(args.limit ?? 5)
       if (!query) return 'Error: query is required'
       try {
-        const { searchMemory } = await import('./search.js')
-        const results = await searchMemory(query, limit)
-        if (!results || results.length === 0) return 'No results found.'
-        return results.map((r: any, i: number) => `[${i + 1}] ${r.content ?? r}`).join('\n\n')
+        const { spawnSync } = await import('node:child_process')
+        const result = spawnSync('rex', ['search', query], { encoding: 'utf-8', timeout: 30_000 })
+        const output = result.stdout?.trim()
+        if (!output) return 'No results found.'
+        return output
       } catch (e: any) {
         return `Memory search failed: ${e.message?.slice(0, 200)}`
       }
@@ -158,8 +159,8 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       const type = String(args.type ?? 'pattern')
       if (!content) return 'Error: content is required'
       try {
-        const { recordObservation } = await import('./observer.js')
-        recordObservation(type as any, content, { project: process.cwd() })
+        const { addObservation } = await import('./observer.js')
+        addObservation('mcp', process.cwd(), type as any, content)
         return `Observation recorded (${type}): ${content.slice(0, 80)}`
       } catch (e: any) {
         return `Failed to record observation: ${e.message?.slice(0, 200)}`
@@ -228,10 +229,9 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
 
     case 'rex_nodes': {
       try {
-        const { getNodes } = await import('./node-mesh.js')
-        const nodes = await getNodes()
-        if (!nodes || nodes.length === 0) return 'No mesh nodes registered.'
-        return nodes.map((n: any) => `${n.hostname} [${n.role}] score=${n.score ?? 'N/A'} ${n.online ? '●' : '○'}`).join('\n')
+        const { buildLocalNodeInfo } = await import('./node-mesh.js')
+        const node = buildLocalNodeInfo()
+        return `${node.hostname} [${node.status ?? 'local'}] score=${node.score} caps=${node.capabilities.join(',')}`
       } catch (e: any) {
         return `Nodes unavailable: ${e.message?.slice(0, 100)}`
       }
@@ -241,7 +241,7 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       const full = Boolean(args.full ?? false)
       try {
         const { runReview } = await import('./review.js')
-        const result = await runReview({ quick: !full, json: true })
+        const result = runReview(full ? 'full' : 'quick')
         return JSON.stringify(result, null, 2)
       } catch (e: any) {
         return `Review failed: ${e.message?.slice(0, 200)}`

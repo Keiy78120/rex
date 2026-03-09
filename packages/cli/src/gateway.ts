@@ -1785,21 +1785,21 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
     }
 
     case 'quick_setup': {
-      await editMessage(token, chatId, messageId, '⚡ Running quick setup…', backMenu())
+      await editMessage(token, chatId, messageId, '⚡ Running quick setup…', backButton())
       const out = truncate(strip(run('rex setup --quick', 30000)), 3000)
       await editMessage(token, chatId, messageId, `⚡ *Quick Setup*\n\`\`\`\n${out}\n\`\`\``, advancedMenu())
       break
     }
 
     case 'run_review': {
-      await editMessage(token, chatId, messageId, '🔍 Running code review…', backMenu())
+      await editMessage(token, chatId, messageId, '🔍 Running code review…', backButton())
       const out = truncate(strip(run('rex review', 30000)), 3000)
       await editMessage(token, chatId, messageId, `🔍 *Code Review*\n\`\`\`\n${out}\n\`\`\``, advancedMenu())
       break
     }
 
     case 'curious_check': {
-      await editMessage(token, chatId, messageId, '🔭 Checking discoveries…', backMenu())
+      await editMessage(token, chatId, messageId, '🔭 Checking discoveries…', backButton())
       try {
         const { runCurious } = await import('./curious.js')
         const result = await runCurious({ silent: true })
@@ -1821,7 +1821,7 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
     }
 
     case 'dev_monitor': {
-      await editMessage(token, chatId, messageId, '📊 Gathering dev status…', backMenu())
+      await editMessage(token, chatId, messageId, '📊 Gathering dev status…', backButton())
       try {
         const { getDevStatus, formatDevStatusTelegram } = await import('./dev-monitor.js')
         const report = await getDevStatus()
@@ -1834,7 +1834,7 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
     }
 
     case 'fleet_status': {
-      await editMessage(token, chatId, messageId, '🌐 Checking fleet…', backMenu())
+      await editMessage(token, chatId, messageId, '🌐 Checking fleet…', backButton())
       try {
         const { getMeshStatus } = await import('./node-mesh.js')
         const { nodes, healthy, stale, offline } = await getMeshStatus(new Map())
@@ -1856,7 +1856,7 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
     }
 
     case 'standup': {
-      await editMessage(token, chatId, messageId, '📋 Generating standup…', backMenu())
+      await editMessage(token, chatId, messageId, '📋 Generating standup…', backButton())
       try {
         const { getDevStatus } = await import('./dev-monitor.js')
         const report = await getDevStatus()
@@ -1873,9 +1873,9 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
         lines.push('')
         lines.push(`📊 ${report.totalCommits} commit${report.totalCommits !== 1 ? 's' : ''} · ${report.sessionCount} session${report.sessionCount !== 1 ? 's' : ''} Claude`)
         if (report.pendingMemories > 0) lines.push(`📥 ${report.pendingMemories} memories en attente`)
-        await editMessage(token, chatId, messageId, lines.join('\n'), backMenu())
+        await editMessage(token, chatId, messageId, lines.join('\n'), backButton())
       } catch (e: any) {
-        await editMessage(token, chatId, messageId, `⚠️ Standup failed: ${e.message?.slice(0, 100)}`, backMenu())
+        await editMessage(token, chatId, messageId, `⚠️ Standup failed: ${e.message?.slice(0, 100)}`, backButton())
       }
       break
     }
