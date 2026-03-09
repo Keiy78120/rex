@@ -600,6 +600,19 @@ rex doctor --fix     # Auto-fix then health check
 | **`rex doctor --platform`**: detailed platform limitation report | `index.ts` |
 | **`rex doctor`**: shows platform warnings summary when limitations detected | `index.ts` |
 
+### ✅ Terminé (session 2026-03-14 — Install optimization + Tech Debt UI)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **`rex install --dry-run`**: preview install plan per profile without executing | `install.ts` |
+| **`gpu-node` profile**: new install profile for GPU inference nodes (detects Metal/nvidia-smi, recommends large Ollama models) | `install.ts` |
+| **GPU detection** in `detectResources()`: macOS (system_profiler Metal) + Linux (nvidia-smi) | `install.ts` |
+| **Port conflict detection**: checks 11434 (Ollama) + 7420 (Hub) before install | `install.ts` |
+| **Install log**: `~/.claude/rex/install.log` — structured timestamped append-only log of install steps | `install.ts` |
+| **`rex resources` alias**: `rex resources [--json]` = alias for `rex inventory` | `index.ts` |
+| **`_TechDebtSection`**: Health page section showing TODO/FIXME/HACK counts + stale (>7d) chips | `health_page.dart` |
+| **`loadDebt()`**: RexService method calling `rex debt --json` → `techDebt` state | `rex_service.dart` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 DONE ✅, Phase 4 (LATER)**:
