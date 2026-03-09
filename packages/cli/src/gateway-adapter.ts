@@ -163,25 +163,90 @@ export class TelegramAdapter implements ChannelAdapter {
 
 // ─── DiscordAdapter ───────────────────────────────────────────────────────────
 
-// TODO: implement via discord.js or Discord Webhook API
+interface DiscordWebhookPayload {
+  content?: string;
+  username?: string;
+  embeds?: Array<{
+    title?: string;
+    description?: string;
+    color?: number;
+    fields?: Array<{ name: string; value: string; inline?: boolean }>;
+  }>;
+}
+
+interface DiscordInteractionMessage {
+  id: string;
+  content?: string;
+  author?: { username?: string; global_name?: string };
+  timestamp?: string;
+}
+
+/**
+ * Discord adapter using Webhook URL for send (outbound-only).
+ * Webhook URL is stored as `token` — full https://discord.com/api/webhooks/... URL.
+ * Receive (normalize) parses Discord interaction payloads (for future bot support).
+ */
 export class DiscordAdapter implements ChannelAdapter {
   readonly name = 'discord';
-  private readonly token: string;
+  private readonly webhookUrl: string;
 
   constructor(token: string) {
-    this.token = token;
+    this.webhookUrl = token;
   }
 
   isAvailable(): boolean {
-    return false;
+    return !!this.webhookUrl && this.webhookUrl.startsWith('https://discord.com/api/webhooks/');
   }
 
-  async send(_to: string, _msg: OutboundMessage): Promise<void> {
-    throw new Error('Discord adapter not yet implemented');
+  async send(_to: string, msg: OutboundMessage): Promise<void> {
+    if (!this.isAvailable()) throw new Error('Discord webhook URL not configured');
+
+    // Strip Telegram Markdown (* ** ``) → plain text for Discord
+    const text = msg.parseMode === 'Markdown'
+      ? msg.text.replace(/\*\*/g, '**').replace(/(?<!\*)\*(?!\*)/g, '*')
+      : msg.text;
+
+    const payload: DiscordWebhookPayload = {
+      username: 'REX',
+      content: text.length <= 2000 ? text : text.slice(0, 1997) + '…',
+    };
+
+    let response: Response;
+    try {
+      response = await fetch(this.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log.error(`Discord fetch error: ${message}`);
+      throw new Error(`Discord send failed: ${message}`);
+    }
+
+    // Discord returns 204 No Content on success for webhooks
+    if (!response.ok && response.status !== 204) {
+      const body = await response.text().catch(() => '');
+      log.error(`Discord webhook error ${response.status}: ${body.slice(0, 100)}`);
+      throw new Error(`Discord webhook error: ${response.status}`);
+    }
+
+    log.debug(`Discord message sent via webhook`);
   }
 
-  normalize(_raw: unknown): GatewayMessage | null {
-    return null;
+  normalize(raw: unknown): GatewayMessage | null {
+    // Discord webhooks are send-only; this handles potential bot interaction payloads
+    if (!raw || typeof raw !== 'object') return null;
+    const payload = raw as Partial<DiscordInteractionMessage>;
+    if (!payload.content) return null;
+    return {
+      channel: 'discord',
+      from: payload.author?.global_name ?? payload.author?.username ?? 'discord',
+      text: payload.content,
+      ts: payload.timestamp ?? new Date().toISOString(),
+      meta: { id: payload.id },
+    };
   }
 }
 
@@ -212,4 +277,28 @@ export function getAvailableAdapters(config: {
   }
 
   return adapters.filter((a) => a.isAvailable());
+}
+
+/**
+ * Load all configured adapters from environment + settings.json.
+ * Keys: REX_TELEGRAM_BOT_TOKEN, REX_DISCORD_WEBHOOK_URL.
+ */
+export async function loadAdaptersFromEnv(): Promise<ChannelAdapter[]> {
+  const { existsSync, readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { homedir } = await import('node:os');
+
+  let settingsEnv: Record<string, string> = {};
+  try {
+    const settingsPath = join(homedir(), '.claude', 'settings.json');
+    if (existsSync(settingsPath)) {
+      const data = JSON.parse(readFileSync(settingsPath, 'utf-8')) as { env?: Record<string, string> };
+      settingsEnv = data.env ?? {};
+    }
+  } catch {}
+
+  const telegramToken = process.env.REX_TELEGRAM_BOT_TOKEN ?? settingsEnv.REX_TELEGRAM_BOT_TOKEN ?? '';
+  const discordWebhook = process.env.REX_DISCORD_WEBHOOK_URL ?? settingsEnv.REX_DISCORD_WEBHOOK_URL ?? '';
+
+  return getAvailableAdapters({ telegram: telegramToken || undefined, discord: discordWebhook || undefined });
 }
