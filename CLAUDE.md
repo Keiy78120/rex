@@ -181,6 +181,18 @@ rex doctor --fix     # Auto-fix then health check
 
 > Historique détaillé dans git log. Ce fichier garde uniquement le statut courant.
 
+### ✅ Terminé (sessions 2026-03-13+ — milo BLOCs completion)
+
+| Ce qui a été fait | Fichier(s) |
+|-------------------|-----------|
+| BLOC 4.1: guard count line in SessionStart preload (`REX active — N guards active`) | `packages/cli/src/preload.ts` |
+| Coverage check in `rex review --full` (vitest/jest output parse, 60% threshold) | `packages/cli/src/review.ts` |
+| Commitlint + commit-msg husky hook (via `rex init --pre-commit`) | `packages/cli/src/init.ts` |
+| `rex context --inject` (injects last-session.md into CLAUDE.md, idempotent) | `packages/cli/src/context.ts`, `index.ts` |
+| `rex watch` (live guard activity tail, color-coded) | `packages/cli/src/index.ts` |
+| `rex log [--today] [--guard <name>]` (filtered guard log viewer) | `packages/cli/src/index.ts` |
+| Fleet thermal awareness confirmed ✅ in node-mesh.ts (thermalStatus.healthy check before routing) | `packages/cli/src/node-mesh.ts` |
+
 ### ✅ Phases 1-3 complètes (sessions 2026-03-05 → 2026-03-13)
 
 **Phase 1 — Core** : CLI (35+ commands), Gateway Telegram, Memory (SQLite+embeddings), Flutter app (20+ pages), Doctor, Daemon, Agents, MCP registry, Provider detection, Budget, Event journal, Semantic cache, Backup, Git workflow, Guard manager, Review pipeline, Observer/Reflector, Orchestrator, Resource inventory.

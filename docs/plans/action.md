@@ -728,10 +728,10 @@ Ces principes ne changent jamais, même si les plans évoluent :
 - Push Flutter + Telegram fallback
 - Propose, ne force jamais. Kevin dit oui → REX exécute.
 
-**Fleet thermal awareness**
-- Avant routing d'une tâche : checker CPU/GPU/RAM du Specialist
-- Node trop chargé → évité automatiquement
-- Pas juste "online/offline" mais "capacité disponible maintenant"
+**Fleet thermal awareness** ✅ DONE
+- `node-mesh.ts` line 466-472 : thermalStatus.healthy check avant routing
+- Node trop chargé (CPU>80% ou RAM>90%) → évité automatiquement
+- `ThermalStatus` interface : cpuLoadPercent, ramUsedPercent, healthy
 
 **P2P Enterprise Fleet (futur)**
 - Isolation stricte entre fleets par entreprise
