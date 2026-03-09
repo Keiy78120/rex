@@ -714,6 +714,57 @@ async function main() {
       break
     }
 
+    case 'tunnel': {
+      // rex tunnel <user@host> [--port=7420] [--remote-port=7420]
+      // Creates reverse SSH tunnel: remote:port → localhost:port (expose local hub to VPS)
+      const host = process.argv[3]
+      if (!host) {
+        console.log('Usage: rex tunnel <user@host> [--port=7420] [--remote-port=7420]')
+        console.log('       Exposes local REX hub to a remote host via SSH reverse tunnel.')
+        process.exit(1)
+      }
+      const portArg = process.argv.find(a => a.startsWith('--port='))
+      const remotePortArg = process.argv.find(a => a.startsWith('--remote-port='))
+      const localPort = portArg ? portArg.split('=')[1] : '7420'
+      const remotePort = remotePortArg ? remotePortArg.split('=')[1] : localPort
+
+      const { execFile } = await import('node:child_process')
+      const BOLD = '\x1b[1m', RESET = '\x1b[0m', CYAN = '\x1b[36m', DIM = '\x1b[2m'
+
+      console.log(`\n${BOLD}REX SSH Tunnel${RESET}`)
+      console.log(`${DIM}${'─'.repeat(40)}${RESET}`)
+      console.log(`  Local:  localhost:${localPort}`)
+      console.log(`  Remote: ${host}:${remotePort}`)
+      console.log(`${DIM}Press Ctrl+C to close tunnel${RESET}\n`)
+      console.log(`${CYAN}→ ssh -R ${remotePort}:localhost:${localPort} -N -o ServerAliveInterval=30 ${host}${RESET}\n`)
+
+      const child = execFile('ssh', [
+        '-R', `${remotePort}:localhost:${localPort}`,
+        '-N',
+        '-o', 'ServerAliveInterval=30',
+        '-o', 'ServerAliveCountMax=3',
+        '-o', 'ExitOnForwardFailure=yes',
+        host,
+      ])
+
+      child.on('error', (err) => {
+        console.error(`Tunnel error: ${err.message}`)
+        process.exit(1)
+      })
+      child.on('exit', (code) => {
+        console.log(`\nTunnel closed (exit ${code})`)
+        process.exit(code ?? 0)
+      })
+
+      process.on('SIGINT', () => {
+        child.kill('SIGTERM')
+      })
+
+      // Keep alive indefinitely
+      await new Promise(() => {})
+      break
+    }
+
     case 'vps': {
       const sub = process.argv[3]
       if (sub === 'setup') {
