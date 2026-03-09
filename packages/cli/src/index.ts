@@ -714,6 +714,21 @@ async function main() {
       break
     }
 
+    case 'metrics': {
+      const { collectMetrics, toPrometheus, printMetrics } = await import('./metrics.js')
+      const prometheusFlag = process.argv.includes('--prometheus')
+      const jsonFlag = process.argv.includes('--json')
+      const m = await collectMetrics()
+      if (prometheusFlag) {
+        process.stdout.write(toPrometheus(m))
+      } else if (jsonFlag) {
+        console.log(JSON.stringify(m, null, 2))
+      } else {
+        printMetrics(m)
+      }
+      break
+    }
+
     case 'tunnel': {
       // rex tunnel <user@host> [--port=7420] [--remote-port=7420]
       // Creates reverse SSH tunnel: remote:port → localhost:port (expose local hub to VPS)
