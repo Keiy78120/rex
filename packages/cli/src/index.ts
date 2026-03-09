@@ -3122,6 +3122,31 @@ async function main() {
           await sandboxCodex(task, { mode, network: !noNetwork })
           break
         }
+        case 'benchmark': {
+          const { runBenchmark, printBenchmarkReport } = await import('./sandbox/benchmark.js')
+          const tag = process.argv.find(a => a.startsWith('--tag='))?.split('=')[1] ?? `bench-${Date.now()}`
+          console.log('Running sandbox benchmark...')
+          const report = await runBenchmark(undefined, tag)
+          printBenchmarkReport(report)
+          if (jsonMode) console.log(JSON.stringify(report.summary, null, 2))
+          break
+        }
+        case 'runner': {
+          const { runInSandbox, getSandboxRunnerStatus } = await import('./sandbox/sandbox-runner.js')
+          const cmd = process.argv.slice(4).filter(a => !a.startsWith('--')).join(' ')
+          const tag = process.argv.find(a => a.startsWith('--tag='))?.split('=')[1]
+          if (!cmd) {
+            const status = getSandboxRunnerStatus()
+            console.log(JSON.stringify(status, null, 2))
+            break
+          }
+          const result = await runInSandbox(cmd, { tag, timeoutMs: 120_000 })
+          if (jsonMode) { console.log(JSON.stringify(result, null, 2)); break }
+          console.log(result.ok ? '✓ Sandbox run passed' : '✗ Sandbox run failed')
+          if (result.stdout) console.log(result.stdout)
+          if (!result.ok && result.stderr) console.error(result.stderr)
+          break
+        }
         default: {
           printSandboxStatus(mode)
           console.log('Usage:')
@@ -3130,10 +3155,13 @@ async function main() {
           console.log('  rex sandbox run "<cmd>"         Run command in sandbox')
           console.log('  rex sandbox claude "<task>"     Run Claude Code in sandbox')
           console.log('  rex sandbox codex "<task>"      Run Codex in sandbox')
+          console.log('  rex sandbox benchmark           Compare sandbox vs prod performance')
+          console.log('  rex sandbox runner "<cmd>"      Run command in Docker sandbox runner')
           console.log()
           console.log('Flags:')
           console.log('  --mode=light|full|off           Isolation level (default: light)')
           console.log('  --no-network                    Block network access in sandbox')
+          console.log('  --tag=<name>                    Tag this run (for benchmark results)')
         }
       }
       break

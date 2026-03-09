@@ -185,6 +185,24 @@ export async function promoteRule(index: number): Promise<boolean> {
   const pattern = active[index - 1]
   if (!pattern.suggestedRule) return false
 
+  // ── Sandbox gate: validate before promoting to prod rules ─────────────────
+  try {
+    const { validateBeforePromote } = await import('./sandbox/sandbox-runner.js')
+    const validation = await validateBeforePromote(pattern)
+    if (!validation.safe) {
+      log.warn(`promoteRule: sandbox rejected rule #${index} — ${validation.reason}`)
+      console.log(`  ⚠️  Sandbox validation failed: ${validation.reason}`)
+      console.log(`  Rule NOT promoted. Fix the issue and retry.`)
+      return false
+    }
+    log.info(`promoteRule: sandbox validated rule #${index} (${validation.reason})`)
+    console.log(`  ✓ Sandbox validation passed`)
+  } catch (err) {
+    // Sandbox unavailable (Docker not installed) — warn but allow promote
+    log.warn(`promoteRule: sandbox validation unavailable — ${(err as Error).message?.slice(0, 60)}`)
+    console.log(`  ⚠️  Sandbox not available — promoting without validation (install Docker to enable)`)
+  }
+
   const HOME = process.env.HOME || '~'
   const rulesDir = join(HOME, '.claude', 'rules')
   const ruleName = pattern.pattern.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)

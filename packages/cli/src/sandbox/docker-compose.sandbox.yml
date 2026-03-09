@@ -1,0 +1,77 @@
+# REX Sandbox — Docker Compose
+# Usage:
+#   docker-compose -f sandbox/docker-compose.sandbox.yml up -d
+#   docker-compose -f sandbox/docker-compose.sandbox.yml run --rm runner <task>
+#
+# Mounts the current project as read-only workspace.
+# All writes go to /workspace-out (separate volume, no prod contamination).
+#
+# Images used:
+#   rex-sandbox — minimal Node 22 + Claude Code CLI + rex binary
+#   (built from Dockerfile.sandbox in this directory)
+
+version: '3.9'
+
+services:
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    image: rex-sandbox:latest
+    working_dir: /workspace
+    environment:
+      - NODE_ENV=sandbox
+      - REX_HOME=/data
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - REX_SANDBOX=1
+    volumes:
+      # Project source — read-only (no accidental writes to prod)
+      - ${PROJECT_DIR:-.}:/workspace:ro
+      # Sandbox output — writable, separate from source
+      - rex-sandbox-out:/workspace-out
+      # REX memory — read-only (agent can read context, not write)
+      - ${HOME}/.claude/rex/memory:/data/.claude/rex/memory:ro
+    networks:
+      - sandbox-net
+    # Resource limits: prevent runaway LLM loops
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+
+  # Benchmark companion — runs the same task without sandbox for comparison
+  benchmark:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    image: rex-sandbox:latest
+    working_dir: /workspace
+    environment:
+      - NODE_ENV=benchmark
+      - REX_HOME=/data
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - REX_SANDBOX=0
+    volumes:
+      - ${PROJECT_DIR:-.}:/workspace:ro
+      - rex-benchmark-out:/workspace-out
+      - ${HOME}/.claude/rex/memory:/data/.claude/rex/memory:ro
+    networks:
+      - sandbox-net
+    profiles:
+      - benchmark
+
+volumes:
+  rex-sandbox-out:
+    driver: local
+  rex-benchmark-out:
+    driver: local
+
+networks:
+  sandbox-net:
+    driver: bridge
+    internal: false   # allow Ollama on host via host.docker.internal
