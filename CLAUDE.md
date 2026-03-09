@@ -616,6 +616,10 @@ rex doctor --fix     # Auto-fix then health check
 | **Fix skills.ts template**: `TODO` placeholder strings replaced with `<angle-bracket>` style — no longer false positives | `skills.ts` |
 | **`rex install --hub` shortcut**: `--hub` maps to `hub-vps` profile automatically | `index.ts`, `install.ts` |
 | **Accurate hub-hint step**: hub-hint now shows correct `rex hub start/token/status` commands | `install.ts` |
+| **Provider 3-strike / 30min disable**: `markFailed()` + `markSuccess()` + `HARD_DISABLE_MS=30min`; `getProvidersSnapshot()` now includes `consecutiveFails` | `free-tiers.ts` |
+| **`pingAllProviders()`**: async parallel health check — calls `validateProvider()` on all available providers, marks failures/successes | `free-tiers.ts` |
+| **Daemon: provider health cycle every 5min**: pings all providers, Telegram alert on degraded | `daemon.ts` |
+| **Flutter providers page: health strikes**: chip shows `Nx fail` (warning) before full `disabled 30m` (error) state | `providers_page.dart` |
 
 ### 🔄 En cours / A faire
 
