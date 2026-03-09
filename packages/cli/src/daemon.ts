@@ -568,6 +568,16 @@ export async function daemon(): Promise<void> {
   log.info(`LLM routing chain: ${routable.map(p => p.name).join(' → ')}`)
   journalAppend('daemon_action', 'daemon', { action: 'started' })
 
+  // Run DB migrations at boot — ensure schema is up to date before any DB access
+  try {
+    const { applyMigrations } = await import('./db-migrations.js')
+    const migResult = applyMigrations()
+    if (migResult.applied.length) log.info(`DB migrations applied: v${migResult.applied.join(', v')}`)
+    if (migResult.errors.length) log.warn(`DB migration errors: ${migResult.errors.join('; ')}`)
+  } catch (e: any) {
+    log.warn(`DB migrations skipped: ${e.message?.slice(0, 80)}`)
+  }
+
   // Start embedded hub (auto port 7420, non-blocking)
   try {
     const { startCommander } = await import('./hub.js')
