@@ -4,7 +4,7 @@ import type { HealthReport, CheckGroup } from '@rex/core'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createLogger, configureLogger } from './logger.js'
-import { DAEMON_LOG_PATH } from './paths.js'
+import { DAEMON_LOG_PATH, SNAPSHOTS_DIR, REX_DIR } from './paths.js'
 import { FREE_TIER_PROVIDERS, getApiKey, validateProvider, getProvidersSnapshot } from './free-tiers.js'
 
 const COLORS = {
@@ -75,6 +75,12 @@ async function main() {
   const log = createLogger('cli')
 
   switch (command) {
+    case 'tui': {
+      const { launchTui } = await import('./ink-tui.js')
+      await launchTui()
+      break
+    }
+
     case 'doctor': {
       const fixMode = process.argv.includes('--fix')
       if (process.argv.includes('--lint-config')) {
@@ -1778,6 +1784,132 @@ async function main() {
       break
     }
 
+    case 'snapshot': {
+      // BLOC 19 — Compaction Resilience: capture session state before context loss
+      const { writeFileSync: snapWrite, readdirSync: snapReaddir, readFileSync: snapReadFile, mkdirSync: snapMkdir, existsSync: snapExists } = await import('node:fs')
+      const { execSync: snapExec } = await import('node:child_process')
+      const { join: snapJoin } = await import('node:path')
+
+      const subCmd = process.argv[3] ?? ''
+      const snapJsonFlag = process.argv.includes('--json')
+
+      interface SessionSnapshot {
+        sessionId: string
+        timestamp: string
+        project: string
+        branch: string
+        pr?: number
+        modifiedFiles: string[]
+        buildCommands: string[]
+        testCommands: string[]
+        errors: string[]
+        taskContext: string
+      }
+
+      if (!snapExists(SNAPSHOTS_DIR)) snapMkdir(SNAPSHOTS_DIR, { recursive: true })
+
+      if (subCmd === '--list' || subCmd === 'list') {
+        const files = snapExists(SNAPSHOTS_DIR)
+          ? snapReaddir(SNAPSHOTS_DIR).filter(f => f.endsWith('.json')).sort().reverse()
+          : []
+        if (snapJsonFlag) {
+          const snaps = files.map(f => {
+            try { return JSON.parse(snapReadFile(snapJoin(SNAPSHOTS_DIR, f), 'utf-8')) as SessionSnapshot }
+            catch { return null }
+          }).filter(Boolean)
+          console.log(JSON.stringify(snaps))
+          break
+        }
+        const BOLD = '\x1b[1m', RESET = '\x1b[0m', DIM = '\x1b[2m', CYAN = '\x1b[36m'
+        console.log(`\n${BOLD}REX Snapshots${RESET}  ${DIM}(${files.length} total)${RESET}\n`)
+        for (const f of files.slice(0, 20)) {
+          try {
+            const s = JSON.parse(snapReadFile(snapJoin(SNAPSHOTS_DIR, f), 'utf-8')) as SessionSnapshot
+            const age = Math.round((Date.now() - new Date(s.timestamp).getTime()) / 60000)
+            const ageStr = age < 60 ? `${age}m ago` : `${Math.round(age / 60)}h ago`
+            console.log(`  ${CYAN}${s.sessionId}${RESET}  ${DIM}${ageStr}${RESET}`)
+            console.log(`    ${s.project} · ${s.branch} · ${s.modifiedFiles.length} modified files`)
+          } catch { /* skip corrupt */ }
+        }
+        console.log()
+        break
+      }
+
+      if (subCmd === '--restore' || subCmd === 'restore') {
+        const snapId = process.argv[4]
+        if (!snapId) { console.error('Usage: rex snapshot restore <session-id>'); break }
+        const snapFile = snapJoin(SNAPSHOTS_DIR, `${snapId}.json`)
+        if (!snapExists(snapFile)) { console.error(`Snapshot not found: ${snapId}`); break }
+        const s = JSON.parse(snapReadFile(snapFile, 'utf-8')) as SessionSnapshot
+        // Output as context-injection format (terse, for SessionStart preload)
+        const lines = [
+          `## Session Snapshot — ${s.sessionId}`,
+          `Project: ${s.project}  Branch: ${s.branch}  ${s.pr ? `PR: #${s.pr}` : ''}`,
+          s.taskContext ? `Task: ${s.taskContext}` : '',
+          s.modifiedFiles.length ? `Modified: ${s.modifiedFiles.slice(0, 8).join(', ')}` : '',
+          s.buildCommands.length ? `Build: ${s.buildCommands.join(' | ')}` : '',
+          s.errors.length ? `Last errors: ${s.errors.slice(0, 2).join(' | ')}` : '',
+        ].filter(Boolean)
+        console.log(lines.join('\n'))
+        break
+      }
+
+      // Default: create a snapshot of the current session
+      const cwd = process.cwd()
+      let branch = 'unknown'
+      let modifiedFiles: string[] = []
+      let prNumber: number | undefined
+
+      try { branch = snapExec('git rev-parse --abbrev-ref HEAD', { cwd, encoding: 'utf-8', timeout: 5000 }).trim() } catch { /* not a git repo */ }
+      try {
+        const status = snapExec('git status --porcelain', { cwd, encoding: 'utf-8', timeout: 5000 })
+        modifiedFiles = status.trim().split('\n').filter(Boolean).map(l => l.slice(3).trim())
+      } catch { /* ok */ }
+      try {
+        const prOut = snapExec('gh pr view --json number -q .number 2>/dev/null', { cwd, encoding: 'utf-8', timeout: 5000 })
+        prNumber = parseInt(prOut.trim())
+        if (isNaN(prNumber)) prNumber = undefined
+      } catch { /* not on a PR */ }
+
+      // Detect build/test commands from package.json or Makefile
+      const buildCmds: string[] = []
+      const testCmds: string[] = []
+      try {
+        if (snapExists(snapJoin(cwd, 'package.json'))) {
+          const pkg = JSON.parse(snapReadFile(snapJoin(cwd, 'package.json'), 'utf-8')) as { scripts?: Record<string, string> }
+          if (pkg.scripts?.build) buildCmds.push('pnpm build')
+          if (pkg.scripts?.test) testCmds.push('pnpm test')
+        }
+        if (snapExists(snapJoin(cwd, 'pubspec.yaml'))) buildCmds.push('flutter build macos --debug')
+      } catch { /* ok */ }
+
+      const sessionId = `${Date.now()}-${branch.replace(/[^a-z0-9]/gi, '-').slice(0, 20)}`
+      const snap: SessionSnapshot = {
+        sessionId,
+        timestamp: new Date().toISOString(),
+        project: cwd.split('/').pop() ?? cwd,
+        branch,
+        pr: prNumber,
+        modifiedFiles,
+        buildCommands: buildCmds,
+        testCommands: testCmds,
+        errors: [],
+        taskContext: '',
+      }
+
+      const snapPath = snapJoin(SNAPSHOTS_DIR, `${sessionId}.json`)
+      snapWrite(snapPath, JSON.stringify(snap, null, 2))
+
+      if (snapJsonFlag) { console.log(JSON.stringify({ sessionId, path: snapPath })); break }
+
+      const BOLD2 = '\x1b[1m', RESET2 = '\x1b[0m', DIM2 = '\x1b[2m', GREEN = '\x1b[32m'
+      console.log(`\n${GREEN}✓${RESET2} Snapshot saved: ${BOLD2}${sessionId}${RESET2}`)
+      console.log(`  Branch: ${branch}  Modified: ${modifiedFiles.length} files`)
+      if (prNumber) console.log(`  PR: #${prNumber}`)
+      console.log(`  Path: ${DIM2}${snapPath}${RESET2}\n`)
+      break
+    }
+
     case 'logs': {
       const lines = process.argv.find(a => a.startsWith('--lines='))
       const n = lines ? parseInt(lines.split('=')[1]) : 50
@@ -2518,6 +2650,12 @@ ${COLORS.bold}Backup & Recovery:${COLORS.reset}
   rex backup           Create full backup (SQLite DBs + config)
   rex backup list      List available backups
   rex backup restore   Restore from backup (requires --confirm)
+
+${COLORS.bold}Compaction Resilience:${COLORS.reset}
+  rex snapshot         Capture current session state (git, files, build cmds)
+  rex snapshot list    List all snapshots
+  rex snapshot restore <id>  Print snapshot for context re-injection
+  rex snapshot --json  JSON output
 
 ${COLORS.bold}Workflow:${COLORS.reset}
   rex workflow feature <name>   Start feature branch + FEATURE.md
