@@ -205,7 +205,7 @@ rex doctor --fix     # Auto-fix then health check
 **Prochaines priorités opérationnelles** :
 - [ ] Installer REX sur VPS (`docs/vps-install.md`)
 - [ ] Migrer mémoire Garry → REX (`docs/garry-migration.md`)
-- [ ] `rex snapshot` (BLOC 19 — compaction resilience) — pas encore implémenté
+- [x] `rex snapshot` (BLOC 19 — compaction resilience) — ✅ implémenté + BLOC 19.2 restoreOnStart wired in preload.ts
 
 ---
 
