@@ -603,6 +603,7 @@ export async function daemon(): Promise<void> {
   let lastProviderPing = 0  // ping providers immediately on start
   let lastDailySummaryDate = ''  // tracks 'YYYY-MM-DD' to send once per day
   let lastAlertDate = ''  // disk/backlog alerts — max once per day
+  let lastCoachingDate = ''  // coaching suggestions — max once per week
 
   // Run maintenance immediately on start
   await maintenanceCycle()
@@ -744,6 +745,53 @@ export async function daemon(): Promise<void> {
         await sendTelegramNotify(alerts.join('\n'))
         log.warn(`Smart alerts sent: ${alerts.join(' | ')}`)
         lastAlertDate = todayStr
+      }
+    }
+
+    // BLOC 16.4 — Proactive coaching suggestions (once per week)
+    const thisWeek = new Date().toISOString().slice(0, 10).replace(/-\d\d$/, `-W${Math.floor(new Date().getDate() / 7)}`)
+    if (lastCoachingDate !== thisWeek) {
+      try {
+        const { readdirSync: coachReaddir, existsSync: coachExists } = await import('node:fs')
+        const { join: coachJoin } = await import('node:path')
+        const { loadConfig } = await import('./config.js')
+        const cfg = loadConfig()
+        const devDir = cfg.devDir || coachJoin(process.env.HOME ?? '~', 'Documents', 'Developer')
+        const suggestions: string[] = []
+
+        // Check if active project lacks tests
+        try {
+          const { listProjects } = await import('./projects.js')
+          const projects = listProjects()
+          const noTests = projects.filter(p => {
+            const hasTests = coachExists(coachJoin(p.path, 'tests'))
+              || coachExists(coachJoin(p.path, 'test'))
+              || coachExists(coachJoin(p.path, '__tests__'))
+              || coachExists(coachJoin(p.path, 'spec'))
+            const hasPkgTest = coachExists(coachJoin(p.path, 'package.json'))
+            return hasPkgTest && !hasTests
+          }).slice(0, 2)
+          if (noTests.length > 0) {
+            suggestions.push(`🧪 Project(s) with no test folder: ${noTests.map(p => p.name).join(', ')} → \`rex workflow add-tests\` ?`)
+          }
+        } catch {}
+
+        // Check if there are promotable patterns (archive)
+        try {
+          const { promotePatterns } = await import('./reflector.js')
+          const promoted = await promotePatterns({ minOccurrences: 3, dryRun: true })
+          if (promoted.length > 0) {
+            suggestions.push(`📐 ${promoted.length} recurring pattern(s) ready to promote → \`rex archive promote\``)
+          }
+        } catch {}
+
+        if (suggestions.length > 0) {
+          await sendTelegramNotify(`💡 *REX Coaching*\n\n${suggestions.join('\n')}`)
+          log.info(`Coaching suggestions sent: ${suggestions.length}`)
+          lastCoachingDate = thisWeek
+        }
+      } catch (e: any) {
+        log.debug(`Coaching cycle skipped: ${e.message?.slice(0, 80)}`)
       }
     }
 
