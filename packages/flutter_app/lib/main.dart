@@ -4,6 +4,7 @@ import 'package:macos_ui/macos_ui.dart';
 import 'package:provider/provider.dart';
 import 'services/rex_service.dart';
 import 'pages/health_page.dart';
+import 'pages/hub_page.dart';
 import 'pages/network_page.dart';
 import 'pages/providers_page.dart';
 import 'pages/voice_page.dart';
@@ -88,25 +89,33 @@ class _RexMainWindowState extends State<RexMainWindow> {
               child: IndexedStack(
                 index: _pageIndex,
                 children: const [
+                  // COCKPIT (0-2)
                   HealthPage(),
+                  HubPage(),
                   NetworkPage(),
-                  ProvidersPage(),
-                  VoicePage(),
-                  AudioPage(),
-                  MemoryPage(),
-                  GatewayPage(),
+                  // AGENTS (3-5)
                   AgentsPage(),
                   McpPage(),
                   OptimizePage(),
-                  ClientsPage(),
+                  // KNOWLEDGE (6-9)
+                  MemoryPage(),
                   TokenPage(),
                   ObserverPage(),
+                  CuriousPage(),
+                  // WORKFLOW (10-14)
                   WorkflowPage(),
+                  ProjectsPage(),
                   ReviewPage(),
                   GuardsPage(),
                   SandboxPage(),
-                  ProjectsPage(),
-                  CuriousPage(),
+                  // RESOURCES (15-16)
+                  ProvidersPage(),
+                  ClientsPage(),
+                  // COMMS (17-19)
+                  GatewayPage(),
+                  VoicePage(),
+                  AudioPage(),
+                  // ADMIN (20-21)
                   LogsPage(),
                   SettingsPage(),
                 ],

@@ -180,6 +180,103 @@ class _McpPageState extends State<McpPage> {
                   ),
                 ),
 
+                const SizedBox(height: 8),
+
+                // Recommendations for this project
+                if (rex.mcpRecommendations.isNotEmpty) ...[
+                  RexSection(
+                    title: 'Recommended${rex.mcpRecommendStack.isNotEmpty ? " · ${rex.mcpRecommendStack}" : ""}',
+                    icon: CupertinoIcons.sparkles,
+                  ),
+                  RexCard(
+                    child: Column(
+                      children: rex.mcpRecommendations.map((rec) {
+                        final name = rec['name'] as String? ?? '';
+                        final reason = rec['reason'] as String? ?? '';
+                        final installed = rex.mcpServers.any((s) => s.name == name);
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 5),
+                          child: Row(
+                            children: [
+                              Icon(
+                                installed ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle,
+                                size: 14,
+                                color: installed ? c.success : c.textTertiary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.text)),
+                                    Text(reason, style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                                  ],
+                                ),
+                              ),
+                              if (!installed)
+                                RexButton(
+                                  label: 'Install',
+                                  icon: CupertinoIcons.arrow_down_circle,
+                                  variant: RexButtonVariant.secondary,
+                                  small: true,
+                                  loading: rex.isLoading,
+                                  onPressed: rex.isLoading ? null : () => _install(name),
+                                ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                // Security scan
+                RexSection(
+                  title: 'Security Scan',
+                  icon: CupertinoIcons.shield_lefthalf_fill,
+                  action: RexButton(
+                    label: rex.isRunningScan ? 'Scanning…' : 'Run Scan',
+                    icon: CupertinoIcons.ant,
+                    small: true,
+                    variant: RexButtonVariant.secondary,
+                    loading: rex.isRunningScan,
+                    onPressed: rex.isRunningScan ? null : () => context.read<RexService>().runMcpScan(),
+                  ),
+                ),
+                if (rex.mcpScanResult.isNotEmpty)
+                  RexCard(
+                    child: () {
+                      final result = rex.mcpScanResult;
+                      if (result.containsKey('error')) {
+                        return RexErrorState(
+                          message: result['error'] as String? ?? 'Scan failed',
+                        );
+                      }
+                      if (result.containsKey('ok') && result['ok'] == false) {
+                        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          RexStatusChip(label: 'Not installed', status: RexChipStatus.warning, small: true),
+                          const SizedBox(height: 8),
+                          Text(result['install'] as String? ?? 'pip install mcp-scan',
+                              style: TextStyle(fontSize: 11, fontFamily: 'Menlo', color: c.textSecondary)),
+                        ]);
+                      }
+                      final output = result['output'] as String?;
+                      if (output != null) {
+                        return Text(output, style: TextStyle(fontSize: 11, fontFamily: 'Menlo', color: c.textSecondary));
+                      }
+                      return RexStatusChip(label: 'Scan complete', status: RexChipStatus.ok, small: true);
+                    }(),
+                  )
+                else
+                  RexCard(
+                    child: Text(
+                      'Run a security scan to check for prompt injection and tool poisoning in your MCP servers.',
+                      style: TextStyle(fontSize: 12, color: c.textSecondary),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+
                 // Add custom server (collapsible)
                 GestureDetector(
                   onTap: () => setState(() => _showAddForms = !_showAddForms),
@@ -282,13 +379,20 @@ class _McpPageState extends State<McpPage> {
                     subtitle: 'Search the marketplace or add a custom server above',
                   )
                 else
-                  ...rex.mcpServers.map(
-                    (server) => _McpServerCard(
-                      server: server,
-                      busy: rex.isLoading,
-                      onCheck: () => _check(server.id),
-                      onToggle: () => _toggle(server),
-                      onRemove: () => _remove(server.id),
+                  RexCard(
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      children: rex.mcpServers.asMap().entries.map((e) {
+                        final server = e.value;
+                        return _McpServerRow(
+                          server: server,
+                          busy: rex.isLoading,
+                          showDivider: e.key < rex.mcpServers.length - 1,
+                          onCheck: () => _check(server.id),
+                          onToggle: () => _toggle(server),
+                          onRemove: () => _remove(server.id),
+                        );
+                      }).toList(),
                     ),
                   ),
 
@@ -409,16 +513,18 @@ class _MarketplaceRow extends StatelessWidget {
   }
 }
 
-class _McpServerCard extends StatelessWidget {
+class _McpServerRow extends StatelessWidget {
   final McpServerInfo server;
   final bool busy;
+  final bool showDivider;
   final VoidCallback onCheck;
   final VoidCallback onToggle;
   final VoidCallback onRemove;
 
-  const _McpServerCard({
+  const _McpServerRow({
     required this.server,
     required this.busy,
+    required this.showDivider,
     required this.onCheck,
     required this.onToggle,
     required this.onRemove,
@@ -426,61 +532,105 @@ class _McpServerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.rex;
     final target = server.type == 'stdio'
         ? '${server.command} ${server.args.join(' ')}'.trim()
         : server.url;
+    final dotColor = server.enabled ? c.success : c.textTertiary;
 
-    return RexCard(
-      title: server.name,
-      trailing: RexStatusChip(
-        label: server.enabled ? 'Enabled' : 'Disabled',
-        status: server.enabled ? RexChipStatus.ok : RexChipStatus.inactive,
-        small: true,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          RexStatRow(
-            label: 'Type',
-            value: server.type,
-            icon: CupertinoIcons.cube,
-          ),
-          RexStatRow(
-            label: 'Target',
-            value: target.isEmpty ? 'No target' : target,
-            icon: CupertinoIcons.link,
-          ),
-          RexStatRow(
-            label: 'ID',
-            value: server.id,
-            icon: CupertinoIcons.tag,
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
             children: [
-              RexButton(
-                label: 'Test',
-                small: true,
-                variant: RexButtonVariant.secondary,
-                onPressed: busy ? null : onCheck,
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
               ),
-              RexButton(
-                label: server.enabled ? 'Disable' : 'Enable',
-                small: true,
-                variant: RexButtonVariant.secondary,
-                onPressed: busy ? null : onToggle,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          server.name,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: c.text,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: c.codeBg,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            server.type,
+                            style: TextStyle(fontSize: 10, color: c.textTertiary),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (target.isNotEmpty)
+                      Text(
+                        target,
+                        style: TextStyle(fontSize: 11, color: c.textSecondary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
               ),
-              RexButton(
-                label: 'Remove',
-                small: true,
-                variant: RexButtonVariant.ghost,
-                onPressed: busy ? null : onRemove,
+              _ActionIcon(
+                icon: CupertinoIcons.checkmark_alt,
+                onTap: busy ? null : onCheck,
+                color: c.textTertiary,
+              ),
+              _ActionIcon(
+                icon: server.enabled ? CupertinoIcons.pause_circle : CupertinoIcons.play_circle,
+                onTap: busy ? null : onToggle,
+                color: server.enabled ? c.textTertiary : c.success,
+              ),
+              _ActionIcon(
+                icon: CupertinoIcons.trash,
+                onTap: busy ? null : onRemove,
+                color: c.error,
               ),
             ],
           ),
-        ],
+        ),
+        if (showDivider)
+          Container(
+            height: 0.5,
+            margin: const EdgeInsets.only(left: 30),
+            color: c.separator,
+          ),
+      ],
+    );
+  }
+}
+
+class _ActionIcon extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final Color color;
+
+  const _ActionIcon({required this.icon, required this.onTap, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Icon(icon, size: 15, color: onTap == null ? context.rex.textTertiary : color),
       ),
     );
   }

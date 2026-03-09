@@ -485,8 +485,17 @@ class _AgentCard extends StatelessWidget {
     required this.onDelete,
   });
 
+  String _meta() {
+    final parts = <String>[agent.profile];
+    parts.add(agent.model.isNotEmpty ? agent.model : 'default');
+    if (agent.intervalSec > 0) parts.add('${agent.intervalSec}s');
+    if (agent.lastRunAt.isNotEmpty) parts.add(agent.lastRunAt);
+    return parts.join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
+    final c = context.rex;
     final chipStatus = agent.running
         ? RexChipStatus.ok
         : agent.enabled
@@ -508,29 +517,14 @@ class _AgentCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          RexStatRow(
-            label: 'Profile',
-            value: agent.profile,
-            icon: CupertinoIcons.person_2,
-          ),
-          RexStatRow(
-            label: 'Model',
-            value: agent.model.isNotEmpty ? agent.model : 'default',
-            icon: CupertinoIcons.cube,
-          ),
-          if (agent.intervalSec > 0)
-            RexStatRow(
-              label: 'Interval',
-              value: '${agent.intervalSec}s',
-              icon: CupertinoIcons.timer,
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              _meta(),
+              style: TextStyle(fontSize: 11, color: c.textSecondary),
+              overflow: TextOverflow.ellipsis,
             ),
-          if (agent.lastRunAt.isNotEmpty)
-            RexStatRow(
-              label: 'Last run',
-              value: agent.lastRunAt,
-              icon: CupertinoIcons.clock,
-            ),
-          const SizedBox(height: 10),
+          ),
           Wrap(
             spacing: 8,
             runSpacing: 8,

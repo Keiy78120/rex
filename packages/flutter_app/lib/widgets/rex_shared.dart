@@ -380,6 +380,150 @@ class RexProgressBar extends StatelessWidget {
   }
 }
 
+/// Data-dense list row — no card wrapping needed.
+/// Use multiple RexListRows inside a RexCard or bare Container.
+class RexListRow extends StatelessWidget {
+  const RexListRow({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.leading,
+    this.trailing,
+    this.onTap,
+    this.showDivider = true,
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget? leading;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+            child: Row(
+              children: [
+                if (leading != null) ...[
+                  leading!,
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: context.rex.text,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (subtitle != null)
+                        Text(
+                          subtitle!,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: context.rex.textTertiary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                if (trailing != null) ...[
+                  const SizedBox(width: 8),
+                  trailing!,
+                ],
+              ],
+            ),
+          ),
+        ),
+        if (showDivider)
+          Container(
+            height: 0.5,
+            margin: EdgeInsets.only(left: leading != null ? 40.0 : 16.0),
+            color: context.rex.separator,
+          ),
+      ],
+    );
+  }
+}
+
+/// A single KPI item for use in RexKpiRow.
+class RexKpiItem {
+  const RexKpiItem({
+    required this.value,
+    required this.label,
+    this.valueColor,
+    this.icon,
+  });
+
+  final String value;
+  final String label;
+  final Color? valueColor;
+  final IconData? icon;
+}
+
+/// Horizontal cockpit-style KPI strip — large value + small label.
+/// Replaces the pattern of multiple RexStatRow with equal-width cells.
+class RexKpiRow extends StatelessWidget {
+  const RexKpiRow({super.key, required this.items, this.valueSize = 22});
+
+  final List<RexKpiItem> items;
+  final double valueSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: items
+          .map(
+            (item) => Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (item.icon != null) ...[
+                    Icon(item.icon, size: 14, color: item.valueColor ?? context.rex.accent),
+                    const SizedBox(height: 4),
+                  ],
+                  Text(
+                    item.value,
+                    style: TextStyle(
+                      fontSize: valueSize,
+                      fontWeight: FontWeight.w700,
+                      color: item.valueColor ?? context.rex.text,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    item.label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.3,
+                      color: context.rex.textTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
 /// Toggle row with label and switch.
 class RexToggleRow extends StatelessWidget {
   const RexToggleRow({

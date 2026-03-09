@@ -3,6 +3,59 @@ import 'package:provider/provider.dart';
 import '../services/rex_service.dart';
 import '../theme.dart';
 
+// ── Navigation item data ─────────────────────────────────────────────────────
+
+typedef _NavItem = ({int index, IconData icon, String label});
+
+/// Group label shown before the first item of each section.
+/// null = no header (first group).
+typedef _Group = ({int startIndex, String? label});
+
+// Items in logical order — index matches IndexedStack in main.dart.
+const List<_NavItem> _items = [
+  // COCKPIT (0-2)
+  (index: 0, icon: CupertinoIcons.heart_fill, label: 'Health'),
+  (index: 1, icon: CupertinoIcons.antenna_radiowaves_left_right, label: 'Commander'),
+  (index: 2, icon: CupertinoIcons.globe, label: 'Fleet'),
+  // AGENTS (3-5)
+  (index: 3, icon: CupertinoIcons.sparkles, label: 'Agents'),
+  (index: 4, icon: CupertinoIcons.link, label: 'MCP'),
+  (index: 5, icon: CupertinoIcons.bolt_fill, label: 'Optimize'),
+  // KNOWLEDGE (6-9)
+  (index: 6, icon: CupertinoIcons.search, label: 'Memory'),
+  (index: 7, icon: CupertinoIcons.chart_bar_alt_fill, label: 'Tokens'),
+  (index: 8, icon: CupertinoIcons.eye_fill, label: 'Observer'),
+  (index: 9, icon: CupertinoIcons.scope, label: 'Curious'),
+  // WORKFLOW (10-14)
+  (index: 10, icon: CupertinoIcons.arrow_branch, label: 'Workflow'),
+  (index: 11, icon: CupertinoIcons.folder_fill, label: 'Projects'),
+  (index: 12, icon: CupertinoIcons.checkmark_shield_fill, label: 'Review'),
+  (index: 13, icon: CupertinoIcons.lock_shield_fill, label: 'Guards'),
+  (index: 14, icon: CupertinoIcons.square_stack_3d_up, label: 'Sandbox'),
+  // RESOURCES (15-16)
+  (index: 15, icon: CupertinoIcons.layers_fill, label: 'Providers'),
+  (index: 16, icon: CupertinoIcons.person_2_fill, label: 'Clients'),
+  // COMMS (17-19)
+  (index: 17, icon: CupertinoIcons.paperplane_fill, label: 'Gateway'),
+  (index: 18, icon: CupertinoIcons.mic_fill, label: 'Voice'),
+  (index: 19, icon: CupertinoIcons.waveform, label: 'Audio'),
+  // ADMIN (20-21)
+  (index: 20, icon: CupertinoIcons.doc_text, label: 'Logs'),
+  (index: 21, icon: CupertinoIcons.gear, label: 'Settings'),
+];
+
+const Map<int, String?> _groupHeaders = {
+  0: null,        // COCKPIT — no label, starts at top
+  3: 'AGENTS',
+  6: 'KNOWLEDGE',
+  10: 'WORKFLOW',
+  15: 'RESOURCES',
+  17: 'COMMS',
+  20: 'ADMIN',
+};
+
+// ── Widget ───────────────────────────────────────────────────────────────────
+
 class RexSidebar extends StatelessWidget {
   const RexSidebar({
     super.key,
@@ -12,30 +65,6 @@ class RexSidebar extends StatelessWidget {
 
   final int currentIndex;
   final ValueChanged<int> onChanged;
-
-  static const _items = [
-    (icon: CupertinoIcons.heart_fill, label: 'Health'),
-    (icon: CupertinoIcons.globe, label: 'Fleet'),
-    (icon: CupertinoIcons.layers_fill, label: 'Providers'),
-    (icon: CupertinoIcons.mic_fill, label: 'Voice'),
-    (icon: CupertinoIcons.waveform, label: 'Audio'),
-    (icon: CupertinoIcons.search, label: 'Memory'),
-    (icon: CupertinoIcons.paperplane_fill, label: 'Gateway'),
-    (icon: CupertinoIcons.sparkles, label: 'Agents'),
-    (icon: CupertinoIcons.link, label: 'MCP'),
-    (icon: CupertinoIcons.bolt_fill, label: 'Optimize'),
-    (icon: CupertinoIcons.person_2_fill, label: 'Clients'),
-    (icon: CupertinoIcons.chart_bar_alt_fill, label: 'Tokens'),
-    (icon: CupertinoIcons.eye_fill, label: 'Observer'),
-    (icon: CupertinoIcons.arrow_branch, label: 'Workflow'),
-    (icon: CupertinoIcons.checkmark_shield_fill, label: 'Review'),
-    (icon: CupertinoIcons.lock_shield_fill, label: 'Guards'),
-    (icon: CupertinoIcons.square_stack_3d_up, label: 'Sandbox'),
-    (icon: CupertinoIcons.folder_fill, label: 'Projects'),
-    (icon: CupertinoIcons.scope, label: 'Curious'),
-    (icon: CupertinoIcons.doc_text, label: 'Logs'),
-    (icon: CupertinoIcons.gear, label: 'Settings'),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -50,28 +79,10 @@ class RexSidebar extends StatelessWidget {
       child: Column(
         children: [
           const _SidebarHeader(),
-          const SizedBox(height: 16),
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                const itemHeight = 36.0; // ~8 vertical padding * 2 + 18 icon + 2 margin
-                final totalItemsHeight = _items.length * itemHeight;
-                final topPadding = ((constraints.maxHeight - totalItemsHeight) / 2)
-                    .clamp(4.0, double.infinity);
-                return ListView.builder(
-                  padding: EdgeInsets.fromLTRB(12, topPadding, 12, 0),
-                  itemCount: _items.length,
-                  itemBuilder: (context, index) {
-                    final item = _items[index];
-                    return _SidebarNavItem(
-                      icon: item.icon,
-                      label: item.label,
-                      selected: index == currentIndex,
-                      onTap: () => onChanged(index),
-                    );
-                  },
-                );
-              },
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              children: _buildNavItems(context),
             ),
           ),
           const _SidebarFooter(),
@@ -79,7 +90,53 @@ class RexSidebar extends StatelessWidget {
       ),
     );
   }
+
+  List<Widget> _buildNavItems(BuildContext context) {
+    final result = <Widget>[];
+    for (final item in _items) {
+      if (_groupHeaders.containsKey(item.index)) {
+        final label = _groupHeaders[item.index];
+        if (label != null) {
+          // Add a small separator + group label before each named group
+          result.add(const SizedBox(height: 4));
+          result.add(_GroupHeader(label: label));
+        }
+      }
+      result.add(
+        _SidebarNavItem(
+          icon: item.icon,
+          label: item.label,
+          selected: item.index == currentIndex,
+          onTap: () => onChanged(item.index),
+        ),
+      );
+    }
+    return result;
+  }
 }
+
+class _GroupHeader extends StatelessWidget {
+  final String label;
+  const _GroupHeader({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 3),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.9,
+          color: context.rex.textTertiary,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Header ───────────────────────────────────────────────────────────────────
 
 class _SidebarHeader extends StatelessWidget {
   const _SidebarHeader();
@@ -88,18 +145,14 @@ class _SidebarHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<RexService>(
       builder: (context, rex, _) {
-        final statusColor = rex.healthStatus == 'healthy'
-            ? CupertinoColors.systemGreen
-            : rex.healthStatus == 'degraded'
-                ? CupertinoColors.systemYellow
-                : CupertinoColors.systemRed;
+        final statusColor = context.rex.statusColor(rex.healthStatus);
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 52, 16, 4),
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     begin: Alignment.topLeft,
@@ -113,7 +166,7 @@ class _SidebarHeader extends StatelessWidget {
                     'R',
                     style: TextStyle(
                       color: CupertinoColors.white,
-                      fontSize: 18,
+                      fontSize: 17,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.5,
                     ),
@@ -133,12 +186,12 @@ class _SidebarHeader extends StatelessWidget {
                       color: context.rex.text,
                     ),
                   ),
-                  const SizedBox(height: 1),
+                  const SizedBox(height: 2),
                   Row(
                     children: [
                       Container(
-                        width: 7,
-                        height: 7,
+                        width: 6,
+                        height: 6,
                         decoration: BoxDecoration(
                           color: statusColor,
                           shape: BoxShape.circle,
@@ -165,6 +218,8 @@ class _SidebarHeader extends StatelessWidget {
     );
   }
 }
+
+// ── Nav item ─────────────────────────────────────────────────────────────────
 
 class _SidebarNavItem extends StatefulWidget {
   const _SidebarNavItem({
@@ -198,8 +253,7 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
       bgColor = const Color(0x00000000);
     }
 
-    final Color fgColor =
-        widget.selected ? accent : context.rex.textSecondary;
+    final Color fgColor = widget.selected ? accent : context.rex.textSecondary;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -209,21 +263,20 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
         onTap: widget.onTap,
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
             color: bgColor,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(7),
           ),
           child: Row(
             children: [
-              Icon(widget.icon, size: 18, color: fgColor),
-              const SizedBox(width: 10),
+              Icon(widget.icon, size: 16, color: fgColor),
+              const SizedBox(width: 9),
               Text(
                 widget.label,
                 style: TextStyle(
                   fontSize: 13,
-                  fontWeight:
-                      widget.selected ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: widget.selected ? FontWeight.w600 : FontWeight.w400,
                   color: fgColor,
                 ),
               ),
@@ -234,6 +287,8 @@ class _SidebarNavItemState extends State<_SidebarNavItem> {
     );
   }
 }
+
+// ── Footer ───────────────────────────────────────────────────────────────────
 
 class _SidebarFooter extends StatelessWidget {
   const _SidebarFooter();
@@ -252,31 +307,27 @@ class _SidebarFooter extends StatelessWidget {
             ? '${(burnRatePerHour / 1000).toStringAsFixed(1)}k/h'
             : '${burnRatePerHour.round()}/h';
 
-        Color contextColor = CupertinoColors.systemGreen;
-        if (contextPct >= 90) contextColor = CupertinoColors.systemRed;
-        else if (contextPct >= 70) contextColor = CupertinoColors.systemYellow;
-
-        Color dailyColor = CupertinoColors.systemGreen;
-        if (dailyPct >= 90) dailyColor = CupertinoColors.systemRed;
-        else if (dailyPct >= 70) dailyColor = CupertinoColors.systemYellow;
+        Color _pctColor(double pct) {
+          if (pct >= 90) return context.rex.error;
+          if (pct >= 70) return context.rex.warning;
+          return context.rex.success;
+        }
 
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(height: 0.5, color: context.rex.separator),
-              const SizedBox(height: 10),
-              // Daemon status
+              const SizedBox(height: 8),
+              // Daemon
               Row(
                 children: [
                   Container(
-                    width: 6,
-                    height: 6,
+                    width: 5,
+                    height: 5,
                     decoration: BoxDecoration(
-                      color: daemonRunning
-                          ? CupertinoColors.systemGreen
-                          : context.rex.textTertiary,
+                      color: daemonRunning ? context.rex.success : context.rex.textTertiary,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -287,17 +338,17 @@ class _SidebarFooter extends StatelessWidget {
                   ),
                 ],
               ),
-              // Token stats (only if loaded)
+              // Token stats
               if (contextPct > 0 || dailyPct > 0) ...[
-                const SizedBox(height: 5),
+                const SizedBox(height: 4),
                 Row(
                   children: [
                     if (contextPct > 0) ...[
                       Container(
-                        width: 6,
-                        height: 6,
+                        width: 5,
+                        height: 5,
                         decoration: BoxDecoration(
-                          color: contextColor,
+                          color: _pctColor(contextPct),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -306,14 +357,14 @@ class _SidebarFooter extends StatelessWidget {
                         'Ctx ${contextPct.round()}%',
                         style: TextStyle(fontSize: 10, color: context.rex.textTertiary),
                       ),
-                      const SizedBox(width: 10),
+                      if (dailyPct > 0) const SizedBox(width: 10),
                     ],
                     if (dailyPct > 0) ...[
                       Container(
-                        width: 6,
-                        height: 6,
+                        width: 5,
+                        height: 5,
                         decoration: BoxDecoration(
-                          color: dailyColor,
+                          color: _pctColor(dailyPct),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -326,14 +377,14 @@ class _SidebarFooter extends StatelessWidget {
                   ],
                 ),
                 if (burnRatePerHour > 0) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Text(
                     '⚡ $burnRateStr',
                     style: TextStyle(fontSize: 10, color: context.rex.textTertiary),
                   ),
                 ],
               ],
-              const SizedBox(height: 5),
+              const SizedBox(height: 4),
               Text(
                 'v7.0.0',
                 style: TextStyle(fontSize: 10, color: context.rex.textTertiary),

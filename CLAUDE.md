@@ -708,15 +708,52 @@ rex doctor --fix     # Auto-fix then health check
 | **Guards sidebar item** — index 15, `lock_shield_fill` icon, wired in IndexedStack (21 pages total) | `main.dart`, `rex_sidebar.dart` |
 | **RexService guards methods** — loadGuards, toggleGuard, addGuardFromRegistry, loadGuardLogs, loadGuardRegistry | `rex_service.dart` |
 | **Provider test connection** — Test button per API key row, real-time validation via `validateProvider()` | `providers_page.dart`, `rex_service.dart` |
+| **`rex menu`** — interactive numbered menu (12 items: Status/Memory/Agents/MCP/Providers/Network/Review/Sandbox/Workflow/Doctor/Logs/Curious) using readline | `index.ts` |
+| **`rex devices`** — display fleet nodes with role, status, capabilities via `printFleetStatus()` | `index.ts`, `node-mesh.ts` |
+| **`rex join <code|url>`** — join REX network via pairing code (REX-XXXX-YYYY-ZZZZ) or hub URL | `index.ts`, `node-mesh.ts` |
+| **Pairing code generation in `rex init`** — generates `REX-XXXX-YYYY-ZZZZ` at end of init, stored in `settings.json env.REX_PAIRING_CODE` | `init.ts` |
+| **Flutter Fleet page: Add Device section** — displays pairing code with copy instructions, fallback to `rex init` prompt | `network_page.dart`, `rex_service.dart` |
+| **HQ Snapshot Flutter integration** — `loadHqSnapshot()` in service, `_HqAlertsSection` widget in Health page (fleet/memory/agents stats + alert chips) | `rex_service.dart`, `health_page.dart` |
+| **`rex hq --json`** — JSON output mode for HQ snapshot, consumed by Flutter | `index.ts`, `dashboard.ts` |
+
+### ✅ Terminé (session 2026-03-14 — Hub Page + ingest sources + workflow + skill scanner)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **Hub Page Flutter** (Phase 3) — Commander view: fleet nodes, HQ overview, active agents, alerts | `pages/hub_page.dart`, `rex_sidebar.dart`, `main.dart` |
+| **`rex mesh --json`** — returns `{ nodes, summary: { total, healthy, stale, offline } }` | `packages/cli/src/index.ts` |
+| **`loadFleetNodes()`** in RexService — calls `rex mesh --json`, exposes `fleetNodes` + `fleetSummary` | `rex_service.dart` |
+| **Obsidian vault ingest** — `ingestObsidian(vaultPath)`: recursively reads `.md` files, chunks, saves to pending/ | `packages/memory/src/ingest.ts` |
+| **WhatsApp export ingest** — `ingestWhatsApp(chatPath)`: strips timestamps/metadata, chunks conversation | `packages/memory/src/ingest.ts` |
+| **`rex ingest --obsidian=<path>`** and **`rex ingest --whatsapp=<path>`** CLI flags | `packages/cli/src/index.ts` |
+| **`createReleasePR(target)`** — pushes branch, creates PR via `gh pr create`, returns URL | `packages/cli/src/workflow.ts` |
+| **`checkBranchProtection(repo, apply)`** — checks GitHub branch protection, optionally enables via `gh api` | `packages/cli/src/workflow.ts` |
+| **`rex workflow release-pr [target]`** and **`rex workflow protect [--apply]`** CLI subcommands | `packages/cli/src/index.ts` |
+| **`scanSkillFile(path)`** — scans agent skill Markdown for injection/exfil patterns (reuses `scan()`) | `packages/cli/src/security-scanner.ts` |
+| **`scanSkillDirectory(dir)`** — walks directory, scans all `.md` skill files, returns summary | `packages/cli/src/security-scanner.ts` |
+| **`rex scan-skills [dir]`** CLI command — scans skills in `~/.claude/plugins/cache` by default | `packages/cli/src/index.ts` |
+
+### ✅ Terminé (session 2026-03-15 — Full Flutter UI design system refactor)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **Design system tokens** — added `info`, `neutral`, `separatorStrong`, `textDisabled` to `RexColors`; stable hex for `success`/`warning`; `statusColor(String?)` helper | `theme.dart` |
+| **Shared widgets** — `RexListRow` (dense row with leading/trailing/divider), `RexKpiItem`/`RexKpiRow` (cockpit-style KPI strip: 22px bold values + 10px uppercase labels) | `widgets/rex_shared.dart` |
+| **Sidebar redesign** — 22 items in 7 logical groups with `_GroupHeader` section labels (COCKPIT/AGENTS/KNOWLEDGE/WORKFLOW/RESOURCES/COMMS/ADMIN), `const` group header map | `rex_sidebar.dart` |
+| **IndexedStack reorder** — 22 pages ordered to match grouped sidebar indices 0-21 | `main.dart` |
+| **Agents page** — compact meta string `profile · model · interval · lastRun` replaces 4 verbose `RexStatRow` blocks per agent | `agents_page.dart` |
+| **MCP page** — single `RexCard(padding: EdgeInsets.zero)` with `_McpServerRow` items replaces one-card-per-server; `_ActionIcon` helper for compact icon-only actions | `mcp_page.dart` |
+| **Providers page** — `_RunbooksSection` uses single grouped card with `RexListRow` items instead of one-card-per-runbook | `providers_page.dart` |
+| **Full audit** — all 22 pages verified clean: no one-card-per-item anti-pattern; Hub, Health, Network, Token, Memory, Curious, Guards, Gateway, Clients all confirmed | all `pages/*.dart` |
+| **Flutter build** — `flutter build macos --debug` ✅ zero errors | — |
 
 ### 🔄 En cours / A faire
 
-**Phase 2 DONE ✅, Phase 3 DONE ✅, BLOC 6.2/6.3/6.4 DONE ✅, BLOC 7.3 DONE ✅, Phase 4 (LATER)**:
-- All 28 action.md sections implemented
-- All Phase 3 items complete (hub, sync, mesh, VPS deploy, Tailscale auto-join)
-- All BLOC 6 guards implemented (6.1 existing + 6.2 new + 6.3 CLI + 6.4 Flutter UI)
-- BLOC 7.3 git hooks done (post-commit, post-merge, pre-push)
-- Provider test connection per key row done
+**ALL PHASES DONE (Phase 2 ✅, Phase 3 ✅, Phase 3 extras ✅). Phase 4 = LATER**:
+- Commander (Hub) Flutter page wired — Phase 3 complete
+- External ingest sources (Obsidian, WhatsApp) — done
+- Auto-PR + branch protection CLI — done
+- Skill scanner (security) — done
 - Cross-platform Flutter (Windows/Linux) — Phase 4 later
 - LangGraph spike — Phase 4 later
 - Training pipeline — Phase 4 later

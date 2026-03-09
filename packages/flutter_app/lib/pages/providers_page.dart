@@ -1193,62 +1193,39 @@ class _RunbooksSection extends StatelessWidget {
         ),
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: runbooks.map((r) {
-        final name = r['name'] ?? 'Untitled';
-        final trigger = r['trigger'] ?? '';
-        final usedCount = r['successCount'] ?? r['usedCount'] ?? 0;
-        final lastUsed = r['lastUsed'] as String?;
-
-        return RexCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(CupertinoIcons.book,
-                      size: 16, color: context.rex.textSecondary),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      name,
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: context.rex.text),
-                    ),
-                  ),
-                  RexStatusChip(
-                    label: '$usedCount runs',
-                    status: usedCount > 0
-                        ? RexChipStatus.ok
-                        : RexChipStatus.inactive,
-                    small: true,
-                  ),
-                ],
-              ),
-              if (trigger.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                RexStatRow(
-                  label: 'Trigger',
-                  value: trigger,
-                ),
-              ],
-              if (usedCount > 0)
-                RexStatRow(
-                  label: 'Success count',
-                  value: '$usedCount',
-                ),
-              if (lastUsed != null)
-                RexStatRow(
-                  label: 'Last used',
-                  value: lastUsed,
-                ),
-            ],
+    return RexCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+            child: RexSection(
+              title: 'Runbooks',
+              icon: CupertinoIcons.book,
+            ),
           ),
-        );
-      }).toList(),
+          ...runbooks.asMap().entries.map((e) {
+            final r = e.value;
+            final name = r['name'] as String? ?? 'Untitled';
+            final trigger = r['trigger'] as String? ?? '';
+            final usedCount = (r['successCount'] ?? r['usedCount'] ?? 0) as int;
+            final isLast = e.key == runbooks.length - 1;
+            return RexListRow(
+              leading: Icon(CupertinoIcons.book,
+                  size: 14, color: context.rex.textTertiary),
+              title: name,
+              subtitle: trigger.isNotEmpty ? trigger : null,
+              trailing: RexStatusChip(
+                label: '$usedCount runs',
+                status: usedCount > 0 ? RexChipStatus.ok : RexChipStatus.inactive,
+                small: true,
+              ),
+              showDivider: !isLast,
+            );
+          }),
+        ],
+      ),
     );
   }
 }
