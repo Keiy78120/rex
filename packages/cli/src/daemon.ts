@@ -612,6 +612,7 @@ export async function daemon(): Promise<void> {
   let lastWatchdog = 0  // run immediately on start
   let lastUserCycles = 0  // detect user state immediately
   let lastCurious = Date.now() - 23 * 60 * 60 * 1000  // run ~1h after daemon start
+  let lastBudgetAlert = 0  // check daily budget every hour
   let lastProviderPing = 0  // ping providers immediately on start
   let lastDailySummaryDate = ''  // tracks 'YYYY-MM-DD' to send once per day
   let lastAlertDate = ''  // disk/backlog alerts — max once per day
@@ -886,6 +887,17 @@ export async function daemon(): Promise<void> {
         log.debug(`Watchdog skipped: ${e.message?.slice(0, 80)}`)
       }
       lastWatchdog = now
+    }
+
+    // Daily budget alert — check every hour, send Telegram at 80%/100% of daily_limit
+    if (now - lastBudgetAlert >= 60 * 60_000) {
+      try {
+        const { checkAndSendDailyBudgetAlert } = await import('./budget.js')
+        await checkAndSendDailyBudgetAlert()
+      } catch (e: any) {
+        log.debug(`Daily budget alert skipped: ${e.message?.slice(0, 80)}`)
+      }
+      lastBudgetAlert = now
     }
 
     // Session guard — check context window + daily budget every 5 min

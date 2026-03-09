@@ -1,5 +1,6 @@
 /** @module BUDGET */
 import { join } from 'node:path'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 import { loadConfig } from './config.js'
@@ -248,6 +249,77 @@ export function checkBudgetAlert(monthlyLimitUsd?: number): BudgetAlert {
     limit,
     percentUsed,
   }
+}
+
+// --- Daily budget alert (Telegram) ---
+
+const DAILY_ALERT_STATE_PATH = join(REX_DIR, 'budget-daily-alert.json')
+
+interface DailyAlertState {
+  date: string
+  alertedAt80: boolean
+  alertedAt100: boolean
+}
+
+function loadDailyAlertState(): DailyAlertState {
+  try {
+    if (!existsSync(DAILY_ALERT_STATE_PATH)) return { date: todayStr(), alertedAt80: false, alertedAt100: false }
+    const s = JSON.parse(readFileSync(DAILY_ALERT_STATE_PATH, 'utf-8')) as DailyAlertState
+    if (s.date !== todayStr()) return { date: todayStr(), alertedAt80: false, alertedAt100: false }
+    return s
+  } catch { return { date: todayStr(), alertedAt80: false, alertedAt100: false } }
+}
+
+function saveDailyAlertState(state: DailyAlertState): void {
+  try {
+    writeFileSync(DAILY_ALERT_STATE_PATH, JSON.stringify(state, null, 2))
+  } catch {}
+}
+
+/**
+ * Check today's spend vs daily_limit. Sends a Telegram alert at 80% and 100%.
+ * Guards: only sends once per threshold per day (state file in REX_DIR).
+ */
+export async function checkAndSendDailyBudgetAlert(): Promise<void> {
+  const config = loadConfig() as any
+  const dailyLimitUsd: number | undefined = config.budget?.dailyLimitUsd
+  if (!dailyLimitUsd || dailyLimitUsd <= 0) return
+
+  const todayData = querySpendByProvider(todayStr())
+  const spend = sumCost(todayData)
+  const pct = (spend / dailyLimitUsd) * 100
+
+  const state = loadDailyAlertState()
+  let changed = false
+
+  const telegramToken = process.env.REX_TELEGRAM_BOT_TOKEN
+  const chatId = process.env.REX_TELEGRAM_CHAT_ID
+  if (!telegramToken || !chatId) return
+
+  async function sendAlert(msg: string): Promise<void> {
+    try {
+      await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text: msg }),
+        signal: AbortSignal.timeout(5000),
+      })
+    } catch (e: any) {
+      log.warn(`Failed to send budget alert: ${e.message}`)
+    }
+  }
+
+  if (pct >= 100 && !state.alertedAt100) {
+    await sendAlert(`🚨 REX Budget: daily limit EXCEEDED\n$${spend.toFixed(2)} / $${dailyLimitUsd.toFixed(2)} (${pct.toFixed(0)}%)`)
+    state.alertedAt100 = true
+    changed = true
+  } else if (pct >= 80 && !state.alertedAt80) {
+    await sendAlert(`⚠️ REX Budget: 80% daily limit reached\n$${spend.toFixed(2)} / $${dailyLimitUsd.toFixed(2)} (${pct.toFixed(0)}%)`)
+    state.alertedAt80 = true
+    changed = true
+  }
+
+  if (changed) saveDailyAlertState(state)
 }
 
 // --- Pretty terminal output ---
