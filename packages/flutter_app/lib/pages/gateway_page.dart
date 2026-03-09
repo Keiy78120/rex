@@ -116,6 +116,9 @@ class _GatewayPageState extends State<GatewayPage> {
               );
             }
 
+            final degraded = rex.gatewayRunning && !rex.ollamaRunning;
+            final activeBackend = rex.ollamaRunning ? 'Qwen + Claude' : 'Claude API only';
+
             return ListView(
               controller: scrollController,
               padding: const EdgeInsets.symmetric(
@@ -123,17 +126,44 @@ class _GatewayPageState extends State<GatewayPage> {
                 vertical: 20,
               ),
               children: [
-                // Status card
+                // Degraded mode banner
+                if (degraded) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: c.warning.withAlpha(18),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: c.warning.withAlpha(60)),
+                    ),
+                    child: Row(children: [
+                      Icon(CupertinoIcons.exclamationmark_triangle, size: 15, color: c.warning),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'DEGRADED — Ollama offline. Inference via Claude API only.',
+                          style: TextStyle(fontSize: 12, color: c.warning),
+                        ),
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                // Comms card (Fleet: Telegram gateway = Comms)
+                RexSection(title: 'Comms', icon: CupertinoIcons.paperplane),
                 RexCard(
-                  title: 'Status',
                   trailing: RexStatusChip(
-                    label: rex.gatewayRunning ? 'Running' : 'Stopped',
+                    label: rex.gatewayRunning ? 'Active' : 'Offline',
                     status: rex.gatewayRunning
-                        ? RexChipStatus.ok
+                        ? (degraded ? RexChipStatus.pending : RexChipStatus.ok)
                         : RexChipStatus.inactive,
                   ),
                   child: Column(
                     children: [
+                      RexStatRow(
+                        label: 'Adapter',
+                        value: 'Telegram',
+                        icon: CupertinoIcons.paperplane_fill,
+                      ),
                       RexStatRow(
                         label: 'Bot',
                         value: '@claude_keiy_bot',
@@ -147,17 +177,16 @@ class _GatewayPageState extends State<GatewayPage> {
                         icon: CupertinoIcons.person,
                       ),
                       RexStatRow(
-                        label: 'Ollama',
-                        value: rex.ollamaRunning ? 'Available' : 'Offline',
-                        valueColor:
-                            rex.ollamaRunning ? c.success : c.textTertiary,
-                        icon: CupertinoIcons.desktopcomputer,
+                        label: 'Backend',
+                        value: activeBackend,
+                        valueColor: degraded ? c.warning : c.success,
+                        icon: CupertinoIcons.square_stack_3d_up,
                       ),
                       const SizedBox(height: 12),
                       Row(
                         children: [
                           RexButton(
-                            label: rex.gatewayRunning ? 'Stop' : 'Start',
+                            label: rex.gatewayRunning ? 'Stop Comms' : 'Start Comms',
                             variant: rex.gatewayRunning
                                 ? RexButtonVariant.danger
                                 : RexButtonVariant.success,
@@ -170,10 +199,11 @@ class _GatewayPageState extends State<GatewayPage> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 8),
 
                 // Send message card
+                RexSection(title: 'Send Message', icon: CupertinoIcons.chat_bubble),
                 RexCard(
-                  title: 'Send via Telegram',
                   child: Column(
                     children: [
                       Row(
@@ -235,9 +265,10 @@ class _GatewayPageState extends State<GatewayPage> {
                   ),
                 ),
 
+                const SizedBox(height: 8),
                 // Features card
+                RexSection(title: 'Capabilities', icon: CupertinoIcons.bolt),
                 RexCard(
-                  title: 'Features',
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: [
