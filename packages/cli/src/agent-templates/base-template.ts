@@ -20,7 +20,7 @@ export interface MemoryInit {
 export interface Automation {
   id: string
   description: string
-  trigger: 'daily' | 'weekly' | 'on-event' | 'on-demand'
+  trigger: 'daily' | 'weekly' | 'monthly' | 'on-event' | 'on-demand'
   triggerTime?: string  // HH:MM for daily/weekly
   signalKind?: 'PATTERN' | 'OPEN_LOOP' | 'DISCOVERY'
   prompt: string

@@ -18,15 +18,16 @@ const calendarBriefTool = tool({
   name: 'calendar_brief',
   description: 'Récupère les RDV du jour avec participants et objectifs',
   parameters: {
-    type: 'object',
+    type: 'object' as const,
     properties: {
-      date: { type: 'string', description: "Date ISO (défaut: aujourd'hui)" },
+      date: { type: 'string' as const, description: "Date ISO (défaut: aujourd'hui)" },
     },
-    required: [],
+    required: [] as string[],
+    additionalProperties: false,
   },
-  execute: async (args: { date?: string }) => {
-    const target = args.date ?? new Date().toISOString().split('T')[0]
-    // Stub: in production, reads from google-calendar MCP
+  execute: async (args: unknown) => {
+    const { date } = args as { date?: string }
+    const target = date ?? new Date().toISOString().split('T')[0]
     return JSON.stringify({ date: target, events: [], note: 'Connectez le MCP google-calendar pour activer ce tool' })
   },
 })
@@ -35,18 +36,19 @@ const memorySearchTool = tool({
   name: 'memory_search',
   description: 'Recherche dans la mémoire REX : historique réunions, décisions, dossiers',
   parameters: {
-    type: 'object',
+    type: 'object' as const,
     properties: {
-      query: { type: 'string', description: 'Requête de recherche' },
-      limit: { type: 'number', description: 'Nombre max de résultats (défaut: 5)' },
+      query: { type: 'string' as const, description: 'Requête de recherche' },
+      limit: { type: 'number' as const, description: 'Nombre max de résultats (défaut: 5)' },
     },
-    required: ['query'],
+    required: ['query'] as string[],
+    additionalProperties: false,
   },
-  execute: async (args: { query: string; limit?: number }) => {
-    const limit = args.limit ?? 5
+  execute: async (args: unknown) => {
+    const { query, limit = 5 } = args as { query: string; limit?: number }
     try {
       const { execSync } = await import('node:child_process')
-      const out = execSync(`rex search "${args.query.replace(/"/g, '')}" --limit=${limit} --json 2>/dev/null`, {
+      const out = execSync(`rex search "${query.replace(/"/g, '')}" --limit=${limit} --json 2>/dev/null`, {
         timeout: 10_000,
         encoding: 'utf-8',
       })
@@ -61,15 +63,15 @@ const emailSummaryTool = tool({
   name: 'email_summary',
   description: 'Résume les emails non lus prioritaires',
   parameters: {
-    type: 'object',
+    type: 'object' as const,
     properties: {
-      maxEmails: { type: 'number', description: "Nombre max d'emails à analyser (défaut: 10)" },
+      maxEmails: { type: 'number' as const, description: "Nombre max d'emails à analyser (défaut: 10)" },
     },
-    required: [],
+    required: [] as string[],
+    additionalProperties: false,
   },
-  execute: async (args: { maxEmails?: number }) => {
-    const maxEmails = args.maxEmails ?? 10
-    // Stub: in production, reads from gmail MCP
+  execute: async (args: unknown) => {
+    const { maxEmails = 10 } = args as { maxEmails?: number }
     return JSON.stringify({ emails: [], maxEmails, note: 'Connectez le MCP gmail pour activer ce tool' })
   },
 })
@@ -77,8 +79,8 @@ const emailSummaryTool = tool({
 const openLoopsTool = tool({
   name: 'open_loops',
   description: 'Liste les boucles ouvertes : décisions non actées, emails sans réponse, tâches en attente',
-  parameters: { type: 'object', properties: {}, required: [] },
-  execute: async (_args: Record<string, never>) => {
+  parameters: { type: 'object' as const, properties: {}, required: [] as string[], additionalProperties: false },
+  execute: async (_args: unknown) => {
     try {
       const { execSync } = await import('node:child_process')
       const out = execSync('rex search "open_loop" --limit=10 --json 2>/dev/null', {

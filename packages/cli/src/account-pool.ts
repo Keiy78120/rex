@@ -338,7 +338,9 @@ export async function runAs(accountId: number, command: string): Promise<string>
  * Rotate round-robin: pick the next available account, run command, release.
  */
 export async function rotateRoundRobin(command: string): Promise<string> {
-  const account = await acquireAccount()
+  const account = selectAccount()
+  if (!account) throw new Error('No accounts available in pool')
+  acquireAccount(account.id)
   const id = account.id
   try {
     const result = await runAs(id, command)

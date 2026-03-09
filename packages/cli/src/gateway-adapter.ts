@@ -150,7 +150,7 @@ export class TelegramAdapter implements ChannelAdapter {
     return {
       channel: 'telegram',
       from,
-      text: msg.text,
+      text: msg.text ?? '',
       ts,
       meta: {
         update_id: update.update_id,

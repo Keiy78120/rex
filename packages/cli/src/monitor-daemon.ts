@@ -77,11 +77,12 @@ function reportToDiscoveries(report: PatternReport): Discovery[] {
 
     discoveries.push({
       type,
-      name: signal.message,
-      description: signal.detail ?? '',
+      title: signal.message,
+      detail: signal.detail ?? '',
       url: '',
       source: signal.source,
       seenAt: signal.detectedAt,
+      isNew: true,
     })
   }
 
@@ -92,11 +93,12 @@ function reportToDiscoveries(report: PatternReport): Discovery[] {
       const focusPct = Math.round((devToolsMin / totalFocusMin) * 100)
       discoveries.push({
         type: 'news',
-        name: `Session dev : ${Math.round(devToolsMin)}min de focus (${focusPct}% de la session)`,
-        description: `Total actif : ${Math.round(totalFocusMin)}min. App principale : ${report.productivity.topApp}`,
+        title: `Session dev : ${Math.round(devToolsMin)}min de focus (${focusPct}% de la session)`,
+        detail: `Total actif : ${Math.round(totalFocusMin)}min. App principale : ${report.productivity.topApp}`,
         url: '',
         source: 'activitywatch',
         seenAt: new Date().toISOString(),
+        isNew: true,
       })
     }
   }

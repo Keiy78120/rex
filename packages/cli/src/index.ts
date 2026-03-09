@@ -3010,7 +3010,7 @@ async function main() {
         console.error('Usage: rex client:create --template <dg|drh|ceo|coo|freelance> --name <id> [--plan=pro] [--dry-run]')
         process.exit(1)
       }
-      const tmpl = getTemplate(templateArg)
+      const tmpl = getTemplate(templateArg as import('./agent-templates/base-template.js').TemplateId)
       if (!tmpl) {
         console.error(`Unknown template: ${templateArg}. Available: ${['dg','drh','ceo','coo','freelance'].join(', ')}`)
         process.exit(1)
@@ -3125,6 +3125,7 @@ async function main() {
         case 'benchmark': {
           const { runBenchmark, printBenchmarkReport } = await import('./sandbox/benchmark.js')
           const tag = process.argv.find(a => a.startsWith('--tag='))?.split('=')[1] ?? `bench-${Date.now()}`
+          const jsonMode = process.argv.includes('--json')
           console.log('Running sandbox benchmark...')
           const report = await runBenchmark(undefined, tag)
           printBenchmarkReport(report)
@@ -3135,6 +3136,7 @@ async function main() {
           const { runInSandbox, getSandboxRunnerStatus } = await import('./sandbox/sandbox-runner.js')
           const cmd = process.argv.slice(4).filter(a => !a.startsWith('--')).join(' ')
           const tag = process.argv.find(a => a.startsWith('--tag='))?.split('=')[1]
+          const jsonMode = process.argv.includes('--json')
           if (!cmd) {
             const status = getSandboxRunnerStatus()
             console.log(JSON.stringify(status, null, 2))
@@ -3315,7 +3317,7 @@ async function main() {
         process.exit(1)
       }
       const chosen = await pickModel(taskArg as import('./router.js').TaskType)
-      const prefs: string[] = TASK_PREFERENCES?.[taskArg] ?? []
+      const prefs: string[] = TASK_PREFERENCES?.[taskArg as import('./router.js').TaskType] ?? []
       if (jsonFlag) {
         console.log(JSON.stringify({ task: taskArg, model: chosen, preferences: prefs }))
       } else {
@@ -3630,7 +3632,7 @@ async function main() {
       const digestFlag = process.argv.includes('--digest')
       const info = await detectUserState()
       if (digestFlag) {
-        const digest = await buildMorningDigest()
+        const digest = await buildMorningDigest(info)
         if (jsonFlag) console.log(JSON.stringify({ state: info.state, digest }))
         else { console.log(`\n${COLORS.bold}Morning Digest${COLORS.reset}\n`); console.log(digest) }
         break

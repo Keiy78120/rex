@@ -225,7 +225,7 @@ export async function ingestMeetingTranscript(
   print(`  File     : ${filePath}`)
   print(`  Length   : ${transcript.length} chars`)
 
-  const model = await pickModel('summarize').catch(() => 'qwen2.5:7b')
+  const model = await pickModel('reason').catch(() => 'qwen2.5:7b')
   print(`  Model    : ${COLORS.dim}${model}${COLORS.reset}`)
 
   print(`\n  ${COLORS.dim}Summarizing transcript…${COLORS.reset}`)

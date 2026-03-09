@@ -154,8 +154,8 @@ export async function routeRequest(
   }
 
   // ── Tier 3: Sonnet (complex / cross-file / nuanced) ──────────────────────
-  const intent = await detectIntent(process.cwd()).catch(() => null)
-  const isComplex = msgLen > 800 || (intent?.intent === 'review' || intent?.intent === 'architect')
+  const intent: import('./project-intent.js').IntentContext | null = (() => { try { return detectIntent(process.cwd()) } catch { return null } })()
+  const isComplex = msgLen > 800 || (intent?.intent === 'refactor' || intent?.intent === 'infra')
   if (isComplex) {
     return { tier: 'sonnet', model: 'claude-sonnet-4-6', reason: 'complex/nuanced task', estimatedCost: 'subscription-low', confidence: 0.8 }
   }

@@ -778,16 +778,15 @@ export async function daemon(): Promise<void> {
       try {
         const { readdirSync: coachReaddir, existsSync: coachExists } = await import('node:fs')
         const { join: coachJoin } = await import('node:path')
-        const { loadConfig } = await import('./config.js')
-        const cfg = loadConfig()
-        const devDir = cfg.devDir || coachJoin(process.env.HOME ?? '~', 'Documents', 'Developer')
+        const devDir = coachJoin(process.env.HOME ?? '~', 'Documents', 'Developer')
         const suggestions: string[] = []
+        void devDir // used for context, scan projects directly
 
         // Check if active project lacks tests
         try {
-          const { listProjects } = await import('./projects.js')
-          const projects = listProjects()
-          const noTests = projects.filter(p => {
+          const { scanProjects } = await import('./projects.js')
+          const projects = scanProjects()
+          const noTests = projects.filter((p: import('./projects.js').ProjectEntry) => {
             const hasTests = coachExists(coachJoin(p.path, 'tests'))
               || coachExists(coachJoin(p.path, 'test'))
               || coachExists(coachJoin(p.path, '__tests__'))
@@ -796,14 +795,14 @@ export async function daemon(): Promise<void> {
             return hasPkgTest && !hasTests
           }).slice(0, 2)
           if (noTests.length > 0) {
-            suggestions.push(`🧪 Project(s) with no test folder: ${noTests.map(p => p.name).join(', ')} → \`rex workflow add-tests\` ?`)
+            suggestions.push(`🧪 Project(s) with no test folder: ${noTests.map((p: import('./projects.js').ProjectEntry) => p.name).join(', ')} → \`rex workflow add-tests\` ?`)
           }
         } catch {}
 
         // Check if there are promotable patterns (archive)
         try {
           const { promotePatterns } = await import('./reflector.js')
-          const promoted = await promotePatterns({ minOccurrences: 3, dryRun: true })
+          const promoted = promotePatterns(3)
           if (promoted.length > 0) {
             suggestions.push(`📐 ${promoted.length} recurring pattern(s) ready to promote → \`rex archive promote\``)
           }
@@ -833,8 +832,9 @@ export async function daemon(): Promise<void> {
         if (snap.state === 'sleeping') {
           log.debug('User cycle: SLEEPING — paid API gated')
         } else if (snap.state === 'waking_up') {
-          const { buildMorningDigest } = await import('./user-state.js')
-          const digest = await buildMorningDigest()
+          const { buildMorningDigest, detectUserState } = await import('./user-state.js')
+          const stateInfo = await detectUserState()
+          const digest = await buildMorningDigest(stateInfo)
           if (digest) await sendTelegramNotify(`🌅 *REX Morning Digest*\n\n${digest}`)
         }
       } catch (e: any) {

@@ -188,7 +188,7 @@ export async function promoteRule(index: number): Promise<boolean> {
   // ── Sandbox gate: validate before promoting to prod rules ─────────────────
   try {
     const { validateBeforePromote } = await import('./sandbox/sandbox-runner.js')
-    const validation = await validateBeforePromote(pattern)
+    const validation = await validateBeforePromote({ ...pattern, suggestedRule: pattern.suggestedRule! })
     if (!validation.safe) {
       log.warn(`promoteRule: sandbox rejected rule #${index} — ${validation.reason}`)
       console.log(`  ⚠️  Sandbox validation failed: ${validation.reason}`)

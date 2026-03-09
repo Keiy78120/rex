@@ -326,12 +326,12 @@ export function printScanResult(result: ScanResult): void {
 export async function scanSkillFile(skillPath: string): Promise<ScanResult> {
   if (!existsSync(skillPath)) {
     return {
-      target: 'skill',
-      hash: '',
+      id: skillPath,
+      target: 'skill' as const,
       scannedAt: new Date().toISOString(),
-      findings: [{ rule: 'not-found', severity: 'high', match: `File not found: ${skillPath}` }],
-      recommendation: 'block',
-      cached: false,
+      findings: [{ rule: 'not-found', severity: 'high' as const, match: `File not found: ${skillPath}` }],
+      recommendation: 'block' as const,
+      usedExternalScanner: false,
     }
   }
   const content = readFileSync(skillPath, 'utf-8')
@@ -356,7 +356,7 @@ export async function scanSkillDirectory(skillsDir: string): Promise<{
         const full = join(dir, entry.name)
         if (entry.isDirectory()) walkSkills(full)
         else if (entry.name.endsWith('.md') || entry.name.endsWith('.txt')) {
-          results.push({ file: full, result: { target: 'skill', hash: '', scannedAt: '', findings: [], recommendation: 'allow', cached: false } })
+          results.push({ file: full, result: { id: full, target: 'skill' as const, scannedAt: '', findings: [], recommendation: 'allow' as const, usedExternalScanner: false } })
         }
       }
     } catch {}
