@@ -158,8 +158,13 @@ async function main() {
     }
 
     case 'hq': {
-      const { printHQStatus } = await import('./dashboard.js')
-      await printHQStatus()
+      if (process.argv.includes('--json')) {
+        const { getHQSnapshot } = await import('./dashboard.js')
+        console.log(JSON.stringify(await getHQSnapshot(), null, 2))
+      } else {
+        const { printHQStatus } = await import('./dashboard.js')
+        await printHQStatus()
+      }
       break
     }
 
@@ -211,6 +216,26 @@ async function main() {
     }
 
     case 'ingest': {
+      // Check for external source flags first
+      const obsidianArg = process.argv.find(a => a.startsWith('--obsidian='))
+      const whatsappArg = process.argv.find(a => a.startsWith('--whatsapp='))
+      if (obsidianArg || whatsappArg) {
+        const memDir = findMemoryPackage()
+        if (!memDir) {
+          console.log(`${COLORS.yellow}Memory package not found.${COLORS.reset}`)
+          process.exit(1)
+        }
+        const { ingestObsidian, ingestWhatsApp } = await import(`${memDir}/src/ingest.js`)
+        if (obsidianArg) {
+          const vaultPath = obsidianArg.split('=').slice(1).join('=')
+          await ingestObsidian(vaultPath)
+        }
+        if (whatsappArg) {
+          const chatPath = whatsappArg.split('=').slice(1).join('=')
+          await ingestWhatsApp(chatPath)
+        }
+        break
+      }
       try {
         const { execSync } = await import('node:child_process')
         const memDir = findMemoryPackage()
@@ -858,8 +883,24 @@ async function main() {
 
     case 'mesh':
     case 'nodes': {
-      const { printFleetStatus } = await import('./node-mesh.js')
-      await printFleetStatus()
+      const jsonFlag = process.argv.includes('--json')
+      if (jsonFlag) {
+        const { buildLocalFleetNode } = await import('./node-mesh.js')
+        const node = buildLocalFleetNode()
+        const nodes = [{ ...node, status: 'healthy' }]
+        console.log(JSON.stringify({
+          nodes,
+          summary: {
+            total: nodes.length,
+            healthy: nodes.filter(n => n.status === 'healthy').length,
+            stale: nodes.filter(n => n.status === 'stale').length,
+            offline: nodes.filter(n => n.status === 'offline').length,
+          }
+        }, null, 2))
+      } else {
+        const { printFleetStatus } = await import('./node-mesh.js')
+        await printFleetStatus()
+      }
       break
     }
 
@@ -1444,6 +1485,20 @@ async function main() {
           workflowPR()
           break
         }
+        case 'release-pr': {
+          // rex workflow release-pr [target-branch]
+          const target = process.argv[4] ?? 'main'
+          const { createReleasePR } = await import('./workflow.js')
+          createReleasePR(target)
+          break
+        }
+        case 'protect': {
+          // rex workflow protect [--apply]
+          const applyFlag = process.argv.includes('--apply')
+          const { checkBranchProtection } = await import('./workflow.js')
+          checkBranchProtection(undefined, applyFlag)
+          break
+        }
         case 'deploy': {
           const env = (process.argv[4] === 'prod' ? 'prod' : 'staging') as 'staging' | 'prod'
           const { workflowDeploy } = await import('./workflow.js')
@@ -1451,7 +1506,7 @@ async function main() {
           break
         }
         default:
-          console.log(`Usage: rex workflow [feature|bugfix|pr|deploy [staging|prod]]`)
+          console.log(`Usage: rex workflow [feature|bugfix|pr|release-pr [target]|protect [--apply]|deploy [staging|prod]]`)
       }
       break
     }
@@ -1565,6 +1620,32 @@ async function main() {
     }
 
     case 'lint':
+    case 'scan-skills': {
+      // rex scan-skills [dir] — scan agent skill files for security threats
+      const { homedir } = await import('node:os')
+      const { join: pathJoin } = await import('node:path')
+      const skillsDir = process.argv[3] ?? pathJoin(homedir(), '.claude', 'plugins', 'cache')
+      const jsonFlag = process.argv.includes('--json')
+      const { scanSkillDirectory, printScanResult } = await import('./security-scanner.js')
+      console.log(`Scanning skills in ${skillsDir}...`)
+      const summary = await scanSkillDirectory(skillsDir)
+      if (jsonFlag) {
+        console.log(JSON.stringify(summary, null, 2))
+      } else {
+        console.log(`\n${summary.total} skill files: ${summary.clean} clean, ${summary.warned} warned, ${summary.blocked} blocked`)
+        for (const { file, result } of summary.results) {
+          if (result.recommendation !== 'allow') {
+            console.log(`\n  ${result.recommendation === 'block' ? '\x1b[31m✗\x1b[0m' : '\x1b[33m!\x1b[0m'} ${file}`)
+            printScanResult(result)
+          }
+        }
+        if (summary.blocked === 0 && summary.warned === 0) {
+          console.log('\x1b[32m✓\x1b[0m All skills clean.')
+        }
+      }
+      break
+    }
+
     case 'lint-loop': {
       const targetPath = process.argv[3] ?? process.cwd()
       const maxIterations = Number(process.argv.find(a => a.startsWith('--max='))?.split('=')[1] ?? 5)
@@ -2065,6 +2146,95 @@ async function main() {
       break
     }
 
+    // ── Interactive Menu ────────────────────────────────────────────────────
+    case 'menu': {
+      const readline = await import('node:readline')
+      const { execFileSync } = await import('node:child_process')
+      const MENU_ITEMS = [
+        { label: 'Status',    desc: 'Quick system overview',     args: ['status'] },
+        { label: 'Memory',    desc: 'Memory health & stats',     args: ['memory-check'] },
+        { label: 'Agents',    desc: 'Active agent status',       args: ['agents', 'status'] },
+        { label: 'MCP',       desc: 'MCP server list',           args: ['mcp', 'list'] },
+        { label: 'Providers', desc: 'API & local providers',     args: ['providers'] },
+        { label: 'Network',   desc: 'Fleet mesh overview',       args: ['mesh'] },
+        { label: 'Review',    desc: 'Quick code review',         args: ['review'] },
+        { label: 'Sandbox',   desc: 'Isolation status',          args: ['sandbox', 'status'] },
+        { label: 'Workflow',  desc: 'Git workflow status',       args: ['workflow'] },
+        { label: 'Doctor',    desc: 'Full health check',         args: ['doctor'] },
+        { label: 'Logs',      desc: 'Recent daemon logs',        args: ['logs', '--lines=40'] },
+        { label: 'Curious',   desc: 'Discover new tools',        args: ['curious'] },
+      ]
+      console.log(`\n  ${COLORS.bold}REX${COLORS.reset}  — Choose an action\n`)
+      MENU_ITEMS.forEach((item, i) => {
+        const num = String(i + 1).padStart(2)
+        console.log(`  ${COLORS.dim}${num})${COLORS.reset}  ${COLORS.bold}${item.label.padEnd(12)}${COLORS.reset}  ${COLORS.dim}${item.desc}${COLORS.reset}`)
+      })
+      console.log(`\n  ${COLORS.dim} q)  Quit${COLORS.reset}\n`)
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+      await new Promise<void>(resolve => {
+        rl.question('  › ', async (answer) => {
+          rl.close()
+          const ch = answer.trim().toLowerCase()
+          if (ch === 'q' || ch === '') return resolve()
+          const n = parseInt(ch)
+          if (n >= 1 && n <= MENU_ITEMS.length) {
+            const item = MENU_ITEMS[n - 1]
+            console.log()
+            try {
+              execFileSync(process.argv[1], item.args, { stdio: 'inherit' })
+            } catch { /* non-zero exits are fine */ }
+          }
+          resolve()
+        })
+      })
+      break
+    }
+
+    // ── Device Bridge ───────────────────────────────────────────────────────
+    case 'devices': {
+      const { printFleetStatus } = await import('./node-mesh.js')
+      await printFleetStatus()
+      break
+    }
+
+    case 'join': {
+      const code = process.argv[3]
+      if (!code) {
+        console.log(`\nUsage: rex join <pairing-code|hub-url>`)
+        console.log(`  Pairing code: REX-XXXX-YYYY-ZZZZ  (generated by rex init on the hub machine)`)
+        console.log(`  URL:          http://192.168.x.x:7420\n`)
+        break
+      }
+      let hubUrl: string | null = null
+      if (code.startsWith('http')) {
+        hubUrl = code
+      } else if (/^REX-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(code)) {
+        // Pairing code: ask for hub URL then store the code as auth hint
+        const readline = await import('node:readline')
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+        hubUrl = await new Promise<string>(r => rl.question('  Hub URL (e.g. http://192.168.1.10:7420): ', v => { rl.close(); r(v.trim()) }))
+      } else {
+        console.log(`  ${COLORS.red}✗${COLORS.reset}  Invalid format. Expected REX-XXXX-YYYY-ZZZZ or http://…`)
+        break
+      }
+      if (!hubUrl) { console.log('  Cancelled.'); break }
+      const url = hubUrl.replace(/\/$/, '')
+      console.log(`\n  Connecting to ${url}...`)
+      try {
+        const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(4000) })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const { persistDiscoveredCommander, registerWithCommander } = await import('./node-mesh.js')
+        persistDiscoveredCommander(url)
+        await registerWithCommander()
+        console.log(`  ${COLORS.green}✓${COLORS.reset}  Joined network — hub URL saved to settings.`)
+        console.log(`\n  Run ${COLORS.cyan}rex mesh${COLORS.reset} to see all nodes.\n`)
+      } catch (e: any) {
+        console.log(`  ${COLORS.red}✗${COLORS.reset}  Could not connect: ${e.message?.slice(0, 80)}`)
+        console.log(`  Make sure the hub is running: ${COLORS.cyan}rex hub${COLORS.reset}\n`)
+      }
+      break
+    }
+
     case undefined: {
       // First run? Run the wizard so the user gets the "wow moment" before launching
       const { isFirstRun, setupWizard } = await import('./setup-wizard.js')
@@ -2224,6 +2394,11 @@ ${COLORS.bold}LiteLLM:${COLORS.reset}
   rex litellm-config         Generate litellm_config.yaml from detected providers
   rex litellm-config --print Print config to stdout (no file write)
   rex litellm-config --output=<path>  Write to custom path
+
+${COLORS.bold}Interactive:${COLORS.reset}
+  rex menu             Interactive numbered menu (12 quick actions)
+  rex devices          Display fleet nodes with role, status, and capabilities
+  rex join <code|url>  Join REX network via pairing code (REX-XXXX-YYYY-ZZZZ) or hub URL
 
 ${COLORS.bold}Fleet: Commander & Specialists:${COLORS.reset}
   rex hub              Start Fleet Commander API server (port 7420)

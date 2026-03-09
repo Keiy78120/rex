@@ -26,6 +26,7 @@ class _HealthPageState extends State<HealthPage> {
       rex.loadDevMonitor();
       rex.loadSystemMetrics();
       rex.loadDebt();
+      rex.loadHqSnapshot();
     });
   }
 
@@ -46,6 +47,7 @@ class _HealthPageState extends State<HealthPage> {
             rex.loadDevMonitor();
             rex.loadSystemMetrics();
             rex.loadDebt();
+            rex.loadHqSnapshot();
           },
         ),
       ],
@@ -188,6 +190,11 @@ class _HealthPageState extends State<HealthPage> {
                       }).toList(),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                ],
+                // HQ Alerts
+                if (rex.hqSnapshot.isNotEmpty) ...[
+                  _HqAlertsSection(snapshot: rex.hqSnapshot),
                   const SizedBox(height: 8),
                 ],
                 // Check groups
@@ -993,6 +1000,96 @@ class _TechDebtSection extends StatelessWidget {
                 'Run: rex debt  to see full list with file locations',
                 style: TextStyle(fontSize: 11, color: context.rex.textTertiary),
               ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── HQ Alerts Section ──────────────────────────────────────────────────────
+
+class _HqAlertsSection extends StatelessWidget {
+  final Map<String, dynamic> snapshot;
+  const _HqAlertsSection({required this.snapshot});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.rex;
+    final alerts = (snapshot['alerts'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? [];
+    final fleet = snapshot['fleet'] as Map<String, dynamic>? ?? {};
+    final memory = snapshot['memory'] as Map<String, dynamic>? ?? {};
+    final agents = snapshot['agents'] as Map<String, dynamic>? ?? {};
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RexSection(title: 'HQ Snapshot', icon: CupertinoIcons.antenna_radiowaves_left_right),
+        RexCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Aggregate stats row
+              Row(
+                children: [
+                  Expanded(
+                    child: RexStatRow(
+                      label: 'Fleet Healthy',
+                      value: '${fleet['healthy'] ?? 0}/${fleet['totalNodes'] ?? 0}',
+                    ),
+                  ),
+                  Expanded(
+                    child: RexStatRow(
+                      label: 'Memories',
+                      value: '${memory['totalMemories'] ?? 0}',
+                    ),
+                  ),
+                  Expanded(
+                    child: RexStatRow(
+                      label: 'Sessions',
+                      value: '${agents['activeSessions'] ?? 0}',
+                    ),
+                  ),
+                  Expanded(
+                    child: RexStatRow(
+                      label: 'Pending',
+                      value: '${memory['pendingChunks'] ?? 0}',
+                    ),
+                  ),
+                ],
+              ),
+              if (alerts.isNotEmpty) ...[
+                Container(height: 0.5, color: c.separator, margin: const EdgeInsets.symmetric(vertical: 10)),
+                ...alerts.map((alert) {
+                  final level = alert['level'] as String? ?? 'warn';
+                  final source = alert['source'] as String? ?? '';
+                  final message = alert['message'] as String? ?? '';
+                  final isCritical = level == 'critical';
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        RexStatusChip(
+                          label: source,
+                          status: isCritical ? RexChipStatus.error : RexChipStatus.warning,
+                          small: true,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            message,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isCritical ? c.error : c.warning,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
             ],
           ),
         ),

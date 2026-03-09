@@ -230,3 +230,97 @@ export function workflowDeploy(env: 'staging' | 'prod'): void {
     }
   }
 }
+
+/**
+ * Auto-create a PR from the current (release) branch into targetBranch.
+ * Uses `gh pr create`. Requires gh CLI.
+ */
+export function createReleasePR(targetBranch = 'main'): { url: string; number: number } | null {
+  const branch = currentBranch()
+  if (branch === targetBranch) {
+    log.warn(`Already on ${targetBranch}, nothing to PR`)
+    return null
+  }
+
+  // Gather commits since divergence
+  let commits = ''
+  try {
+    commits = git(`log ${targetBranch}..HEAD --oneline`).split('\n').filter(Boolean).map(l => `- ${l}`).join('\n')
+  } catch {}
+
+  const title = `${branch}`
+  const body = commits
+    ? `## Changes\n\n${commits}\n`
+    : `Merging \`${branch}\` into \`${targetBranch}\`.`
+
+  try {
+    // Push branch first
+    execSync(`git push -u origin ${branch} --force-with-lease`, { encoding: 'utf-8', timeout: 30_000, stdio: 'pipe' })
+    const out = execSync(
+      `gh pr create --base ${targetBranch} --head ${branch} --title "${title}" --body "${body.replace(/"/g, '\\"')}"`,
+      { encoding: 'utf-8', timeout: 30_000, stdio: 'pipe' }
+    ).trim()
+    // gh outputs the PR URL on the last line
+    const url = out.split('\n').filter(l => l.startsWith('https://')).pop() ?? out
+    log.info(`PR created: ${url}`)
+    console.log(`PR created: ${url}`)
+    const match = url.match(/\/pull\/(\d+)$/)
+    return { url, number: match ? parseInt(match[1]) : 0 }
+  } catch (e: any) {
+    log.error(`PR creation failed: ${e.message?.slice(0, 200)}`)
+    console.log(`PR creation failed. Check gh auth and remote.`)
+    return null
+  }
+}
+
+/**
+ * Check branch protection status on the given repo's default branch.
+ * Reports if protections are missing and optionally enables them via gh API.
+ */
+export function checkBranchProtection(repo?: string, apply = false): { protected: boolean; rules: string[] } {
+  // Detect repo from remote if not provided
+  if (!repo) {
+    try {
+      const remote = git('remote get-url origin')
+      const m = remote.match(/github\.com[/:]([^/]+\/[^/.]+)/)
+      repo = m ? m[1] : undefined
+    } catch {}
+  }
+  if (!repo) {
+    log.warn('Could not detect GitHub repo from remote')
+    return { protected: false, rules: [] }
+  }
+
+  const branch = 'main'
+  try {
+    const raw = execSync(
+      `gh api repos/${repo}/branches/${branch}/protection 2>/dev/null || echo '{}'`,
+      { encoding: 'utf-8', timeout: 15_000, stdio: 'pipe' }
+    ).trim()
+    const data = JSON.parse(raw || '{}')
+    const rules: string[] = []
+    if (data.required_pull_request_reviews) rules.push('PR reviews required')
+    if (data.required_status_checks?.strict) rules.push('Status checks required')
+    if (data.enforce_admins?.enabled) rules.push('Enforce on admins')
+
+    if (rules.length === 0 && apply) {
+      log.info(`Enabling branch protection on ${repo}/${branch}`)
+      execSync(`gh api repos/${repo}/branches/${branch}/protection --method PUT \
+        --field required_pull_request_reviews='{"required_approving_review_count":0}' \
+        --field enforce_admins=false \
+        --field required_status_checks=null \
+        --field restrictions=null`, { encoding: 'utf-8', timeout: 15_000, stdio: 'pipe' })
+      rules.push('PR reviews required (just enabled)')
+      console.log(`Branch protection enabled on ${repo}/${branch}`)
+    } else if (rules.length > 0) {
+      console.log(`${repo}/${branch} is protected: ${rules.join(', ')}`)
+    } else {
+      console.log(`${repo}/${branch} has NO branch protection. Run with --apply to enable.`)
+    }
+
+    return { protected: rules.length > 0, rules }
+  } catch (e: any) {
+    log.warn(`Branch protection check failed: ${e.message?.slice(0, 100)}`)
+    return { protected: false, rules: [] }
+  }
+}

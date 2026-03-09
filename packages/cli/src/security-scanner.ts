@@ -17,7 +17,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, readdirSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
@@ -315,6 +315,69 @@ export function printScanResult(result: ScanResult): void {
 
   if (result.findings.length === 0) {
     console.log('  No threats detected.')
+  }
+}
+
+/**
+ * Scan an agent skill file (Markdown template) for dangerous patterns.
+ * Checks for prompt-injection attempts, exfiltration vectors, dangerous commands.
+ * This is the REX equivalent of the Cisco skill-scanner concept.
+ */
+export async function scanSkillFile(skillPath: string): Promise<ScanResult> {
+  if (!existsSync(skillPath)) {
+    return {
+      target: 'skill',
+      hash: '',
+      scannedAt: new Date().toISOString(),
+      findings: [{ rule: 'not-found', severity: 'high', match: `File not found: ${skillPath}` }],
+      recommendation: 'block',
+      cached: false,
+    }
+  }
+  const content = readFileSync(skillPath, 'utf-8')
+  return scan(content, 'skill', skillPath)
+}
+
+/** Scan all skill files in a directory and return a summary */
+export async function scanSkillDirectory(skillsDir: string): Promise<{
+  total: number
+  clean: number
+  warned: number
+  blocked: number
+  results: Array<{ file: string; result: ScanResult }>
+}> {
+  const results: Array<{ file: string; result: ScanResult }> = []
+  let blocked = 0, warned = 0
+
+  function walkSkills(dir: string) {
+    if (!existsSync(dir)) return
+    try {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name)
+        if (entry.isDirectory()) walkSkills(full)
+        else if (entry.name.endsWith('.md') || entry.name.endsWith('.txt')) {
+          results.push({ file: full, result: { target: 'skill', hash: '', scannedAt: '', findings: [], recommendation: 'allow', cached: false } })
+        }
+      }
+    } catch {}
+  }
+
+  walkSkills(skillsDir)
+
+  // Now scan each file (replace placeholder results)
+  for (let i = 0; i < results.length; i++) {
+    const r = await scanSkillFile(results[i].file)
+    results[i].result = r
+    if (r.recommendation === 'block') blocked++
+    else if (r.recommendation === 'warn') warned++
+  }
+
+  return {
+    total: results.length,
+    clean: results.length - warned - blocked,
+    warned,
+    blocked,
+    results,
   }
 }
 

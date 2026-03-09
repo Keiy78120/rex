@@ -948,6 +948,24 @@ fi
   // 10. Save settings
   writeJson(settingsPath, settings)
 
+  // 11. Generate pairing code (store in settings for other nodes to use)
+  let pairingCode = ''
+  {
+    try {
+      const { randomBytes } = await import('node:crypto')
+      const rand = randomBytes(6).toString('hex').toUpperCase()
+      pairingCode = `REX-${rand.slice(0,4)}-${rand.slice(4,8)}-${rand.slice(8,12)}`
+      const existing = readJson(settingsPath) ?? {}
+      if (!(existing.env?.REX_PAIRING_CODE)) {
+        if (!existing.env) existing.env = {}
+        existing.env.REX_PAIRING_CODE = pairingCode
+        writeJson(settingsPath, existing)
+      } else {
+        pairingCode = existing.env.REX_PAIRING_CODE
+      }
+    } catch { /* non-critical */ }
+  }
+
   console.log(`\n${COLORS.dim}─────────────────────────────────────────────${COLORS.reset}`)
   console.log(`\n${COLORS.bold}  REX initialized!${COLORS.reset}`)
   console.log(`\n  Next steps:`)
@@ -959,6 +977,11 @@ fi
     console.log(`    1. Ingest session history: ${COLORS.cyan}rex ingest${COLORS.reset}`)
   }
   console.log(`    •  Run ${COLORS.cyan}rex doctor${COLORS.reset} to verify setup`)
+  if (pairingCode) {
+    console.log(`\n  ${COLORS.bold}Pairing code${COLORS.reset} (share with another machine to join this node):`)
+    console.log(`    ${COLORS.cyan}${COLORS.bold}${pairingCode}${COLORS.reset}`)
+    console.log(`    Other machine: ${COLORS.dim}rex join ${pairingCode}${COLORS.reset}`)
+  }
   console.log()
 }
 

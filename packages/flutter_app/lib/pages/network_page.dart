@@ -75,6 +75,10 @@ class _NetworkPageState extends State<NetworkPage> {
                 // Queue section
                 RexSection(title: 'Event Queue', icon: CupertinoIcons.tray_full),
                 _QueueCard(queue: rex.queueStats),
+                const SizedBox(height: 8),
+                // Add Device section
+                RexSection(title: 'Add Device', icon: CupertinoIcons.plus_circle),
+                _AddDeviceCard(pairingCode: rex.pairingCode),
               ],
             );
           },
@@ -434,6 +438,74 @@ class _MeshPeerRow extends StatelessWidget {
           RexStatusChip(label: 'direct', status: RexChipStatus.ok, small: true)
         else if (online)
           RexStatusChip(label: 'relay', status: RexChipStatus.pending, small: true),
+      ]),
+    );
+  }
+}
+
+class _AddDeviceCard extends StatelessWidget {
+  final String? pairingCode;
+  const _AddDeviceCard({required this.pairingCode});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.rex;
+    if (pairingCode == null || pairingCode!.isEmpty) {
+      return RexCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+            'Run rex init on this machine to generate a pairing code.',
+            style: TextStyle(fontSize: 13, color: c.textSecondary),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'rex init',
+            style: TextStyle(fontSize: 12, fontFamily: 'Menlo', color: c.textTertiary),
+          ),
+        ]),
+      );
+    }
+    return RexCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(
+          'Share this code with another machine to join the fleet:',
+          style: TextStyle(fontSize: 13, color: c.textSecondary),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: c.accent.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: c.accent.withValues(alpha: 0.25)),
+          ),
+          child: Text(
+            pairingCode!,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Menlo',
+              letterSpacing: 1.5,
+              color: c.accent,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'On the other machine, run:',
+          style: TextStyle(fontSize: 12, color: c.textTertiary),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(color: c.codeBg, borderRadius: BorderRadius.circular(6)),
+          child: Text(
+            'rex join $pairingCode',
+            style: TextStyle(fontSize: 12, fontFamily: 'Menlo', color: c.textSecondary),
+          ),
+        ),
       ]),
     );
   }

@@ -199,6 +199,7 @@ class RexService extends ChangeNotifier {
   Map<String, dynamic>? hubStatus;
   Map<String, dynamic>? syncStatus;
   Map<String, dynamic>? queueStats;
+  String? pairingCode;
 
   // Providers & Budget
   List<Map<String, dynamic>> providers = [];
@@ -1203,6 +1204,7 @@ $transcript
     } catch (_) {}
     mcpServers = [];
     notifyListeners();
+    loadMcpRecommendations();
   }
 
   Future<String> addMcpStdio(
@@ -1335,6 +1337,54 @@ $transcript
     lastOutput = output;
     notifyListeners();
     return output;
+  }
+
+  List<Map<String, dynamic>> _mcpRecommendations = [];
+  String _mcpRecommendStack = '';
+  List<Map<String, dynamic>> get mcpRecommendations => _mcpRecommendations;
+  String get mcpRecommendStack => _mcpRecommendStack;
+
+  Future<void> loadMcpRecommendations() async {
+    try {
+      final cwd = Directory.current.path;
+      final output = await _runRexArgs(['mcp', 'auto', '--path=$cwd', '--json'], timeout: 10);
+      final json = _extractJson(output);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic>) {
+          _mcpRecommendStack = parsed['stack'] as String? ?? '';
+          final recs = parsed['recommendations'] as List?;
+          _mcpRecommendations = recs?.whereType<Map<String, dynamic>>().toList() ?? [];
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+  }
+
+  Map<String, dynamic> _mcpScanResult = {};
+  bool _isRunningScan = false;
+  Map<String, dynamic> get mcpScanResult => _mcpScanResult;
+  bool get isRunningScan => _isRunningScan;
+
+  Future<void> runMcpScan() async {
+    _isRunningScan = true;
+    notifyListeners();
+    try {
+      final output = await _runRexArgs(['mcp', 'scan', '--json'], timeout: 120);
+      final json = _extractJson(output);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic>) {
+          _mcpScanResult = parsed;
+        }
+      } else if (output.isNotEmpty) {
+        _mcpScanResult = {'output': output.trim()};
+      }
+    } catch (e) {
+      _mcpScanResult = {'error': e.toString()};
+    }
+    _isRunningScan = false;
+    notifyListeners();
   }
 
   // --- Audio logger ---
@@ -1934,8 +1984,22 @@ $transcript
       _loadHubStatus(),
       _loadSyncStatus(),
       _loadQueueStats(),
+      loadPairingCode(),
     ]);
     notifyListeners();
+  }
+
+  Future<void> loadPairingCode() async {
+    try {
+      final home = Platform.environment['HOME'] ?? '';
+      final settingsFile = File('$home/.claude/settings.json');
+      if (await settingsFile.exists()) {
+        final data = jsonDecode(await settingsFile.readAsString()) as Map<String, dynamic>;
+        final env = data['env'] as Map<String, dynamic>?;
+        final code = env?['REX_PAIRING_CODE'] as String?;
+        if (code != null && code.startsWith('REX-')) pairingCode = code;
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadNodeStatus() async {
@@ -2538,6 +2602,49 @@ $transcript
     try {
       await _runRexArgs(['session-guard', 'clear']);
       await checkSessionGuard();
+    } catch (_) {}
+  }
+
+  // ── HQ Snapshot ──────────────────────────────────────────────────────────
+
+  Map<String, dynamic> _hqSnapshot = {};
+  Map<String, dynamic> get hqSnapshot => _hqSnapshot;
+
+  Future<void> loadHqSnapshot() async {
+    try {
+      final output = await _runRexArgs(['hq', '--json']);
+      final json = _extractJson(output);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic>) {
+          _hqSnapshot = parsed;
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+  }
+
+  // ── Fleet Nodes ───────────────────────────────────────────────────────────
+
+  List<Map<String, dynamic>> _fleetNodes = [];
+  Map<String, dynamic> _fleetSummary = {};
+  List<Map<String, dynamic>> get fleetNodes => _fleetNodes;
+  Map<String, dynamic> get fleetSummary => _fleetSummary;
+
+  Future<void> loadFleetNodes() async {
+    try {
+      final output = await _runRexArgs(['mesh', '--json'], timeout: 10);
+      final json = _extractJson(output);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic>) {
+          _fleetNodes = (parsed['nodes'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList() ?? [];
+          _fleetSummary = parsed['summary'] as Map<String, dynamic>? ?? {};
+          notifyListeners();
+        }
+      }
     } catch (_) {}
   }
 
