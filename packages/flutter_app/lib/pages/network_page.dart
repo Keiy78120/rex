@@ -56,8 +56,8 @@ class _NetworkPageState extends State<NetworkPage> {
                 RexSection(title: 'This Node', icon: CupertinoIcons.desktopcomputer),
                 _NodeIdentityCard(node: rex.nodeStatus!),
                 const SizedBox(height: 8),
-                // Hub section
-                RexSection(title: 'Hub', icon: CupertinoIcons.circle_grid_hex),
+                // Commander section
+                RexSection(title: 'Commander', icon: CupertinoIcons.circle_grid_hex),
                 _HubCard(hub: rex.hubStatus),
                 const SizedBox(height: 8),
                 // Sync section
@@ -198,13 +198,20 @@ class _HubCard extends StatelessWidget {
           const SizedBox(height: 12),
           Container(height: 0.5, color: context.rex.separator),
           const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              'SPECIALISTS',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 0.6, color: context.rex.textTertiary),
+            ),
+          ),
           ...nodes.map((n) => _ConnectedNodeRow(node: n)),
         ],
         const SizedBox(height: 12),
         Row(children: [
           if (!running)
             RexButton(
-              label: 'Start Hub',
+              label: 'Start Commander',
               icon: CupertinoIcons.play_fill,
               variant: RexButtonVariant.success,
               small: true,
@@ -212,7 +219,7 @@ class _HubCard extends StatelessWidget {
             )
           else
             RexButton(
-              label: 'Stop Hub',
+              label: 'Stop Commander',
               icon: CupertinoIcons.stop_fill,
               variant: RexButtonVariant.danger,
               small: true,
