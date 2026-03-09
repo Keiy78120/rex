@@ -747,6 +747,33 @@ rex doctor --fix     # Auto-fix then health check
 | **Full audit** — all 22 pages verified clean: no one-card-per-item anti-pattern; Hub, Health, Network, Token, Memory, Curious, Guards, Gateway, Clients all confirmed | all `pages/*.dart` |
 | **Flutter build** — `flutter build macos --debug` ✅ zero errors | — |
 
+### ✅ Terminé (session 2026-03-15 — Flutter UI design system overhaul)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **hub_page.dart** : Commander page — Fleet KPIs (total/healthy/stale/offline), HQ Overview (memories/sessions/burn rate), Active Agents list, Alerts | `pages/hub_page.dart` |
+| **RexColors tokens** : `info`, `neutral`, `separatorStrong`, `textDisabled`, stable hex for `success`/`warning`, `statusColor(String?)` helper | `theme.dart` |
+| **Shared widgets** : `RexListRow` (dense row with leading/trailing/divider), `RexKpiItem`/`RexKpiRow` (cockpit-style KPI strip: 22px bold values + 10px uppercase labels) | `widgets/rex_shared.dart` |
+| **Sidebar redesign** : 22 items in 7 logical groups — COCKPIT/AGENTS/KNOWLEDGE/WORKFLOW/RESOURCES/COMMS/ADMIN, `_GroupHeader` section labels, `const` map | `rex_sidebar.dart` |
+| **IndexedStack reorder** : 22 pages ordered to match grouped sidebar indices 0-21 | `main.dart` |
+| **Agents page** : compact meta string `profile · model · interval · lastRun` replaces 4 verbose `RexStatRow` blocks per agent | `agents_page.dart` |
+| **MCP page** : single `RexCard(padding: EdgeInsets.zero)` with `_McpServerRow` items replaces one-card-per-server | `mcp_page.dart` |
+| **Providers page** : `_RunbooksSection` uses single grouped card with `RexListRow` instead of one-card-per-runbook | `providers_page.dart` |
+| **Full audit** : all 22 pages verified clean (no one-card-per-item anti-pattern) | all `pages/*.dart` |
+| Flutter build ✅ zero errors | — |
+
+### ✅ Terminé (session 2026-03-15 — HQ dashboard data mapping fixes)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **dashboard.ts getBudget()** : `rex budget --json` (USD cost) → `rex burn-rate --json` (token stats: burnRatePerHour/dailyTotal/dailyPercent/contextPercent/sessionTotal) | `packages/cli/src/dashboard.ts` |
+| **dashboard.ts getAgents()** : `profiles: string[]` → `AgentProfile[]` via `rex agents list --json`; filters enabled/running agents; maps `{name, model, profile, running}` | `packages/cli/src/dashboard.ts` |
+| **AgentProfile interface** added to dashboard.ts + AgentSummary.profiles typed properly | `packages/cli/src/dashboard.ts` |
+| **hub_page.dart budget field** : `budget['estimatedDailyCost']` (non-existent) → burn rate display `(burnRatePerHour / 1000).toStringAsFixed(1)k/h` | `pages/hub_page.dart` |
+| **hub_page.dart chip status** : `RexChipStatus.neutral` (non-existent) → `RexChipStatus.inactive`; agent text shows `profile · model` | `pages/hub_page.dart` |
+| **living-rex-vision.md** : 3 new ✅ entries (Cockpit UI, Commander hub page, HQ data mapping) | `docs/plans/living-rex-vision.md` |
+| CLI build ✅ zero errors | — |
+
 ### 🔄 En cours / A faire
 
 **ALL PHASES DONE (Phase 2 ✅, Phase 3 ✅, Phase 3 extras ✅). Phase 4 = LATER**:
