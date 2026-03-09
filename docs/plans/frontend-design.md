@@ -21,10 +21,10 @@ Le frontend doit montrer l'essentiel et piloter une API unique.
 
 Phases frontend :
 
-- **Phase 1** : DONE (pages existantes : Health, Voice, Audio, Memory, Gateway, Agents, MCP, Optimize, Settings)
-- **Phase 2** : CURRENT (MCP Marketplace, Providers page avec API keys, free model catalog)
-- **Phase 3** : FUTURE (Hub page, Network page multi-nodes)
-- **Phase 4** : LATER (fleet dashboard, training UI)
+- **Phase 1** : ✅ DONE (pages: Health, Voice, Audio, Memory, Gateway, Agents, MCP, Optimize, Settings)
+- **Phase 2** : ✅ DONE (MCP Marketplace, Providers API keys, free model catalog, 26 pages total)
+- **Phase 3** : ✅ DONE (Hub page, Network/Fleet page, Clients page — session 2026-03-15)
+- **Phase 4** : LATER (fleet dashboard, cross-platform Flutter Windows/Linux)
 
 ---
 
@@ -149,14 +149,14 @@ Section API Keys config (Phase 2) :
 - free model catalog : tableau des modeles gratuits avec RPM/TPM/quotas connus
 - auto-rotation status : quel provider est actif, lequel est en cooldown
 
-### Hub (Phase 3 — FUTURE)
+### Hub (Phase 3 — ✅ DONE session 2026-03-15)
 
-Pas encore implemente. Sera la vue reseau centralisee :
+Implémenté dans `hub_page.dart` (Commander view) + `network_page.dart` (Fleet view) :
 
-- nodes connectes
-- taches en cours
-- sante globale
-- queue size / pending replay
+- nodes connectés (Fleet Peers section)
+- tâches en cours (Event Queue section)
+- santé globale (TopologyBanner + NodeIdentityCard)
+- queue size / pending replay (QueueCard)
 
 ### Review / Sandbox
 

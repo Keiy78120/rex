@@ -43,7 +43,7 @@ Phases :
 - **Phase 1** : DONE (CLI, daemon, memory, gateway, app Flutter)
 - **Phase 2** : DONE (MCP marketplace, LiteLLM proxy, API keys config, free model catalog)
 - **Phase 3** : DONE (hub centralise, VPS brain, mesh multi-nodes, Tailscale auto, Fleet terminology)
-- **Phase 4** : LATER (cross-platform Flutter, LangGraph spike, training pipeline, meeting bots)
+- **Phase 4** : DONE (LangGraph spike, training pipeline, meeting bots, Slack adapter, Bun compile)
 
 ## 3. Regle generale
 

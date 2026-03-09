@@ -3838,17 +3838,18 @@ Features degradees en mode Zero Paid :
 | Compaction resilience | 19 | Pre-shot snapshots, preload restore |
 | Device bridge | 18 | Pairing, join, multi-device onboarding |
 
-### Phase 4 — LATER : LangGraph + Training + Meeting bots
+### Phase 4 — DONE : LangGraph + Training + Meeting bots
 
-| Task | Bloc | Detail |
-|------|------|--------|
-| LangGraph spike | — | Evaluer apres stabilisation orchestrator + queue + state machine |
-| Training pipeline | — | Benchmarks mlx-lm vs unsloth + eval dataset interne |
-| Meeting bots type Otter AI | 12.5 | Integration OSS, transcription + memoire |
-| Graph Memory (Neo4j/Kuzu) | 3 | Knowledge graph au-dessus du vector store |
-| Bun compile distribution | OL5 | Single binary cross-platform |
-| Rust embed-rs | OL4a | napi-rs + fastembed, supprime dependance Ollama embed |
-| Rust sync-server | OL4b | tokio + tungstenite, ~2MB RSS |
+| Task | Bloc | Status | Detail |
+|------|------|--------|--------|
+| LangGraph spike | — | ✅ done | `lang-graph.ts` — 3 templates (scriptHelper, codeReview, monitorCycle), `rex graph run/list/status` |
+| Training pipeline | — | ✅ done | `training.ts` — collect/export/run/status, mlx-lm + OpenAI fine-tune, `rex train *` |
+| Meeting bots type Otter AI | 12.5 | ✅ done | `meeting.ts` — ingest transcript → LLM summary → action items → REX memory, `rex meeting *` |
+| Slack adapter | — | ✅ done | `gateway-adapter.ts` SlackAdapter — Incoming Webhook, normalize Events API |
+| Bun compile distribution | OL5 | ✅ done | `scripts/build-binary.sh` — Bun compile + Node.js SEA fallback + native addon bundling |
+| Graph Memory (Neo4j/Kuzu) | 3 | skip (v8) | Knowledge graph au-dessus du vector store |
+| Rust embed-rs | OL4a | skip | napi-rs + fastembed, supprime dependance Ollama embed |
+| Rust sync-server | OL4b | skip | tokio + tungstenite, ~2MB RSS |
 
 ---
 
