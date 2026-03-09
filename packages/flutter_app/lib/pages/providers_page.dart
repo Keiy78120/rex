@@ -23,6 +23,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
     rex.loadRunbooks();
     rex.loadModelRouter();
     rex.loadLlmUsage();
+    rex.loadLlmBackend();
   }
 
   @override
@@ -95,6 +96,8 @@ class _ProvidersPageState extends State<ProvidersPage> {
                 _FreeTiersSection(),
                 const SizedBox(height: 8),
                 _LlmUsageSection(usage: rex.llmUsage),
+                const SizedBox(height: 8),
+                _LlmBackendSection(),
                 const SizedBox(height: 8),
                 _ModelRouterSection(),
                 const SizedBox(height: 8),
@@ -333,6 +336,98 @@ class _ProviderRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// -- LLM Backend Section --
+
+class _LlmBackendSection extends StatelessWidget {
+  static const _backendIcons = <String, IconData>{
+    'ollama': CupertinoIcons.cube_box,
+    'llama-cpp': CupertinoIcons.chevron_left_slash_chevron_right,
+    'localai': CupertinoIcons.cloud,
+    'vllm': CupertinoIcons.bolt,
+    'llamafile': CupertinoIcons.doc,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.rex;
+    return Consumer<RexService>(
+      builder: (context, rex, _) {
+        final b = rex.llmBackend;
+        final type = b['type'] as String? ?? '';
+        final url = b['url'] as String? ?? '';
+        final apiFormat = b['apiFormat'] as String? ?? '';
+        final healthy = b['healthy'] as bool? ?? false;
+        final models = (b['models'] as List<dynamic>?)?.whereType<String>().toList() ?? <String>[];
+
+        return RexCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const RexSection(
+                title: 'LLM Backend',
+                icon: CupertinoIcons.layers,
+              ),
+              if (type.isEmpty)
+                const RexEmptyState(
+                  icon: CupertinoIcons.cube_box,
+                  title: 'Backend info unavailable',
+                  subtitle: 'Run rex backend to configure.',
+                )
+              else ...[
+                RexStatRow(
+                  label: 'Engine',
+                  value: type,
+                  icon: _backendIcons[type] ?? CupertinoIcons.cube_box,
+                  valueColor: healthy ? c.success : c.warning,
+                ),
+                RexStatRow(
+                  label: 'Status',
+                  value: healthy ? 'reachable' : 'unreachable',
+                  icon: healthy ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.exclamationmark_circle,
+                  valueColor: healthy ? c.success : c.error,
+                ),
+                if (url.isNotEmpty)
+                  RexStatRow(
+                    label: 'URL',
+                    value: url,
+                    icon: CupertinoIcons.link,
+                  ),
+                if (apiFormat.isNotEmpty)
+                  RexStatRow(
+                    label: 'API',
+                    value: '$apiFormat format',
+                    icon: CupertinoIcons.doc_text,
+                  ),
+                if (models.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Models (${models.length})',
+                    style: TextStyle(fontSize: 11, color: c.textTertiary),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: models.take(6).map<Widget>((m) => RexStatusChip(label: m, status: RexChipStatus.ok, small: true)).toList(),
+                  ),
+                  if (models.length > 6)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '+${models.length - 6} more',
+                        style: TextStyle(fontSize: 11, color: c.textTertiary),
+                      ),
+                    ),
+                ],
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

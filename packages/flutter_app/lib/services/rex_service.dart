@@ -2292,6 +2292,34 @@ $transcript
     }
   }
 
+  // ── LLM Backend ──────────────────────────────────────────────────────
+  Map<String, dynamic> _llmBackend = {};
+  Map<String, dynamic> get llmBackend => _llmBackend;
+
+  Future<void> loadLlmBackend() async {
+    try {
+      final out = await _runRexArgs(['backend', '--json'], timeout: 8);
+      final json = _extractJson(out);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic>) {
+          _llmBackend = parsed;
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<bool> switchLlmBackend(String type, String url) async {
+    try {
+      await _runRexArgs(['backend', 'switch', type, url], timeout: 10);
+      await loadLlmBackend();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Open a project directory in Claude Code via `rex launch --path=<path>`.
   /// Fire-and-forget — we don't await the Claude process.
   Future<void> launchProject(String projectPath) async {
