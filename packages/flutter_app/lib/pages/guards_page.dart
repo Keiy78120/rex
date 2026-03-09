@@ -238,7 +238,7 @@ class _GuardsPageState extends State<GuardsPage> {
                     else
                       GestureDetector(
                         onTap: () async {
-                          final ok = await rex.addGuardFromRegistry(name);
+                          await rex.addGuardFromRegistry(name);
                           if (mounted) {
                             setState(() {});
                           }

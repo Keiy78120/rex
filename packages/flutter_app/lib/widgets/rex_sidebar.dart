@@ -7,9 +7,6 @@ import '../theme.dart';
 
 typedef _NavItem = ({int index, IconData icon, String label});
 
-/// Group label shown before the first item of each section.
-/// null = no header (first group).
-typedef _Group = ({int startIndex, String? label});
 
 // Items in logical order — index matches IndexedStack in main.dart.
 const List<_NavItem> _items = [
@@ -311,7 +308,7 @@ class _SidebarFooter extends StatelessWidget {
             ? '${(burnRatePerHour / 1000).toStringAsFixed(1)}k/h'
             : '${burnRatePerHour.round()}/h';
 
-        Color _pctColor(double pct) {
+        Color pctColor(double pct) {
           if (pct >= 90) return context.rex.error;
           if (pct >= 70) return context.rex.warning;
           return context.rex.success;
@@ -352,7 +349,7 @@ class _SidebarFooter extends StatelessWidget {
                         width: 5,
                         height: 5,
                         decoration: BoxDecoration(
-                          color: _pctColor(contextPct),
+                          color: pctColor(contextPct),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -368,7 +365,7 @@ class _SidebarFooter extends StatelessWidget {
                         width: 5,
                         height: 5,
                         decoration: BoxDecoration(
-                          color: _pctColor(dailyPct),
+                          color: pctColor(dailyPct),
                           shape: BoxShape.circle,
                         ),
                       ),
