@@ -104,12 +104,23 @@ async function main() {
         log.info('Auto-fix complete, running doctor')
         console.log(`\n${COLORS.green}Auto-fix complete.${COLORS.reset} Running doctor...\n`)
       }
+      if (process.argv.includes('--platform')) {
+        const { getPlatformReport, printPlatformDetail } = await import('./platform-warnings.js')
+        printPlatformDetail(getPlatformReport())
+        break
+      }
       const report = await runAllChecks()
       console.log(formatReport(report))
       // Memory integrity check
       try {
         const { showMemoryHealth } = await import('./memory-check.js')
         showMemoryHealth()
+      } catch {}
+      // Platform limitations summary
+      try {
+        const { getPlatformReport, printPlatformSummary } = await import('./platform-warnings.js')
+        const pr = getPlatformReport()
+        if (pr.warnings.length > 0) printPlatformSummary(pr)
       } catch {}
       process.exit(report.status === 'broken' ? 1 : 0)
       break
