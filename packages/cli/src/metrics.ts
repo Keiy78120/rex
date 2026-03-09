@@ -1,3 +1,4 @@
+/** @module HQ */
 /**
  * REX Metrics — unified monitoring snapshot
  * Aggregates: burn rate, memory health, fleet nodes, ingest queue, system

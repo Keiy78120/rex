@@ -1,3 +1,4 @@
+/** @module CLI */
 import { runAllChecks } from '@rex/core'
 import type { HealthReport, CheckGroup } from '@rex/core'
 import { existsSync, readFileSync } from 'node:fs'

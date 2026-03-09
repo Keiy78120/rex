@@ -1,3 +1,4 @@
+/** @module OPTIMIZE */
 import { execSync } from 'node:child_process'
 import { existsSync, appendFileSync } from 'node:fs'
 import { platform, totalmem, homedir } from 'node:os'
