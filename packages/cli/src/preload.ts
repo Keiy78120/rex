@@ -3,6 +3,7 @@ import Database from 'better-sqlite3'
 import * as sqliteVec from 'sqlite-vec'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { MEMORY_DB_PATH, SNAPSHOTS_DIR } from './paths.js'
 import { findProject } from './projects.js'
 import { createLogger } from './logger.js'
@@ -189,6 +190,19 @@ export async function preload(cwd: string): Promise<string> {
           if (latest.errors?.length) snapParts.push(`Errors: ${latest.errors[0].slice(0, 80)}`)
           sections.push(snapParts.join(' | '))
         }
+      }
+    }
+  } catch { /* non-blocking */ }
+
+  // 8. BLOC 4.1 — Guard status line: "REX active — N guards active"
+  try {
+    const guardsDir = join(homedir(), '.claude', 'rex-guards')
+    if (existsSync(guardsDir)) {
+      const guardFiles = readdirSync(guardsDir).filter(f => f.endsWith('.sh'))
+      const guardCount = guardFiles.length
+      if (guardCount > 0) {
+        const memDate = project?.lastActive ? new Date(project.lastActive).toLocaleDateString() : 'today'
+        sections.push(`REX active — memory loaded from ${memDate} — ${guardCount} guard${guardCount !== 1 ? 's' : ''} active`)
       }
     }
   } catch { /* non-blocking */ }
