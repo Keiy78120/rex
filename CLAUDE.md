@@ -790,17 +790,35 @@ rex doctor --fix     # Auto-fix then health check
 | **FilesPage wired** — `FilesPage()` ajoutée à l'IndexedStack à l'index 22 + item `Files` (doc_text_fill) dans la sidebar ADMIN group | `main.dart`, `rex_sidebar.dart` |
 | Flutter build ✅ zero errors, CLI build ✅ zero errors | — |
 
+### ✅ Terminé (session 2026-03-15 — Phase 4: agent runtime + routing policy + training)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **tool-adapter.ts** : 9 REX tools en format Ollama/OpenAI natif (memory search, git, files, status, projects, web search) | `packages/cli/src/tool-adapter.ts` |
+| **agent-runtime.ts** : loop universel — intent detection → model routing → tool injection → tool-calling loop → response | `packages/cli/src/agent-runtime.ts` |
+| **orchestration-policy.ts** : 6 tiers (script/local/free-tier/sonnet/opus/codex), zero LLM, max 3 Opus/day, `rex route --explain` | `packages/cli/src/orchestration-policy.ts` |
+| **lang-graph.ts** : wrapper @langchain/langgraph + 3 templates (script-helper, code-review, monitor-cycle), `rex graph run/list/status` | `packages/cli/src/lang-graph.ts` |
+| **training.ts** : pipeline fine-tuning — collect/export/run/status, mlx-lm (Apple Silicon) + OpenAI gpt-4o-mini jobs | `packages/cli/src/training.ts` |
+| **embed.ts** : backend fastembed (ONNX, Apache 2.0) via REX_EMBED_BACKEND=fastembed | `packages/memory/src/embed.ts` |
+| **gateway.ts** : streamAgent() remplace dispatch manuel (modèle choisi dynamiquement) | `packages/cli/src/gateway.ts` |
+| **hub.ts** : POST /api/chat route via runAgent() | `packages/cli/src/hub.ts` |
+| **index.ts** : `rex ask`, `rex route --explain`, `rex graph`, `rex train` | `packages/cli/src/index.ts` |
+| **training_page.dart** : Dataset/Jobs/Routing tabs + routing simulator UI | `packages/flutter_app/lib/pages/training_page.dart` |
+| **rex_service.dart** : training state, loadTrainingStats/Jobs, exportTrainingData, startTraining, getRoutingDecision | `packages/flutter_app/lib/services/rex_service.dart` |
+| Sidebar: Training item à l'index 23 (groupe ADMIN) | `main.dart`, `rex_sidebar.dart` |
+| Flutter build ✅ zero errors, CLI build ✅ zero errors | — |
+
 ### 🔄 En cours / A faire
 
-**ALL PHASES DONE (Phase 2 ✅, Phase 3 ✅, Phase 3 extras ✅). Phase 4 = LATER**:
-- Commander (Hub) Flutter page wired — Phase 3 complete
-- External ingest sources (Obsidian, WhatsApp) — done
-- Auto-PR + branch protection CLI — done
-- Skill scanner (security) — done
-- Cross-platform Flutter (Windows/Linux) — Phase 4 later
-- LangGraph spike — Phase 4 later
-- Training pipeline — Phase 4 later
+**Phase 4 ~80% DONE**:
+- ✅ LangGraph spike — done (@langchain/langgraph@1.2.1)
+- ✅ Training pipeline — done (mlx-lm + OpenAI fine-tune)
+- ✅ Universal agent loop (tool-calling pour tous les modèles locaux)
+- ✅ Routing policy (6 tiers, zero LLM, `rex route --explain`)
+- Cross-platform Flutter (Windows/Linux) — Phase 4 later (workaround: hub web dashboard)
 - Tunnels + fallback (SSH/RustDesk) — Phase 4 later
+- @libsql/client sync (Turso replica) — when VPS configured
+- Fine-tune avec fleet: architecture définie, activation quand >2 nodes disponibles
 
 ---
 
