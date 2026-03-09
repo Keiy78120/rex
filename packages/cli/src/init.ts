@@ -764,6 +764,30 @@ fi
       desc: 'Telegram notification on task completion',
       matcher: undefined,
     },
+    {
+      file: 'force-push-guard.sh',
+      event: 'PreToolUse',
+      desc: 'Block git push --force on main/master',
+      matcher: 'Bash',
+    },
+    {
+      file: 'large-file-guard.sh',
+      event: 'PreToolUse',
+      desc: 'Block writing files > 10MB',
+      matcher: 'Write',
+    },
+    {
+      file: 'env-commit-guard.sh',
+      event: 'PreToolUse',
+      desc: 'Block staging .env files in git commits',
+      matcher: 'Bash',
+    },
+    {
+      file: 'todo-limit-guard.sh',
+      event: 'PostToolUse',
+      desc: 'Warn when TODO/FIXME count exceeds threshold',
+      matcher: 'Edit|Write',
+    },
   ]
 
   let guardsInstalled = 0

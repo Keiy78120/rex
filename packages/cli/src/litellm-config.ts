@@ -11,7 +11,7 @@
 
 import { writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { homedir, hostname } from 'node:os'
 import { FREE_TIER_PROVIDERS, getApiKey } from './free-tiers.js'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
@@ -79,7 +79,6 @@ function getProxyKey(): string {
     } catch {}
   }
   // Generate stable key from hostname
-  const { hostname } = require('node:os')
   return `rex-${hostname().split('.')[0]}-proxy`
 }
 

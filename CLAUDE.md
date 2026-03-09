@@ -820,13 +820,32 @@ rex doctor --fix     # Auto-fix then health check
 | living-rex-vision.md updated: BM25, iMessage, guards v3, fine-tuning → ✅ | `docs/plans/living-rex-vision.md` |
 | CLI build ✅ zero errors, memory TS check ✅ zero errors | — |
 
+### ✅ Terminé (session 2026-03-XX — Audit système + ESM fixes + Guards + Docs)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| Fix ESM require() → imports top-level (4 fichiers) | `gateway.ts`, `litellm-config.ts`, `rex-mcp-server.ts`, `workflow.ts` |
+| 4 nouveaux guards wired dans rex install | `init.ts`: force-push, large-file, env-commit, todo-limit |
+| Audit complet système (50+ composants vérifiés) | `docs/audit-complet-2026-03.md` |
+| Guide installation VPS hub-vps | `docs/vps-install.md` |
+| Guide migration mémoire Garry → REX | `docs/garry-migration.md` |
+| Confirmation : rex train, rex debt, stuck ingest, security scanner blocking tous ✅ | `index.ts`, `daemon.ts`, `mcp-discover.ts` |
+| Confirmation : tous les 50+ CLI commands appelés par Flutter existent | `index.ts` vérifié |
+
 ### 🔄 En cours / A faire
 
 **Phase 4 COMPLETE (cross-platform + LangGraph deferred)**:
 - Cross-platform Flutter (Windows/Linux) — explicitly deferred to Phase 4 later
 - Tunnels + fallback (SSH/RustDesk) — explicitly deferred
 - @libsql/client sync (Turso replica) — when VPS configured
-- Fine-tune avec fleet: activation quand >2 nodes disponibles
+
+**Prochaines priorités opérationnelles** :
+- [ ] Installer REX sur VPS (`docs/vps-install.md`)
+- [ ] Migrer mémoire Garry → REX (`docs/garry-migration.md`)
+- [ ] HTTP server timeout hub (`hub.ts` — `server.setTimeout(30000)`)
+- [ ] Account pool wired dans orchestrator (`account-pool.ts` → `orchestrator.ts`)
+- [ ] FTS auto-rebuild si drift (appel `rebuildFtsIndex()` dans doctor)
+- [ ] `rex models setup` (auto-pull Ollama models selon RAM disponible)
 
 ---
 

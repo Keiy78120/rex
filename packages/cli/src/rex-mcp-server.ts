@@ -21,6 +21,7 @@
  */
 
 import { createInterface } from 'node:readline'
+import { execSync } from 'node:child_process'
 import { createLogger } from './logger.js'
 
 const log = createLogger('TOOLS:mcp-server')
@@ -338,7 +339,6 @@ export async function startMcpServer(): Promise<void> {
 export function getMcpServerConfig(): Record<string, unknown> {
   const rexBin = process.argv[0] === 'node' ? process.argv[1] : process.execPath
   // Find rex binary
-  const { execSync } = require('node:child_process')
   let rexPath = ''
   try { rexPath = execSync('which rex', { encoding: 'utf-8', timeout: 3000 }).trim() } catch {}
   if (!rexPath) rexPath = rexBin

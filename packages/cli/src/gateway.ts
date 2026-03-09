@@ -2,7 +2,7 @@
 import { homedir, hostname as getHostname } from 'node:os'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { join, basename, extname } from 'node:path'
-import { execSync, execFileSync } from 'node:child_process'
+import { execSync, execFileSync, spawn } from 'node:child_process'
 import { appendEvent, getQueueStats, getUnacked, ackEvent } from './sync-queue.js'
 import { discoverHub } from './node.js'
 import { routeTask } from './node-mesh.js'
@@ -1232,7 +1232,7 @@ async function runClaudeAsync(
   timeoutMs: number,
   onProgress?: (frameIdx: number) => Promise<void>
 ): Promise<{ stdout: string; stderr: string }> {
-  const { spawn } = require('node:child_process')
+  // spawn imported at top-level ESM import
 
   // Inject model flag if set in state
   const modelArgs = state.claudeModel ? ['--model', state.claudeModel, ...args] : args

@@ -179,7 +179,6 @@ export function workflowDeploy(env: 'staging' | 'prod'): void {
 
   // 2. Prod confirmation
   if (env === 'prod') {
-    const readline = require('readline').createInterface({ input: process.stdin, output: process.stdout })
     const answer: string = execSync(
       'read -p "Deploy to PRODUCTION? (yes/no): " ans && echo $ans',
       { encoding: 'utf-8', shell: '/bin/bash', timeout: 30_000 }
