@@ -1,46 +1,52 @@
 ## Summary
 
-<!-- What does this PR do? 1-3 sentences. -->
-
-## Changes
+<!--
+What does this PR do? Use bullet points.
+-->
 
 -
 -
 
-## Area
+## Type
 
-- [ ] CLI
-- [ ] Daemon
-- [ ] Memory
-- [ ] Provider routing
-- [ ] Gateway
-- [ ] Flutter app
-- [ ] Hub API
-- [ ] Skills
-- [ ] Guards
-- [ ] Docs / Config
+- [ ] `feat` — new feature
+- [ ] `fix` — bug fix
+- [ ] `refactor` — code improvement, no behavior change
+- [ ] `docs` — documentation only
+- [ ] `chore` — tooling, deps, config
 
-## Verification
+## Breaking Changes
 
-<!-- Show actual output — not just "it works" -->
+- [ ] Yes (describe below)
+- [ ] No
 
-**Build:**
-```
-# paste: pnpm build output
-```
+<!--
+If yes, describe what breaks and the migration path:
+-->
 
-**Flutter build (if applicable):**
-```
-# paste: flutter build macos --debug last lines
-```
+## Test Plan
 
-**Manual test:**
-<!-- Command run + observed result -->
+<!--
+How was this tested? Paste actual output, not just "it works".
+-->
+
+- [ ] `pnpm build` passes:
+  ```
+
+  ```
+- [ ] `flutter build macos --debug` passes (if Flutter changed)
+- [ ] Manual test:
+  ```
+  # command run
+  # observed output
+  ```
 
 ## Checklist
 
-- [ ] `pnpm build` passes (zero errors)
-- [ ] No hardcoded paths (use `paths.ts`)
-- [ ] No `console.log` (use `createLogger`)
-- [ ] No `any` without justification
-- [ ] No secrets committed
+- [ ] `pnpm build` passes with zero TypeScript errors
+- [ ] No `console.log` — uses `createLogger` from `logger.ts`
+- [ ] No hardcoded paths — uses `paths.ts`
+- [ ] No `any` types without inline justification
+- [ ] No `.env` or secrets committed
+- [ ] No `Co-Authored-By` lines in commit messages
+- [ ] `CLAUDE.md` "En cours / Terminé" section updated (if significant change)

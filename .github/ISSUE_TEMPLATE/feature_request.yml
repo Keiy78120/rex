@@ -1,0 +1,60 @@
+name: Feature Request
+description: Suggest a new feature or improvement for REX
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [roadmap](https://github.com/Keiy78120/rex/blob/main/docs/plans/action.md) before submitting — your idea may already be planned.
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use Case
+      description: What problem does this solve? What is painful today?
+      placeholder: "As a developer, I want to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How should it work? Be specific — include CLI commands, UI sketches, or API shapes if applicable.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: area
+    attributes:
+      label: Area
+      options:
+        - label: CLI command
+        - label: Daemon / background service
+        - label: Memory / semantic search
+        - label: Provider / free tier routing
+        - label: Gateway (Telegram commands)
+        - label: Flutter app page
+        - label: Hub API endpoint
+        - label: Skills
+        - label: Guards / hooks
+        - label: VPS / headless deployment
+        - label: Other
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Other approaches you've thought about, including workarounds you use today.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - "Low — nice to have"
+        - "Medium — improves daily workflow"
+        - "High — blocks my workflow"
+    validations:
+      required: true
