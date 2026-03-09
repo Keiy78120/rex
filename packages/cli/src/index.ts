@@ -3191,6 +3191,52 @@ async function main() {
       break
     }
 
+    // ── Secrets Vault ───────────────────────────────────────────────────────
+    case 'secrets:list': {
+      const { printSecrets } = await import('./secrets.js')
+      printSecrets()
+      break
+    }
+
+    case 'secrets:set': {
+      const arg = process.argv[3]
+      if (!arg || !arg.includes('=')) {
+        console.error('Usage: rex secrets:set KEY=VALUE')
+        process.exit(1)
+      }
+      const idx = arg.indexOf('=')
+      const key = arg.slice(0, idx)
+      const value = arg.slice(idx + 1)
+      const { setSecret } = await import('./secrets.js')
+      setSecret(key, value)
+      console.log(`\x1b[32m✓\x1b[0m Secret '${key}' saved to encrypted vault`)
+      break
+    }
+
+    case 'secrets:delete': {
+      const key = process.argv[3]
+      if (!key) { console.error('Usage: rex secrets:delete KEY'); process.exit(1) }
+      const { deleteSecret } = await import('./secrets.js')
+      const deleted = deleteSecret(key)
+      if (deleted) console.log(`\x1b[32m✓\x1b[0m Secret '${key}' deleted`)
+      else console.log(`\x1b[33m!\x1b[0m Secret '${key}' not found`)
+      break
+    }
+
+    case 'secrets:rotate': {
+      const { rotateSecrets } = await import('./secrets.js')
+      const { rotated, newKeyPath } = rotateSecrets()
+      console.log(`\x1b[32m✓\x1b[0m Rotated ${rotated} secret(s). New key: ${newKeyPath}`)
+      break
+    }
+
+    case 'secrets:export': {
+      const { importFromSettings } = await import('./secrets.js')
+      const { imported, skipped } = importFromSettings()
+      console.log(`\x1b[32m✓\x1b[0m Imported ${imported} secret(s) from settings.json (${skipped} skipped)`)
+      break
+    }
+
     // ── Project Init ────────────────────────────────────────────────────────
     case 'project': {
       const sub = process.argv[3]

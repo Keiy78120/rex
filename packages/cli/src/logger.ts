@@ -1,5 +1,5 @@
 /** @module CORE */
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { DAEMON_LOG_PATH, ensureRexDirs } from './paths.js'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
@@ -48,14 +48,22 @@ export function createLogger(source: string) {
   }
 }
 
-/** Rotate log file if it exceeds maxLines. Keeps the last keepLines. */
-export function rotateLog(maxLines = 10000, keepLines = 5000): void {
+const MAX_LOG_BYTES = 100 * 1024 * 1024  // 100 MB hard cap
+const KEEP_LOG_BYTES = 20 * 1024 * 1024   // keep last 20 MB after rotation
+
+/**
+ * Rotate log file when it exceeds maxBytes (default 100 MB).
+ * Keeps the last keepBytes of content, trimmed to the first full line.
+ * Old content is dropped in-place (not archived) to bound disk usage.
+ */
+export function rotateLog(maxBytes = MAX_LOG_BYTES, keepBytes = KEEP_LOG_BYTES): void {
   if (!existsSync(DAEMON_LOG_PATH)) return
   try {
-    const content = readFileSync(DAEMON_LOG_PATH, 'utf-8')
-    const lines = content.split('\n')
-    if (lines.length > maxLines) {
-      writeFileSync(DAEMON_LOG_PATH, lines.slice(-keepLines).join('\n'))
-    }
+    const size = statSync(DAEMON_LOG_PATH).size
+    if (size <= maxBytes) return
+    const content = readFileSync(DAEMON_LOG_PATH)
+    const kept = content.slice(content.length - keepBytes)
+    const nl = kept.indexOf(10)  // '\n' byte
+    writeFileSync(DAEMON_LOG_PATH, nl >= 0 ? kept.slice(nl + 1) : kept)
   } catch {}
 }
