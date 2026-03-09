@@ -13,6 +13,7 @@ import { appendEvent as journalAppend, purgeOldJournalEvents } from './event-jou
 import { cacheClean } from './semantic-cache.js'
 import { getRoutableProviders, pingAllProviders } from './free-tiers.js'
 import { buildLocalNodeInfo, registerWithHub, autoDiscoverHubs, persistDiscoveredHub } from './node-mesh.js'
+import { detectSignals, isUnderPressure } from './signal-detector.js'
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 const log = createLogger('daemon')
@@ -252,6 +253,12 @@ async function ingestCycle(): Promise<void> {
   const cpu = cpuLoadPercent()
 
   log.info(`Ingest cycle start — pending=${pending}, ollama=${ollamaUp ? `${latencyMs}ms` : 'down'}, cpu=${cpu}%`)
+
+  // System pressure check: skip heavy ops if RAM or disk is critical
+  if (isUnderPressure()) {
+    log.warn('System under pressure (RAM/disk critical) — skipping ingest cycle')
+    return
+  }
 
   // CPU throttle: skip heavy ops if system is overloaded
   if (cpu >= 80) {

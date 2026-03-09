@@ -820,8 +820,8 @@ async function main() {
         case 'register': {
           const hubUrl = process.argv[4] || undefined
           const ok = await registerWithHub(hubUrl)
-          if (ok) console.log(`${COLORS.green}✓${COLORS.reset} Registered with hub`)
-          else console.log(`${COLORS.yellow}!${COLORS.reset} No hub found — running in solo mode`)
+          if (ok) console.log(`${COLORS.green}✓${COLORS.reset} Registered with Commander`)
+          else console.log(`${COLORS.yellow}!${COLORS.reset} No Commander found — running in solo mode`)
           break
         }
         case 'status':
@@ -865,7 +865,7 @@ async function main() {
       const host = process.argv[3]
       if (!host) {
         console.log('Usage: rex tunnel <user@host> [--port=7420] [--remote-port=7420]')
-        console.log('       Exposes local REX hub to a remote host via SSH reverse tunnel.')
+        console.log('       Exposes local REX Commander to a remote host via SSH reverse tunnel.')
         process.exit(1)
       }
       const portArg = process.argv.find(a => a.startsWith('--port='))
@@ -1155,6 +1155,19 @@ async function main() {
         } else {
           console.log(`No runbook suggestions for current context.\nUsage: rex reflect <session-log-path>`)
         }
+      }
+      break
+    }
+
+    case 'signals': {
+      // rex signals [--json] — show system-level signals (hardware, services, dev, providers)
+      const jsonFlag = process.argv.includes('--json')
+      const { detectSignals, printSignals } = await import('./signal-detector.js')
+      const signals = detectSignals(true)
+      if (jsonFlag) {
+        console.log(JSON.stringify(signals, null, 2))
+      } else {
+        printSignals(signals)
       }
       break
     }
@@ -2084,6 +2097,8 @@ ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex intent [path]    Detect project intent from git signals (new/feature/fix/refactor)
   rex intent --debug   Show raw signals used for detection
   rex intent --json    JSON output
+  rex signals          Show system-level signals (hardware, services, dev, providers)
+  rex signals --json   JSON output
 
 ${COLORS.bold}Agent Factory (B2B):${COLORS.reset}
   rex create-client --name "..." --trade "plombier" [--plan=pro] [--phone=...] [--email=...] [--dry-run]

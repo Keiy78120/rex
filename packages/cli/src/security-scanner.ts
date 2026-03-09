@@ -16,10 +16,10 @@
  */
 
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { createLogger } from './logger.js'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 
@@ -227,10 +227,7 @@ function tryExternalMcpScan(content: string): ScanFinding[] {
     if (!hasMcpScan) return []
 
     // Write content to a temp file for mcp-scan stdin
-    const { writeFileSync, unlinkSync } = require('node:fs') as typeof import('node:fs')
-    const { join: pathJoin } = require('node:path') as typeof import('node:path')
-    const { tmpdir } = require('node:os') as typeof import('node:os')
-    const tmpPath = pathJoin(tmpdir(), `rex-mcp-scan-${Date.now()}.json`)
+    const tmpPath = join(tmpdir(), `rex-mcp-scan-${Date.now()}.json`)
     writeFileSync(tmpPath, content)
 
     const out = execSync(`uvx mcp-scan@latest scan --quiet ${tmpPath}`, {
