@@ -118,20 +118,67 @@ Each machine in the Fleet plays a typed role:
 
 ## 10 Modules
 
-REX is divided into 10 modules that serve as both **UI navigation menus** in the Flutter app and **internal semantic namespaces** for task routing.
+REX is divided into 10 modules. Each module is both a **navigation page** in the Flutter app and a **semantic namespace** — logs, scripts, and internal LLM calls are all prefixed with the module name (`[FLEET]`, `[MEMORY]`, etc.) so any LLM or script instantly understands context without reading the whole codebase.
 
-| Module | Role |
-|--------|------|
-| **HQ** | Health dashboard — system status, guards, burn rate, quick actions |
-| **TOOLS** | MCP marketplace, tool registry, enable/disable integrations |
-| **CURIOUS** | Proactive discovery — new Ollama models, GitHub trending, HN AI filter |
-| **AGENTS** | Autonomous agent management — profiles, teams, orchestrator chat |
-| **BUDGET** | Cost tracking, provider usage, free tier quotas, burn rate |
-| **FLEET** | Node topology, Commander status, Tailscale mesh, sync queue |
-| **MEMORY** | Session indexing, semantic search, categories, consolidation |
-| **GATEWAY** | Comms / Telegram control surface status and logs |
-| **PROJETS** | Project scanner — stack detection, open in Claude, recent activity |
-| **OPTIMIZE** | CLAUDE.md analysis, rule suggestions, self-improvement |
+### REX HQ
+
+The dashboard. Aggregates health, guards, budget burn rate, active agents, memory stats, and system alerts in a single read. Zero LLM — all reads run in parallel via `Promise.all`.
+
+`dashboard.ts` · `event-journal.ts`
+
+### REX FLEET
+
+Fleet management. All connected machines register as typed **FleetNodes** (Code Specialist, Inference Specialist, Storage Specialist, Background Specialist). The Commander routes tasks to the right node based on capabilities, latency, and availability. Supports 1 machine, 2-5, or 30+.
+
+`node-mesh.ts` · `hub.ts` · `daemon.ts`
+
+### REX MEMORY
+
+The knowledge base. Sessions from Claude Code are ingested, chunked, embedded (nomic-embed-text via Ollama), and stored in SQLite. Searchable by semantic query. Failed sessions become error patterns. Successful ones become runbooks. Injected at session start (200-token budget).
+
+`packages/memory/` · `ingest.ts` · `semantic-cache.ts` · `sync-queue.ts`
+
+### REX BUDGET
+
+Cost discipline. Every LLM call follows a relay chain: cache → script/CLI → Ollama local → free tier API (Groq, Cerebras, Together, Mistral, OpenRouter, DeepSeek) → subscription → pay. Tracks burn rate, context %, daily quota. Alerts before hitting limits.
+
+`orchestrator.ts` · `burn-rate.ts` · `free-tiers.ts` · `litellm.ts`
+
+### REX AGENTS
+
+Autonomous agent management. Launch Claude Code or Codex with typed profiles (feature, bug-fix, refactor, infra, docs). Each agent runs in an isolated `CLAUDE_CONFIG_DIR`. Multi-account rotation (account-pool.ts) handles rate limits. Orchestrator chat in the Flutter app.
+
+`agents.ts` · `rex-launcher.ts` · `account-pool.ts`
+
+### REX GATEWAY
+
+Comms interface. The Telegram bot is the primary remote control surface. Routes messages through the Fleet (mesh routing for LLM tasks, direct for memory queries). Streams responses progressively. Falls back to spool-and-replay when the Commander is unreachable.
+
+`gateway.ts` (CLI alias: `rex comms`)
+
+### REX TOOLS
+
+MCP marketplace and tool registry. Discover, scan, install, and enable/disable MCP servers from a curated catalog (awesome-mcp-servers, Smithery). Every install goes through a security scanner before it runs. Lint-loop for iterative code correction.
+
+`mcp-discover.ts` · `security-scanner.ts` · `lint-loop.ts` · `rex-mcp-server.ts`
+
+### REX CURIOUS
+
+Proactive discovery. Runs in the background without interrupting you. Scans Ollama library, GitHub trending AI repos, Hacker News AI filter. Surfaces new models, tools, and repos worth watching. Results cached, surfaced in the app with a NEW badge.
+
+`curious.ts` · `signal-detector.ts` · `dev-monitor.ts`
+
+### REX PROJETS
+
+Project scanner and setup. Detects all git repos in your dev directory, identifies the stack (TS, Flutter, PHP, etc.), tracks recent activity. Intent detection reads git signals (branch name, staged files, recent commits) to pick the right Claude Code profile before launch.
+
+`projects.ts` · `project-intent.ts` · `context-loader.ts`
+
+### REX OPTIMIZE
+
+Self-improvement. Analyzes your `CLAUDE.md` for redundancy and gaps. Extracts lessons from sessions, promotes patterns into rules. Prunes stale memories, rotates logs. Setup wizard auto-detects everything available (Ollama, API keys, CLIs, Tailscale, hardware) without asking.
+
+`reflector.ts` · `self-improve.ts` · `setup-wizard.ts` · `quick-setup.ts`
 
 ---
 
