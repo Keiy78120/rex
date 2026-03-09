@@ -184,6 +184,10 @@ async function main() {
 
     case 'install': {
       const { install } = await import('./install.js')
+      // --hub shortcut → force hub-vps profile
+      if (process.argv.includes('--hub') && !process.argv.some(a => a.startsWith('--profile='))) {
+        process.argv.push('--profile=hub-vps')
+      }
       await install()
       break
     }
@@ -2010,6 +2014,7 @@ ${COLORS.bold}Launch:${COLORS.reset}
 
 ${COLORS.bold}Commands:${COLORS.reset}
   rex install         One-command setup (init + setup + audit)
+  rex install --hub   One-command VPS hub setup (hub-vps profile)
   rex init            Setup REX (guards, hooks, MCP, startup)
   rex init --docker   Generate docker-compose.local.yml + .env.docker for VPS deployment
   rex audit           Run integration audit checks

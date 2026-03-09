@@ -286,9 +286,12 @@ WantedBy=multi-user.target`
       break
 
     case 'hub-hint':
-      console.log(`\n  ${COLORS.bold}Step: Hub API${COLORS.reset}`)
-      info('Hub API is not yet implemented — tracked in CLAUDE.md roadmap')
-      info('The daemon provides health checks, ingest, and maintenance in the meantime')
+      console.log(`\n  ${COLORS.bold}Step: Hub API (Commander)${COLORS.reset}`)
+      info('Start the Hub Commander: rex hub start')
+      info('Generate a secure token: rex hub token')
+      info('Check status: rex hub status --json')
+      info('For VPS: rex vps deploy <host> to provision via SSH')
+      info('For Docker: rex init --docker to generate docker-compose files')
       break
 
     case 'gpu-hint':
