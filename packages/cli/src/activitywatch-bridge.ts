@@ -117,6 +117,24 @@ export async function getTopApps(hours = 8, limit = 10): Promise<AppUsage[]> {
   return usage.slice(0, limit)
 }
 
+/**
+ * Returns the number of minutes the user has been AFK (idle) according to
+ * the aw-watcher-afk bucket. Returns 0 if ActivityWatch is not available.
+ */
+export async function getAfkIdleMinutes(): Promise<number> {
+  const buckets = await awFetch<Record<string, unknown>>('/buckets')
+  if (!buckets) return 0
+  const afkKey = Object.keys(buckets).find(k => k.includes('afk'))
+  if (!afkKey) return 0
+  const events = await awFetch<Array<{ data?: { status?: string }; duration?: number }>>(
+    `/buckets/${encodeURIComponent(afkKey)}/events?limit=1`
+  )
+  if (!events || !events[0]) return 0
+  const last = events[0]
+  if (last.data?.status !== 'afk') return 0
+  return Math.round((last.duration ?? 0) / 60)
+}
+
 export async function getProductivitySnapshot(hours = 8): Promise<ProductivitySnapshot> {
   const usage = await getAppUsage(hours)
   let devSec = 0, browserSec = 0, commSec = 0, totalSec = 0

@@ -17,6 +17,7 @@ import { join } from 'node:path'
 import { execSync } from 'node:child_process'
 import { REX_DIR, DAEMON_LOG_PATH } from './paths.js'
 import { createLogger } from './logger.js'
+import { getAfkIdleMinutes } from './activitywatch-bridge.js'
 
 const log = createLogger('HQ:user-cycles')
 
@@ -163,30 +164,6 @@ export function computeSleepScore(inputs: ScoreInputs): number {
   )
 }
 
-// ── Activity watch idle fetch ─────────────────────────────────────────────────
-
-async function getActivityWatchIdleMinutes(): Promise<number> {
-  try {
-    const res = await fetch('http://localhost:5600/api/0/buckets', {
-      signal: AbortSignal.timeout(2000),
-    })
-    if (!res.ok) return 0
-    const buckets = await res.json() as Record<string, unknown>
-    // Find AFK bucket
-    const afkKey = Object.keys(buckets).find(k => k.includes('afk'))
-    if (!afkKey) return 0
-    const eventRes = await fetch(
-      `http://localhost:5600/api/0/buckets/${afkKey}/events?limit=1`,
-      { signal: AbortSignal.timeout(2000) }
-    )
-    if (!eventRes.ok) return 0
-    const events = await eventRes.json() as Array<{ data?: { status?: string }; duration?: number }>
-    const last = events[0]
-    if (!last?.data?.status || last.data.status !== 'afk') return 0
-    return Math.round((last.duration ?? 0) / 60)
-  } catch { return 0 }
-}
-
 // ── Historical pattern: are we usually sleeping at this hour? ─────────────────
 
 function getHistoricalSleepPattern(): number {
@@ -229,7 +206,7 @@ export async function detectUserCycle(): Promise<CycleSnapshot> {
 
   // Gather signals in parallel
   const [idleMinutes, noMessageSinceMinutes] = await Promise.all([
-    getActivityWatchIdleMinutes(),
+    getAfkIdleMinutes(),
     Promise.resolve(getNoTelegramMinutes()),
   ])
 
