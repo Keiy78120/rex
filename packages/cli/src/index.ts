@@ -188,6 +188,18 @@ async function main() {
       break
     }
 
+    case 'git-hooks': {
+      const { installGitHooks } = await import('./init.js')
+      const dir = process.argv[3] || process.cwd()
+      const n = installGitHooks(dir)
+      if (n > 0) {
+        console.log(`${COLORS.green}✓${COLORS.reset} ${n} git hook(s) installed (post-commit, post-merge, pre-push)`)
+      } else {
+        console.log(`${COLORS.yellow}→${COLORS.reset} No hooks installed — not in a git repo or already present`)
+      }
+      break
+    }
+
     case 'install': {
       const { install } = await import('./install.js')
       // --hub shortcut → force hub-vps profile
@@ -1446,8 +1458,34 @@ async function main() {
 
     case 'guard': {
       const sub = process.argv[3]
-      const { listGuards, enableGuard, disableGuard, getGuardLogs } = await import('./guard-manager.js')
+      const { listGuards, enableGuard, disableGuard, getGuardLogs, addGuard, createGuard, listRegistry } = await import('./guard-manager.js')
+      const isJson = process.argv.includes('--json')
       switch (sub) {
+        case 'add': {
+          const name = process.argv[4]
+          if (!name) { console.log('Usage: rex guard add <name>\n       rex guard registry  (list available guards)'); break }
+          const result = addGuard(name)
+          console.log(result.ok ? `${COLORS.green}✓${COLORS.reset} ${result.message}` : `${COLORS.red}✗${COLORS.reset} ${result.message}`)
+          break
+        }
+        case 'create': {
+          const name = process.argv[4]
+          if (!name) { console.log('Usage: rex guard create <name>'); break }
+          const result = createGuard(name)
+          console.log(result.ok ? `${COLORS.green}✓${COLORS.reset} ${result.message}` : `${COLORS.red}✗${COLORS.reset} ${result.message}`)
+          if (result.ok && result.path) {
+            console.log(`\n  Edit your guard: ${COLORS.dim}${result.path}${COLORS.reset}`)
+            console.log(`  Then enable it:  ${COLORS.dim}rex guard enable ${name}${COLORS.reset}\n`)
+          }
+          break
+        }
+        case 'registry': {
+          const available = listRegistry()
+          console.log(`\n${COLORS.bold}Guard Registry${COLORS.reset} (${available.length} built-in guards)\n`)
+          for (const g of available) console.log(`  ${COLORS.dim}·${COLORS.reset} ${g}`)
+          console.log(`\n  Install: ${COLORS.dim}rex guard add <name>${COLORS.reset}\n`)
+          break
+        }
         case 'enable': {
           const name = process.argv[4]
           if (!name) { console.log('Usage: rex guard enable <name>'); break }
@@ -1488,6 +1526,10 @@ async function main() {
         case 'list':
         default: {
           const guards = listGuards()
+          if (isJson) {
+            process.stdout.write(JSON.stringify({ guards, total: guards.length }) + '\n')
+            break
+          }
           if (guards.length === 0) {
             console.log(`${COLORS.dim}No guards found in ~/.claude/rex-guards/${COLORS.reset}`)
           } else {
@@ -1648,6 +1690,19 @@ async function main() {
     case 'free-tiers': {
       const testMode = process.argv.includes('--test')
       const jsonMode = process.argv.includes('--json')
+      const providerArg = process.argv.find(a => a.startsWith('--provider='))?.split('=')[1]
+
+      // Single provider test — returns { provider, envKey, ok, latencyMs }
+      if (testMode && providerArg && jsonMode) {
+        const { FREE_TIER_PROVIDERS, validateProvider, getApiKey } = await import('./free-tiers.js')
+        const p = FREE_TIER_PROVIDERS.find(x => x.envKey === providerArg || x.name === providerArg)
+        if (!p) { console.log(JSON.stringify({ error: 'Provider not found' })); break }
+        const start = Date.now()
+        const ok = await validateProvider(p)
+        const latencyMs = Date.now() - start
+        console.log(JSON.stringify({ provider: p.name, envKey: p.envKey, ok, latencyMs }))
+        break
+      }
 
       if (jsonMode) {
         console.log(JSON.stringify(getProvidersSnapshot()))
@@ -2051,6 +2106,9 @@ ${COLORS.bold}Guards:${COLORS.reset}
   rex guard disable <name>    Disable a guard
   rex guard logs [name]       Show guard trigger logs
   rex guard analyze <cmd>     Analyze command safety (AST-level)
+  rex guard registry          List built-in guards available to install
+  rex guard add <name>        Install a guard from the built-in registry
+  rex guard create <name>     Create a custom guard from template
   rex guard-ast               Hook entry point (reads CLAUDE_TOOL_INPUT)
   rex doctor --lint-config    Lint CLAUDE.md, hooks, and MCP configs
 

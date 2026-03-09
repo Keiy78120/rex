@@ -1768,6 +1768,20 @@ $transcript
     return getProviderApiKey(envKey).isNotEmpty;
   }
 
+  /// Test connectivity for a single provider. Returns `true` if reachable.
+  Future<bool> testProviderApiKey(String envKey) async {
+    final out = await _runRexArgs(
+      ['free-tiers', '--test', '--provider=$envKey', '--json'],
+      timeout: 10,
+    );
+    try {
+      final j = jsonDecode(_extractJson(out)) as Map<String, dynamic>;
+      return j['ok'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> refreshMarketplace() async {
     isLoading = true;
     notifyListeners();
@@ -2640,6 +2654,77 @@ $transcript
       }
     } catch (_) {}
   }
+
+  // ── Guards ───────────────────────────────────────────────────────────────────
+
+  List<Map<String, dynamic>> _guards = [];
+  bool _isLoadingGuards = false;
+
+  List<Map<String, dynamic>> get guards => _guards;
+  bool get isLoadingGuards => _isLoadingGuards;
+
+  Future<void> loadGuards() async {
+    _isLoadingGuards = true;
+    notifyListeners();
+    try {
+      final result = await _runRexArgs(['guard', 'list', '--json']);
+      final parsed = jsonDecode(_extractJson(result));
+      if (parsed is Map<String, dynamic>) {
+        _guards = (parsed['guards'] as List? ?? []).whereType<Map<String, dynamic>>().toList();
+      }
+    } catch (_) {}
+    _isLoadingGuards = false;
+    notifyListeners();
+  }
+
+  Future<bool> toggleGuard(String name, {required bool enable}) async {
+    try {
+      final sub = enable ? 'enable' : 'disable';
+      await _runRexArgs(['guard', sub, name]);
+      await loadGuards();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> addGuardFromRegistry(String name) async {
+    try {
+      await _runRexArgs(['guard', 'add', name]);
+      await loadGuards();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<String>> loadGuardLogs({String? name}) async {
+    try {
+      final args = ['guard', 'logs'];
+      if (name != null) args.add(name);
+      final result = await _runRexArgs(args);
+      return result.split('\n').where((l) => l.trim().isNotEmpty).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<String>> loadGuardRegistry() async {
+    try {
+      final result = await _runRexArgs(['guard', 'registry']);
+      // Parse output: lines starting with "  · "
+      return result
+          .split('\n')
+          .where((l) => l.contains('·'))
+          .map((l) => l.replaceAll(RegExp(r'[·\s]'), '').trim())
+          .where((l) => l.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ── End Guards ────────────────────────────────────────────────────────────────
 
   @override
   void dispose() {

@@ -778,6 +778,8 @@ class _ApiKeyRowState extends State<_ApiKeyRow> {
   late TextEditingController _controller;
   bool _obscure = true;
   bool _editing = false;
+  bool _testing = false;
+  bool? _testResult;
 
   @override
   void initState() {
@@ -877,12 +879,34 @@ class _ApiKeyRowState extends State<_ApiKeyRow> {
             Expanded(
               child: Row(
                 children: [
-                  RexStatusChip(
-                    label: isSet ? 'Configured' : 'Not set',
-                    status: isSet ? RexChipStatus.ok : RexChipStatus.inactive,
-                    small: true,
-                  ),
+                  if (_testing)
+                    const CupertinoActivityIndicator(radius: 7)
+                  else if (_testResult != null)
+                    RexStatusChip(
+                      label: _testResult! ? 'Connected' : 'Failed',
+                      status: _testResult! ? RexChipStatus.ok : RexChipStatus.error,
+                      small: true,
+                    )
+                  else
+                    RexStatusChip(
+                      label: isSet ? 'Configured' : 'Not set',
+                      status: isSet ? RexChipStatus.ok : RexChipStatus.inactive,
+                      small: true,
+                    ),
                   const Spacer(),
+                  if (isSet && !_testing) ...[
+                    RexButton(
+                      label: 'Test',
+                      small: true,
+                      variant: RexButtonVariant.secondary,
+                      onPressed: () async {
+                        setState(() { _testing = true; _testResult = null; });
+                        final ok = await rex.testProviderApiKey(widget.envKey);
+                        if (mounted) setState(() { _testing = false; _testResult = ok; });
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                  ],
                   RexButton(
                     label: isSet ? 'Update' : 'Set',
                     small: true,
@@ -892,6 +916,7 @@ class _ApiKeyRowState extends State<_ApiKeyRow> {
                       setState(() {
                         _editing = true;
                         _obscure = true;
+                        _testResult = null;
                       });
                     },
                   ),

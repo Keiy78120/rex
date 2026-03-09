@@ -18,6 +18,7 @@ import 'pages/token_page.dart';
 import 'pages/observer_page.dart';
 import 'pages/workflow_page.dart';
 import 'pages/review_page.dart';
+import 'pages/guards_page.dart';
 import 'pages/projects_page.dart';
 import 'pages/sandbox_page.dart';
 import 'pages/curious_page.dart';
@@ -102,6 +103,7 @@ class _RexMainWindowState extends State<RexMainWindow> {
                   ObserverPage(),
                   WorkflowPage(),
                   ReviewPage(),
+                  GuardsPage(),
                   SandboxPage(),
                   ProjectsPage(),
                   CuriousPage(),

@@ -1,6 +1,7 @@
 /** @module TOOLS */
-import { readdirSync, readFileSync, chmodSync, renameSync, existsSync, statSync } from 'node:fs'
-import { join, basename } from 'node:path'
+import { readdirSync, readFileSync, writeFileSync, chmodSync, renameSync, existsSync, statSync, copyFileSync, mkdirSync } from 'node:fs'
+import { join, basename, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createLogger } from './logger.js'
 import { DAEMON_LOG_PATH } from './paths.js'
 
@@ -107,6 +108,105 @@ export function disableGuard(name: string): boolean {
   }
 
   return true
+}
+
+// ── Registry ─────────────────────────────────────────────────────────────────
+
+/** Directory of built-in guard templates (co-located with this source file). */
+function getRegistryDir(): string {
+  // Works both from source (src/guards/) and installed (dist/../src/guards/)
+  const thisFile = fileURLToPath(import.meta.url)
+  const candidates = [
+    join(dirname(thisFile), '..', 'src', 'guards'),   // installed: dist/ → src/guards/
+    join(dirname(thisFile), 'guards'),                  // source: src/guards/
+  ]
+  for (const c of candidates) {
+    if (existsSync(c)) return c
+  }
+  // Fallback: installed rex-claude package
+  return join(HOME, '.nvm', 'versions', 'node', process.version, 'lib', 'node_modules', 'rex-claude', 'src', 'guards')
+}
+
+export function listRegistry(): string[] {
+  const dir = getRegistryDir()
+  if (!existsSync(dir)) return []
+  return readdirSync(dir)
+    .filter(f => f.endsWith('.sh'))
+    .map(f => f.replace(/\.sh$/, ''))
+    .sort()
+}
+
+/** Copy a guard from the built-in registry to ~/.claude/rex-guards/ */
+export function addGuard(name: string): { ok: boolean; message: string } {
+  const registryDir = getRegistryDir()
+  const src = join(registryDir, `${name}.sh`)
+
+  if (!existsSync(src)) {
+    const available = listRegistry().join(', ')
+    return { ok: false, message: `Guard '${name}' not found in registry. Available: ${available}` }
+  }
+
+  if (!existsSync(GUARDS_DIR)) mkdirSync(GUARDS_DIR, { recursive: true })
+
+  const dest = join(GUARDS_DIR, `${name}.sh`)
+  copyFileSync(src, dest)
+  chmodSync(dest, 0o755)
+  log.info(`Guard added: ${name} → ${dest}`)
+  return { ok: true, message: `Guard '${name}' installed to ${dest}` }
+}
+
+const GUARD_TEMPLATE = (name: string) => `#!/bin/bash
+# REX Guard: ${name}
+# Hook: PostToolUse (matcher: Edit|Write)
+# Detects: <describe what this guard checks>
+# Action: WARNING
+
+INPUT="\${CLAUDE_TOOL_INPUT:-\$TOOL_INPUT}"
+
+# Only check relevant file types
+if ! echo "\$INPUT" | grep -qE '\\.(ts|tsx|js|jsx)'; then
+  exit 0
+fi
+
+# Extract file path from tool input
+FILE_PATH=\$(echo "\$INPUT" | grep -oE '[a-zA-Z0-9_./@-]+\\.(ts|tsx|js|jsx)' | head -1)
+if [ -z "\$FILE_PATH" ] || [ ! -f "\$FILE_PATH" ]; then
+  exit 0
+fi
+
+ISSUES=""
+
+# TODO: Add your grep checks here
+# Example:
+# if grep -qE 'some_pattern' "\$FILE_PATH" 2>/dev/null; then
+#   ISSUES="\${ISSUES}\\n  - Found problematic pattern"
+# fi
+
+if [ -n "\$ISSUES" ]; then
+  echo "REX Guard [${name}]: Issues found in \${FILE_PATH}:"
+  echo -e "\$ISSUES"
+fi
+
+exit 0
+`
+
+/** Create a new custom guard from a template */
+export function createGuard(name: string): { ok: boolean; message: string; path?: string } {
+  if (!name.match(/^[a-z0-9-]+$/)) {
+    return { ok: false, message: 'Guard name must be lowercase letters, numbers, and hyphens only' }
+  }
+
+  if (!existsSync(GUARDS_DIR)) mkdirSync(GUARDS_DIR, { recursive: true })
+
+  const dest = join(GUARDS_DIR, `${name}.sh`)
+  if (existsSync(dest)) {
+    return { ok: false, message: `Guard '${name}' already exists at ${dest}` }
+  }
+
+  writeFileSync(dest, GUARD_TEMPLATE(name))
+  chmodSync(dest, 0o755)
+  log.info(`Guard created: ${name} → ${dest}`)
+  return { ok: true, message: `Guard '${name}' created at ${dest}. Edit it to add your logic.`, path: dest }
 }
 
 export function getGuardLogs(name?: string, limit = 30): string[] {

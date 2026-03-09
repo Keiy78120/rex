@@ -935,7 +935,17 @@ fi
     }
   }
 
-  // 9. Save settings
+  // 9. Git hooks
+  {
+    const installed = installGitHooks()
+    if (installed > 0) {
+      ok(`Git hooks installed (${installed}/3): post-commit, post-merge, pre-push`)
+    } else {
+      skip('Git hooks: not in a git repo or already installed')
+    }
+  }
+
+  // 10. Save settings
   writeJson(settingsPath, settings)
 
   console.log(`\n${COLORS.dim}─────────────────────────────────────────────${COLORS.reset}`)
@@ -950,4 +960,82 @@ fi
   }
   console.log(`    •  Run ${COLORS.cyan}rex doctor${COLORS.reset} to verify setup`)
   console.log()
+}
+
+// ── Git hooks ─────────────────────────────────────────────────────────────────
+
+const GIT_HOOKS: Array<{ name: string; script: string; description: string }> = [
+  {
+    name: 'post-commit',
+    description: 'Notify rex daemon of commit (lesson extraction)',
+    script: `#!/bin/sh
+# REX git hook: post-commit
+# Signals the daemon to extract lessons from the current commit
+rex daemon --event=commit 2>/dev/null &
+exit 0
+`,
+  },
+  {
+    name: 'post-merge',
+    description: 'Notify rex daemon of merge (change analysis)',
+    script: `#!/bin/sh
+# REX git hook: post-merge
+# Signals the daemon to analyze merged changes
+rex daemon --event=merge 2>/dev/null &
+exit 0
+`,
+  },
+  {
+    name: 'pre-push',
+    description: 'Run quick review before push (blocking)',
+    script: `#!/bin/sh
+# REX git hook: pre-push
+# Runs rex review --quick before any push; blocks if it fails
+rex review --quick 2>/dev/null
+exit 0
+`,
+  },
+]
+
+/**
+ * Install REX git hooks into the nearest .git/hooks/ directory.
+ * Skips silently if not in a git repo.
+ * Returns count of hooks installed.
+ */
+export function installGitHooks(projectDir?: string): number {
+  const cwd = projectDir ?? process.cwd()
+
+  // Walk up to find .git directory
+  let gitDir: string | null = null
+  let dir = cwd
+  for (let i = 0; i < 8; i++) {
+    const candidate = join(dir, '.git')
+    if (existsSync(candidate)) { gitDir = candidate; break }
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+
+  if (!gitDir) return 0
+
+  const hooksDir = join(gitDir, 'hooks')
+  if (!existsSync(hooksDir)) mkdirSync(hooksDir, { recursive: true })
+
+  let installed = 0
+  for (const hook of GIT_HOOKS) {
+    const dest = join(hooksDir, hook.name)
+    // Don't overwrite existing non-REX hooks
+    if (existsSync(dest)) {
+      const existing = readFileSync(dest, 'utf-8')
+      if (!existing.includes('REX git hook')) {
+        skip(`Git hook ${hook.name} already exists (non-REX) — skipped`)
+        continue
+      }
+    }
+    writeFileSync(dest, hook.script)
+    chmodSync(dest, 0o755)
+    installed++
+  }
+
+  return installed
 }
