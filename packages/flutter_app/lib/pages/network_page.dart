@@ -23,7 +23,7 @@ class _NetworkPageState extends State<NetworkPage> {
   @override
   Widget build(BuildContext context) {
     return RexPageLayout(
-      title: 'Network',
+      title: 'Fleet',
       actions: [
         RexHeaderButton(
           icon: CupertinoIcons.refresh,
@@ -53,7 +53,7 @@ class _NetworkPageState extends State<NetworkPage> {
                 _TopologyBanner(node: rex.nodeStatus!),
                 const SizedBox(height: 16),
                 // Node identity card
-                RexSection(title: 'This Node', icon: CupertinoIcons.desktopcomputer),
+                RexSection(title: 'This Specialist', icon: CupertinoIcons.desktopcomputer),
                 _NodeIdentityCard(node: rex.nodeStatus!),
                 const SizedBox(height: 8),
                 // Commander section
@@ -67,7 +67,7 @@ class _NetworkPageState extends State<NetworkPage> {
                 // Tailscale mesh peers
                 if ((rex.nodeStatus!['tailscalePeers'] as List?)?.isNotEmpty == true) ...[
                   const SizedBox(height: 8),
-                  RexSection(title: 'Mesh Peers', icon: CupertinoIcons.antenna_radiowaves_left_right),
+                  RexSection(title: 'Fleet Peers', icon: CupertinoIcons.antenna_radiowaves_left_right),
                   _MeshPeersCard(peers: (rex.nodeStatus!['tailscalePeers'] as List)
                       .whereType<Map<String, dynamic>>().toList()),
                 ],
@@ -137,7 +137,7 @@ class _NodeIdentityCard extends StatelessWidget {
     return RexCard(
       child: Column(children: [
         RexStatRow(
-          label: 'Node ID',
+          label: 'Specialist ID',
           value: nodeId.length > 12 ? '${nodeId.substring(0, 12)}...' : nodeId,
           icon: CupertinoIcons.tag,
         ),
