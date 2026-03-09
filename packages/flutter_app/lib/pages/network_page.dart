@@ -64,6 +64,14 @@ class _NetworkPageState extends State<NetworkPage> {
                 RexSection(title: 'Sync', icon: CupertinoIcons.arrow_2_circlepath),
                 _SyncCard(sync: rex.syncStatus),
                 const SizedBox(height: 8),
+                // Tailscale mesh peers
+                if ((rex.nodeStatus!['tailscalePeers'] as List?)?.isNotEmpty == true) ...[
+                  const SizedBox(height: 8),
+                  RexSection(title: 'Mesh Peers', icon: CupertinoIcons.antenna_radiowaves_left_right),
+                  _MeshPeersCard(peers: (rex.nodeStatus!['tailscalePeers'] as List)
+                      .whereType<Map<String, dynamic>>().toList()),
+                ],
+                const SizedBox(height: 8),
                 // Queue section
                 RexSection(title: 'Event Queue', icon: CupertinoIcons.tray_full),
                 _QueueCard(queue: rex.queueStats),
@@ -370,5 +378,63 @@ class _QueueStat extends StatelessWidget {
       Text('$value', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: color)),
       Text(label, style: TextStyle(fontSize: 11, color: context.rex.textSecondary)),
     ]);
+  }
+}
+
+class _MeshPeersCard extends StatelessWidget {
+  final List<Map<String, dynamic>> peers;
+  const _MeshPeersCard({required this.peers});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.rex;
+    final online = peers.where((p) => p['online'] == true).length;
+    return RexCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text('$online/${peers.length}',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.text)),
+          const SizedBox(width: 6),
+          Text('peers online',
+              style: TextStyle(fontSize: 12, color: c.textSecondary)),
+        ]),
+        const SizedBox(height: 10),
+        ...peers.map((p) => _MeshPeerRow(peer: p)),
+      ]),
+    );
+  }
+}
+
+class _MeshPeerRow extends StatelessWidget {
+  final Map<String, dynamic> peer;
+  const _MeshPeerRow({required this.peer});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.rex;
+    final hostname = (peer['hostname'] as String?) ?? '';
+    final ip = (peer['ip'] as String?) ?? '';
+    final online = peer['online'] == true;
+    final direct = peer['direct'] == true;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            color: online ? c.success : c.textTertiary,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(hostname, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.text)),
+          Text(ip, style: TextStyle(fontSize: 11, fontFamily: 'Menlo', color: c.textTertiary)),
+        ])),
+        if (online && direct)
+          RexStatusChip(label: 'direct', status: RexChipStatus.ok, small: true)
+        else if (online)
+          RexStatusChip(label: 'relay', status: RexChipStatus.pending, small: true),
+      ]),
+    );
   }
 }

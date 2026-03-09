@@ -553,6 +553,14 @@ rex doctor --fix     # Auto-fix then health check
 | **Gateway `/metrics`**: Telegram command — RAM%, ingest pending, hub status in one message | `gateway.ts` |
 | **Gateway `/mesh`, `/nodes`, `/fleet`**: fleet status via getMeshStatus() + `fleet_status` callback + Fleet button in Advanced menu | `gateway.ts` |
 
+### ✅ Terminé (session 2026-03-14 — Flutter UI Fleet polish)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **Network page**: §25 Fleet terminology — `'Commander'` section, SPECIALISTS label above node list, Start/Stop Commander buttons | `network_page.dart` |
+| **Gateway page**: §25 Fleet terminology — `'Comms'` section (Telegram = Comms adapter), degraded mode banner (running + Ollama offline), Adapter/Backend stat rows, `'Start/Stop Comms'` buttons, Capabilities section | `gateway_page.dart` |
+| **Health page**: System Metrics section — `rex metrics --json` driven (RAM%, CPUs, uptime, ingest pending, daemon status, hub specialists) | `health_page.dart`, `rex_service.dart` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 DONE ✅, Phase 4 (LATER)**:
