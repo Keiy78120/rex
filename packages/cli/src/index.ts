@@ -1533,7 +1533,7 @@ async function main() {
 
       try {
         const grepOut = debtExec(
-          `git grep -n -E "(TODO|FIXME|HACK|XXX)[:()]?" -- "*.ts" "*.js" "*.dart" "*.py" "*.sh" 2>/dev/null || true`,
+          `git grep -n -E "(//|#|\\*).*(TODO|FIXME|HACK|XXX)" -- "*.ts" "*.js" "*.dart" "*.py" "*.sh" 2>/dev/null || true`,
           { cwd, encoding: 'utf-8', timeout: 10_000 }
         )
         for (const raw of grepOut.trim().split('\n').filter(Boolean)) {

@@ -354,7 +354,7 @@ function cmdAdd(args: string[]) {
 
   const content = `---
 name: ${slug}
-description: TODO — describe this skill
+description: <describe this skill>
 requiredTools: [Read, Grep]
 requiredMcp: []
 ---
@@ -363,17 +363,17 @@ requiredMcp: []
 
 ## Objective
 
-TODO — what this skill does.
+<what this skill does>
 
 ## Process
 
-1. TODO — step 1
-2. TODO — step 2
-3. TODO — step 3
+1. <step 1>
+2. <step 2>
+3. <step 3>
 
 ## Rules
 
-- TODO — constraints and guardrails
+- <constraints and guardrails>
 `
   writeFileSync(filePath, content)
 
