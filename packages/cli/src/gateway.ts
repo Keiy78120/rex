@@ -603,6 +603,10 @@ function advancedMenu() {
     ],
     [
       { text: '🌐 Fleet', callback_data: 'fleet_status' },
+      { text: '🧭 Session', callback_data: 'session_info' },
+    ],
+    [
+      { text: '🔄 Reset history', callback_data: 'reset_history' },
     ],
     [{ text: '◀️ Menu', callback_data: 'menu' }],
   ]
@@ -2038,6 +2042,28 @@ async function handleCallback(token: string, chatId: string, messageId: number, 
       break
     }
 
+    case 'session_info': {
+      const hist = getHistory(chatId)
+      const turns = Math.floor(hist.length / 2)
+      const backend = state.mode === 'qwen' ? 'agent\\-runtime \\(Qwen/Ollama\\)' : 'claude\\-cli'
+      const uptimeMin = Math.floor((Date.now() - gatewayStartTime) / 60_000)
+      const lines = [
+        `🧭 *Session info*`,
+        `Backend: \`${backend}\``,
+        `History: ${turns} turn${turns !== 1 ? 's' : ''} \\(${hist.length} messages\\)`,
+        `Max turns: ${MAX_HISTORY_TURNS}`,
+        `Uptime: ${uptimeMin}m`,
+      ]
+      await editMessage(token, chatId, messageId, lines.join('\n'), advancedMenu())
+      break
+    }
+
+    case 'reset_history': {
+      clearHistory(chatId)
+      await editMessage(token, chatId, messageId, '🔄 Conversation history cleared\\. Starting fresh\\.', advancedMenu())
+      break
+    }
+
     case 'standup': {
       await editMessage(token, chatId, messageId, '📋 Generating standup…', backButton())
       try {
@@ -2759,6 +2785,47 @@ async function handleText(token: string, chatId: string, text: string, from: str
     const out = truncate(strip(run('rex review', 30000)), 3000)
     await editMessage(token, chatId, loading.message_id, `🔍 *Code Review*\n\`\`\`\n${out}\n\`\`\``)
     logCommand(from, '/review', 'done')
+    return
+  }
+
+  if (cmd === '/session') {
+    const hist = getHistory(chatId)
+    const turns = Math.floor(hist.length / 2)
+    const backend = state.mode === 'qwen' ? 'agent-runtime (Qwen/Ollama)' : 'claude-cli'
+    const uptimeMin = Math.floor((Date.now() - gatewayStartTime) / 60_000)
+    const lines = [
+      `🧠 *Session info*`,
+      `Backend: \`${backend}\``,
+      `History: ${turns} turn${turns !== 1 ? 's' : ''} (${hist.length} messages)`,
+      `Max turns: ${MAX_HISTORY_TURNS}`,
+      `Uptime: ${uptimeMin}m`,
+    ]
+    await send(token, chatId, lines.join('\n'))
+    logCommand(from, '/session', 'shown')
+    return
+  }
+
+  if (cmd === '/reset') {
+    clearHistory(chatId)
+    await send(token, chatId, '🔄 Conversation history cleared. Starting fresh.')
+    logCommand(from, '/reset', 'cleared')
+    return
+  }
+
+  if (cmd.startsWith('/delegate ') || cmd === '/delegate') {
+    const task = text.replace(/^\/delegate\s*/i, '').trim()
+    if (!task) {
+      await send(token, chatId, '💡 Usage: `/delegate <task description>`\nEx: `/delegate review the last PR and summarize changes`')
+      return
+    }
+    const loading = await send(token, chatId, `🤖 Delegating: _${task.slice(0, 80)}_…`)
+    try {
+      const out = truncate(strip(run(`rex orchestrate "${task.replace(/"/g, '\\"')}"`, 120_000)), 3500)
+      await editMessage(token, chatId, loading.message_id, `🤖 *Delegate result*\n\`\`\`\n${out}\n\`\`\``)
+    } catch (e: any) {
+      await editMessage(token, chatId, loading.message_id, `⚠️ Delegate failed: ${e.message?.slice(0, 120)}`)
+    }
+    logCommand(from, '/delegate', 'done')
     return
   }
 
