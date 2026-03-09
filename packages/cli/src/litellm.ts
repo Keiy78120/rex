@@ -298,3 +298,86 @@ export function resetUsage(): void {
   saveUsage()
   log.info('Usage stats reset')
 }
+
+// ── Effect-ts typed layer ──────────────────────────────────────────
+// Wraps callWithFallback with typed error channels so callers cannot
+// silently ignore failures. Additive — existing code is unchanged.
+
+import { Effect, Data } from 'effect'
+
+/** Tagged LLM error union — the compiler forces handling each case. */
+export class NetworkError extends Data.TaggedError('NetworkError')<{
+  message: string
+  provider: string
+}> {}
+
+export class RateLimitError extends Data.TaggedError('RateLimitError')<{
+  message: string
+  provider: string
+  retryAfterMs: number
+}> {}
+
+export class AllProvidersExhaustedError extends Data.TaggedError('AllProvidersExhaustedError')<{
+  tried: string[]
+}> {}
+
+export type LlmError = NetworkError | RateLimitError | AllProvidersExhaustedError
+
+/**
+ * Effect-typed wrapper around callWithFallback.
+ * The return type makes it impossible to ignore errors:
+ *
+ * @example
+ * const result = yield* callLlmEffect("Hello REX")
+ * // result: LiteLLMResult — fully typed, error handled by compiler
+ */
+export function callLlmEffect(
+  prompt: string,
+  opts: LiteLLMOptions = {},
+): Effect.Effect<LiteLLMResult, LlmError> {
+  return Effect.tryPromise({
+    try: () => callWithFallback(prompt, opts.system, opts),
+    catch: (err) => {
+      const msg = String(err instanceof Error ? err.message : err)
+      if (msg.startsWith('RATE_LIMIT') || msg.includes('429')) {
+        const retryMatch = msg.match(/retry.?after[=:]?\s*(\d+)/i)
+        const retryAfterMs = retryMatch ? parseInt(retryMatch[1], 10) * 1000 : DEFAULT_BLOCK_MS
+        return new RateLimitError({ message: msg, provider: 'unknown', retryAfterMs })
+      }
+      if (msg.startsWith('ALL_PROVIDERS_FAILED')) {
+        const triedMatch = msg.match(/\[([^\]]+)\]/)
+        const tried = triedMatch ? triedMatch[1].split(', ') : []
+        return new AllProvidersExhaustedError({ tried })
+      }
+      return new NetworkError({ message: msg, provider: 'unknown' })
+    },
+  })
+}
+
+/**
+ * Run an Effect-typed LLM call, mapping errors to a plain string fallback.
+ * Convenience wrapper for code that cannot use generators (non-Effect context).
+ *
+ * @example
+ * const text = await runLlmEffect("Summarize this", { system: "You are REX" })
+ */
+export async function runLlmEffect(
+  prompt: string,
+  opts: LiteLLMOptions = {},
+): Promise<LiteLLMResult | null> {
+  const program = callLlmEffect(prompt, opts).pipe(
+    Effect.catchTag('RateLimitError', (e) => {
+      log.warn(`effect/llm: rate limit on ${e.provider} — retry in ${e.retryAfterMs}ms`)
+      return Effect.fail(e)
+    }),
+    Effect.catchTag('AllProvidersExhaustedError', (e) => {
+      log.warn(`effect/llm: all providers exhausted [${e.tried.join(', ')}]`)
+      return Effect.succeed(null as unknown as LiteLLMResult)
+    }),
+    Effect.catchTag('NetworkError', (e) => {
+      log.warn(`effect/llm: network error — ${e.message.slice(0, 80)}`)
+      return Effect.succeed(null as unknown as LiteLLMResult)
+    }),
+  )
+  return Effect.runPromise(program).catch(() => null)
+}

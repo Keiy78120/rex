@@ -373,3 +373,120 @@ Rules:
 - Use past memory context to give informed, personalized answers
 - Flag open loops and unresolved issues proactively
 - Prefer script/CLI answers over explanations when data is available`
+
+// ── Effect-ts typed pipeline ───────────────────────────────────────
+// Each step of the 5-step REX Identity pipeline is typed so the
+// compiler prevents silently ignoring context-building failures.
+// Additive — existing rexIdentityPipeline() is unchanged.
+
+import { Effect, Data } from 'effect'
+
+export class ContextBuildError extends Data.TaggedError('ContextBuildError')<{
+  step: 'memory' | 'events' | 'signals' | 'intent'
+  message: string
+}> {}
+
+export class ScriptFirstResult extends Data.TaggedClass('ScriptFirstResult')<{
+  response: string
+}> {}
+
+export class LlmRequired extends Data.TaggedClass('LlmRequired')<{
+  ctx: RexContext
+  brief: string
+}> {}
+
+/**
+ * Step 1-3 as Effect: build context with typed failure for each source.
+ * Memory / events / signals failures are non-fatal — returns partial context.
+ */
+export function buildContextEffect(message: string): Effect.Effect<RexContext, ContextBuildError> {
+  const memoryEffect = Effect.tryPromise({
+    try: () => Promise.resolve(searchMemory(message)),
+    catch: (e) => new ContextBuildError({ step: 'memory', message: String(e) }),
+  }).pipe(Effect.orElse(() => Effect.succeed([] as string[])))
+
+  const eventsEffect = Effect.tryPromise({
+    try: () => Promise.resolve(getRecentEvents(5)),
+    catch: (e) => new ContextBuildError({ step: 'events', message: String(e) }),
+  }).pipe(Effect.orElse(() => Effect.succeed([] as string[])))
+
+  const signalsEffect = Effect.tryPromise({
+    try: () => Promise.resolve(getRelevantSignals(message).map(s => s.title + ': ' + s.detail)),
+    catch: (e) => new ContextBuildError({ step: 'signals', message: String(e) }),
+  }).pipe(Effect.orElse(() => Effect.succeed([] as string[])))
+
+  return Effect.all([memoryEffect, eventsEffect, signalsEffect]).pipe(
+    Effect.map(([memorySnippets, recentEvents, openLoopSignals]) => ({
+      message,
+      memorySnippets,
+      recentEvents,
+      intent: detectMessageIntent(message),
+      openLoopSignals,
+      projectCwd: process.cwd(),
+    })),
+  )
+}
+
+/**
+ * Step 4 as Effect: returns ScriptFirstResult if a script matched, else LlmRequired.
+ * The union type forces callers to handle both branches explicitly.
+ */
+export function tryScriptEffect(ctx: RexContext): Effect.Effect<ScriptFirstResult | LlmRequired, never> {
+  const answer = tryScriptFirst(ctx)
+  if (answer) {
+    return Effect.succeed(new ScriptFirstResult({ response: formatRexResponse(answer, ctx) }))
+  }
+  return Effect.succeed(new LlmRequired({ ctx, brief: buildFocusedBrief(ctx) }))
+}
+
+/**
+ * Full Effect-typed pipeline — composable version of rexIdentityPipeline().
+ * Useful when callers need to intercept specific failure modes (e.g., degrade mode).
+ *
+ * @example
+ * const result = yield* rexIdentityEffect("status de REX")
+ * console.log(result.response, result.usedLLM)
+ */
+export function rexIdentityEffect(
+  message: string,
+  opts: { model?: string } = {},
+): Effect.Effect<RexIdentityResult, ContextBuildError> {
+  const start = Date.now()
+
+  return buildContextEffect(message).pipe(
+    Effect.flatMap(ctx =>
+      tryScriptEffect(ctx).pipe(
+        Effect.flatMap(outcome => {
+          if (outcome._tag === 'ScriptFirstResult') {
+            return Effect.succeed<RexIdentityResult>({
+              response: outcome.response,
+              usedLLM: false,
+              scriptAnswer: outcome.response,
+              durationMs: Date.now() - start,
+            })
+          }
+          // LlmRequired — call agent runtime
+          return Effect.tryPromise({
+            try: async () => {
+              const { streamAgent } = await import('./agent-runtime.js')
+              let accumulated = ''
+              const result = await streamAgent(outcome.brief, {
+                model: opts.model,
+                injectContext: false,
+                onChunk: (chunk: string) => { accumulated += chunk },
+              })
+              return {
+                response: formatRexResponse(result.response || accumulated, outcome.ctx),
+                usedLLM: true as const,
+                scriptAnswer: null,
+                model: result.model,
+                durationMs: Date.now() - start,
+              } satisfies RexIdentityResult
+            },
+            catch: (e) => new ContextBuildError({ step: 'intent', message: String(e) }),
+          })
+        }),
+      )
+    ),
+  )
+}
