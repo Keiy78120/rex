@@ -192,6 +192,9 @@ rex doctor --fix     # Auto-fix then health check
 | `rex watch` (live guard activity tail, color-coded) | `packages/cli/src/index.ts` |
 | `rex log [--today] [--guard <name>]` (filtered guard log viewer) | `packages/cli/src/index.ts` |
 | Fleet thermal awareness confirmed ✅ in node-mesh.ts (thermalStatus.healthy check before routing) | `packages/cli/src/node-mesh.ts` |
+| BLOC 1.1: session-summary.sh upgraded to YAML format with decisions/blockers/next-steps sections + env var support | `~/.claude/rex-guards/session-summary.sh` |
+| BLOC 1.2: preload.ts injects last-session.md context (task/next-steps/blockers) at SessionStart | `packages/cli/src/preload.ts` |
+| Dependency audit step added to `rex review --full` (pnpm/npm audit, surfaces critical/high CVEs) | `packages/cli/src/review.ts` |
 
 ### ✅ Phases 1-3 complètes (sessions 2026-03-05 → 2026-03-13)
 
