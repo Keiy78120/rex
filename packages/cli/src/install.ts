@@ -26,7 +26,7 @@ function ok(msg: string) { console.log(`  ${COLORS.green}✓${COLORS.reset} ${ms
 function info(msg: string) { console.log(`  ${COLORS.cyan}i${COLORS.reset} ${msg}`) }
 function warn(msg: string) { console.log(`  ${COLORS.yellow}!${COLORS.reset} ${msg}`) }
 
-export type InstallProfile = 'local-dev' | 'desktop-full' | 'headless-node' | 'hub-vps'
+export type InstallProfile = 'local-dev' | 'desktop-full' | 'headless-node' | 'hub-vps' | 'gpu-node'
 
 interface InstallOptions {
   profile?: InstallProfile
@@ -43,6 +43,7 @@ interface ResourceReport {
   flutter: boolean
   brew: boolean
   systemd: boolean
+  gpu: boolean
 }
 
 const PROFILES: Record<InstallProfile, { label: string; desc: string; steps: string[] }> = {
@@ -65,6 +66,11 @@ const PROFILES: Record<InstallProfile, { label: string; desc: string; steps: str
     label: 'Hub VPS',
     desc: 'CLI + daemon + hub API (centralized server)',
     steps: ['init', 'setup-ollama', 'daemon', 'systemd-hint', 'hub-hint'],
+  },
+  'gpu-node': {
+    label: 'GPU Node',
+    desc: 'CLI + daemon + Ollama large models (GPU inference specialist)',
+    steps: ['init', 'setup-ollama', 'daemon', 'systemd-hint', 'gpu-hint'],
   },
 }
 
@@ -92,6 +98,17 @@ function detectResources(): ResourceReport {
     } catch {}
   }
 
+  let gpu = false
+  try {
+    if (os === 'darwin') {
+      const info = execSync('system_profiler SPDisplaysDataType 2>/dev/null', { encoding: 'utf-8' })
+      gpu = info.includes('Metal')
+    } else if (os === 'linux') {
+      execSync('nvidia-smi', { stdio: 'ignore' })
+      gpu = true
+    }
+  } catch {}
+
   return {
     os,
     ramGB,
@@ -102,6 +119,7 @@ function detectResources(): ResourceReport {
     flutter: commandExists('flutter'),
     brew: commandExists('brew'),
     systemd,
+    gpu,
   }
 }
 
@@ -113,6 +131,7 @@ function printResources(res: ResourceReport) {
   console.log(`  ${dot(res.git)} Git: ${res.git ? 'available' : 'not found'}`)
   console.log(`  ${dot(res.ollama)} Ollama: ${res.ollama ? 'installed' : 'not found'}`)
   console.log(`  ${dot(res.flutter)} Flutter: ${res.flutter ? 'available' : 'not found'}`)
+  console.log(`  ${dot(res.gpu)} GPU: ${res.gpu ? (res.os === 'darwin' ? 'Metal' : 'NVIDIA') : 'not detected'}`)
   if (res.os === 'darwin') console.log(`  ${dot(res.brew)} Homebrew: ${res.brew ? 'available' : 'not found'}`)
   if (res.os === 'linux') console.log(`  ${dot(res.systemd)} systemd: ${res.systemd ? 'available' : 'not found'}`)
 }
@@ -125,6 +144,7 @@ function printProfiles(res: ResourceReport) {
     let note = ''
     if (key === 'desktop-full' && res.os !== 'darwin') note = ` ${COLORS.dim}(macOS only)${COLORS.reset}`
     if (key === 'hub-vps' && res.os === 'darwin') note = ` ${COLORS.dim}(typically Linux VPS)${COLORS.reset}`
+    if (key === 'gpu-node' && !res.gpu) note = ` ${COLORS.dim}(no GPU detected)${COLORS.reset}`
     console.log(`  ${COLORS.cyan}${i + 1}${COLORS.reset}) ${COLORS.bold}${p.label}${COLORS.reset}${note}`)
     console.log(`     ${COLORS.dim}${p.desc}${COLORS.reset}`)
   }
@@ -133,6 +153,7 @@ function printProfiles(res: ResourceReport) {
 function suggestProfile(res: ResourceReport): InstallProfile {
   if (res.os === 'darwin' && res.flutter) return 'desktop-full'
   if (res.os === 'darwin') return 'local-dev'
+  if (res.gpu && res.systemd) return 'gpu-node'
   if (res.systemd) return 'headless-node'
   return 'local-dev'
 }
@@ -159,11 +180,11 @@ async function selectProfile(res: ResourceReport, nonInteractive: boolean): Prom
   const profileKeys = Object.keys(PROFILES) as InstallProfile[]
   const suggestedIdx = profileKeys.indexOf(suggested) + 1
 
-  const answer = await prompt(`Select profile [1-4] (default: ${suggestedIdx} = ${suggested}):`)
+  const answer = await prompt(`Select profile [1-5] (default: ${suggestedIdx} = ${suggested}):`)
   if (!answer) return suggested
 
   const num = parseInt(answer, 10)
-  if (num >= 1 && num <= 4) return profileKeys[num - 1]
+  if (num >= 1 && num <= 5) return profileKeys[num - 1]
 
   // Try matching by name
   const match = profileKeys.find(k => k === answer || k.startsWith(answer))
@@ -269,6 +290,27 @@ WantedBy=multi-user.target`
       info('Hub API is not yet implemented — tracked in CLAUDE.md roadmap')
       info('The daemon provides health checks, ingest, and maintenance in the meantime')
       break
+
+    case 'gpu-hint':
+      console.log(`\n  ${COLORS.bold}Step: GPU Inference Setup${COLORS.reset}`)
+      if (res.gpu) {
+        info(`GPU detected (${res.os === 'darwin' ? 'Metal/Apple Silicon' : 'NVIDIA'})`)
+        info('Recommended large models for Ollama:')
+        if (res.ramGB >= 24) {
+          info('  ollama pull qwen2.5:14b   (14B — good balance)')
+          info('  ollama pull deepseek-r1:14b (14B — reasoning)')
+        } else if (res.ramGB >= 16) {
+          info('  ollama pull qwen2.5:7b    (7B — fast)')
+          info('  ollama pull deepseek-r1:8b (8B — reasoning)')
+        } else {
+          info('  ollama pull qwen2.5:3b    (3B — lightweight)')
+        }
+        info('Run: ollama pull <model> to download')
+      } else {
+        warn('No GPU detected — GPU Node profile is more effective with a GPU')
+        info('You can still use Ollama with CPU (smaller models recommended)')
+      }
+      break
   }
 }
 
@@ -289,6 +331,7 @@ function printSummary(profile: InstallProfile, res: ResourceReport) {
       case 'daemon': installed.push('Background daemon (auto-start)'); break
       case 'gateway': installed.push('Telegram gateway (auto-start)'); break
       case 'flutter-app': if (res.flutter) installed.push('Flutter desktop app'); break
+      case 'gpu-hint': installed.push('GPU inference recommendations printed'); break
     }
   }
 
@@ -316,6 +359,7 @@ function printDryRun(profile: InstallProfile, res: ResourceReport) {
       'flutter-app': res.flutter ? 'Build + install Flutter desktop app' : 'Skip (Flutter SDK not found)',
       'systemd-hint': 'Print systemd unit for daemon',
       'hub-hint': 'Print hub API setup hint',
+      'gpu-hint': res.gpu ? 'Print GPU model recommendations' : 'Print GPU setup hint (no GPU detected)',
     }
     console.log(`  ${COLORS.cyan}→${COLORS.reset} ${labels[step] ?? step}`)
   }

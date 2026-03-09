@@ -406,7 +406,8 @@ async function main() {
       break
     }
 
-    case 'inventory': {
+    case 'inventory':
+    case 'resources': {
       const { showInventory, collectInventory, saveInventoryCache } = await import('./inventory.js')
       const jsonFlag = process.argv.includes('--json')
       const inv = await collectInventory()
@@ -2070,7 +2071,7 @@ ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex setup --quick    Zero-question setup: auto-detect everything, write optimal config
   rex setup --yes      Non-interactive setup (auto-install deps, env-based Telegram)
   rex llm <prompt>     Query local LLM directly
-  rex inventory       Scan local resources (CLIs, services, hardware, models)
+  rex inventory       Scan local resources (CLIs, services, hardware, models) [alias: resources]
   rex models           Show task-aware model routing table (--catalog for full list)
   rex preload [path]   Show pre-loaded context for a path
   rex context [path]   Analyze project, recommend MCP/skills
