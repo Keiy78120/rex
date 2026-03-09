@@ -297,22 +297,22 @@ const RESET = '\x1b[0m'
 export async function showNodeStatus(): Promise<void> {
   const status = await getNodeStatus()
 
-  const hubDisplay = status.hubConnected
+  const commanderDisplay = status.hubConnected
     ? `${GREEN}\u25CF${RESET} connected (${status.hubUrl})`
     : `${RED}\u25CB${RESET} disconnected`
 
   const heartbeatDisplay = status.lastHeartbeat || `${DIM}never${RESET}`
-  const modeDisplay = status.mode === 'fleet' ? `${GREEN}fleet${RESET}` : status.mode === 'cluster' ? `${CYAN}cluster${RESET}` : `${DIM}solo${RESET}`
+  const modeDisplay = status.mode === 'fleet' ? `${GREEN}Fleet${RESET}` : status.mode === 'cluster' ? `${CYAN}Cluster${RESET}` : `${DIM}Solo${RESET}`
 
   console.log()
-  console.log(`${BOLD}REX Node${RESET}`)
+  console.log(`${BOLD}REX Specialist${RESET}`)
   console.log(`${DIM}${'─'.repeat(28)}${RESET}`)
-  console.log(`  ID:        ${CYAN}${status.id}${RESET}`)
-  console.log(`  Hostname:  ${status.hostname}`)
-  console.log(`  Platform:  ${status.platform}`)
-  console.log(`  Mode:      ${modeDisplay}`)
-  console.log(`  Hub:       ${hubDisplay}`)
-  console.log(`  Heartbeat: ${heartbeatDisplay}`)
+  console.log(`  ID:            ${CYAN}${status.id}${RESET}`)
+  console.log(`  Hostname:      ${status.hostname}`)
+  console.log(`  Platform:      ${status.platform}`)
+  console.log(`  Mode:          ${modeDisplay}`)
+  console.log(`  Commander:     ${commanderDisplay}`)
+  console.log(`  Last mission:  ${heartbeatDisplay}`)
 
   if (status.tailscalePeers.length > 0) {
     console.log(`  ${BOLD}Tailscale Peers:${RESET}`)

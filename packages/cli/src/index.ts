@@ -506,7 +506,7 @@ async function main() {
         } else {
           console.log(`\n  ${COLORS.dim}(existing token)${COLORS.reset}`)
         }
-        console.log(`\n  Hub token: ${COLORS.green}${token}${COLORS.reset}`)
+        console.log(`\n  Commander token: ${COLORS.green}${token}${COLORS.reset}`)
         console.log(`  ${COLORS.dim}Use --new to regenerate${COLORS.reset}\n`)
         break
       }
@@ -517,14 +517,14 @@ async function main() {
           console.log(JSON.stringify(status))
         } else {
           const runColor = status.running ? COLORS.green : COLORS.red
-          console.log(`\n  Hub: ${runColor}${status.running ? 'running' : 'stopped'}${COLORS.reset}  port=${status.port}  nodes=${status.nodesCount}`)
+          console.log(`\n  Commander: ${runColor}${status.running ? 'running' : 'stopped'}${COLORS.reset}  port=${status.port}  specialists=${status.nodesCount}`)
         }
         break
       }
       if (sub === 'stop') {
         const { execSync } = await import('node:child_process')
         try { execSync(`pkill -f "rex hub"`) } catch {}
-        if (!jsonFlag) console.log(`${COLORS.green}✓${COLORS.reset} Hub stopped`)
+        if (!jsonFlag) console.log(`${COLORS.green}✓${COLORS.reset} Commander stopped`)
         if (jsonFlag) console.log(JSON.stringify({ stopped: true }))
         break
       }
@@ -547,8 +547,8 @@ async function main() {
           console.log(JSON.stringify(status))
         } else {
           console.log(status.running
-            ? `${COLORS.green}✓${COLORS.reset} Hub started on port ${status.port}`
-            : `${COLORS.red}✗${COLORS.reset} Hub failed to start`)
+            ? `${COLORS.green}✓${COLORS.reset} Commander started on port ${status.port}`
+            : `${COLORS.red}✗${COLORS.reset} Commander failed to start`)
         }
         break
       }
@@ -1828,15 +1828,15 @@ ${COLORS.bold}LiteLLM:${COLORS.reset}
   rex litellm-config --print Print config to stdout (no file write)
   rex litellm-config --output=<path>  Write to custom path
 
-${COLORS.bold}Hub & Network:${COLORS.reset}
-  rex hub              Start REX hub API server (port 7420)
-  rex hub token        Generate a secure REX_HUB_TOKEN
-  rex hub --port=N     Start on custom port
-  rex mesh             Show all mesh nodes + capabilities (alias: rex nodes)
+${COLORS.bold}Fleet: Commander & Specialists:${COLORS.reset}
+  rex hub              Start Fleet Commander API server (port 7420)
+  rex hub token        Generate a secure Commander token
+  rex hub --port=N     Start Commander on custom port
+  rex mesh             Show all Specialists + capabilities (alias: rex nodes)
   rex nodes            Alias for rex mesh
-  rex node status      Show node identity and hub connection
-  rex node register    Register this node with hub
-  rex sync             Bidirectional sync with hub
+  rex node status      Show Specialist identity and Commander connection
+  rex node register    Register this Specialist with Commander
+  rex sync             Bidirectional sync with Commander
   rex sync push/pull   One-way sync
   rex sync status      Show sync state
   rex queue stats      Show event queue statistics
