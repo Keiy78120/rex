@@ -2,8 +2,10 @@ import { join } from 'node:path'
 import { existsSync, mkdirSync } from 'node:fs'
 
 const HOME = process.env.HOME || '~'
-
-export const REX_DIR = join(HOME, '.claude', 'rex')
+// REX_HOME overrides the base directory (used in Docker: /data)
+export const REX_DIR = process.env.REX_HOME
+  ? join(process.env.REX_HOME, '.claude', 'rex')
+  : join(HOME, '.claude', 'rex')
 export const MEMORY_DIR = join(REX_DIR, 'memory')
 export const MEMORY_DB_PATH = join(MEMORY_DIR, 'rex.sqlite')
 export const PENDING_DIR = join(MEMORY_DIR, 'pending')
