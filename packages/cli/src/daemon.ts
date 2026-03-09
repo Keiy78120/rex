@@ -692,11 +692,12 @@ export async function daemon(): Promise<void> {
     // Curious discovery every 24h — sends Telegram for DISCOVERY/PATTERN/OPEN_LOOP
     if (now - lastCurious >= 24 * 60 * 60 * 1000) {
       try {
-        const { runCurious, sendProactiveNotifications } = await import('./curious.js')
+        const { runCurious } = await import('./curious.js')
+        const { dispatchDiscoveries } = await import('./proactive-dispatch.js')
         const result = await runCurious({ silent: true })
         if (result.newCount > 0) {
           log.info(`Curious: ${result.newCount} new discoveries`)
-          await sendProactiveNotifications(result.discoveries)
+          await dispatchDiscoveries(result.discoveries)
         }
       } catch (e: any) {
         log.debug(`Curious cycle skipped: ${e.message?.slice(0, 80)}`)

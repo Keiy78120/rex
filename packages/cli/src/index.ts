@@ -1458,6 +1458,60 @@ async function main() {
       break
     }
 
+    case 'notify': {
+      // rex notify [message] [--pending] [--confirm <id>] [--dismiss <id>] [--json]
+      // rex notify         → show pending signals
+      // rex notify "msg"   → send custom notification (macOS + Telegram)
+      // rex notify --pending → list pending signals
+      // rex notify --confirm <id> → confirm a pending signal
+      // rex notify --dismiss <id> → dismiss a pending signal
+      const { sendCustomNotification, sendMacNotification, getPendingSignals, confirmSignal, dismissSignal, printPendingSignals } = await import('./proactive-dispatch.js')
+      const args = process.argv.slice(3)
+      const jsonFlag = args.includes('--json')
+
+      if (args.includes('--confirm')) {
+        const id = args[args.indexOf('--confirm') + 1]
+        if (!id) { console.log('Usage: rex notify --confirm <id>'); break }
+        const ok = confirmSignal(id)
+        if (jsonFlag) console.log(JSON.stringify({ success: ok, id }))
+        else console.log(ok ? `✓ Confirmed: ${id}` : `! Signal not found: ${id}`)
+        break
+      }
+
+      if (args.includes('--dismiss')) {
+        const id = args[args.indexOf('--dismiss') + 1]
+        if (!id) { console.log('Usage: rex notify --dismiss <id>'); break }
+        const ok = dismissSignal(id)
+        if (jsonFlag) console.log(JSON.stringify({ success: ok, id }))
+        else console.log(ok ? `✓ Dismissed: ${id}` : `! Signal not found: ${id}`)
+        break
+      }
+
+      if (args.includes('--pending') || args.length === 0) {
+        const pending = getPendingSignals()
+        if (jsonFlag) console.log(JSON.stringify({ pending }, null, 2))
+        else printPendingSignals(pending)
+        break
+      }
+
+      // Custom notification: rex notify "my message"
+      const message = args.filter(a => !a.startsWith('--')).join(' ')
+      if (message) {
+        const macOk = sendMacNotification('REX', message)
+        const { sendTelegramNotification } = await import('./proactive-dispatch.js')
+        const tgOk = await sendTelegramNotification(`🔔 *REX*\n${message}`)
+        if (jsonFlag) console.log(JSON.stringify({ mac: macOk, telegram: tgOk, message }))
+        else {
+          const macStatus = macOk ? '✓' : '—'
+          const tgStatus = tgOk ? '✓' : '—'
+          console.log(`  macOS ${macStatus}  Telegram ${tgStatus}  "${message}"`)
+        }
+      } else {
+        console.log('Usage: rex notify [message] [--pending] [--confirm <id>] [--dismiss <id>]')
+      }
+      break
+    }
+
     case 'monitor': {
       // rex monitor [--json]
       const jsonFlag = process.argv.includes('--json')
@@ -3218,6 +3272,12 @@ ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex prune            Cleanup old/duplicate memories
   rex prune --stats    Show memory database stats
   rex curious          Discover new models, MCPs, and AI news (--json)
+  rex notify           Show pending proactive signals
+  rex notify "msg"     Send custom notification (macOS + Telegram)
+  rex notify --confirm <id>   Confirm a pending signal action
+  rex notify --dismiss <id>   Dismiss a pending signal
+  rex notify --json    JSON output
+  rex signals          System-level signal snapshot (hardware, services, dev)
   rex monitor          Dev status snapshot: git activity, sessions, memory (--json)
   rex self-review      Extract lessons, detect error patterns
   rex promote-rule N   Promote rule candidate to ~/.claude/rules/
