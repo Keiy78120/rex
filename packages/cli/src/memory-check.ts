@@ -29,6 +29,7 @@ export interface MemoryHealthResult {
     embeddingCount: number
     embeddingCoverage: number
   }
+  ftsDrift: { totalFts: number; drift: number }
   orphans: { count: number; ids: number[] }
   pending: { count: number; staleCount: number; staleFiles: string[] }
   duplicates: { count: number; samples: string[] }
@@ -39,6 +40,7 @@ export function checkMemoryHealth(): MemoryHealthResult {
     dbExists: false,
     dbIntegrity: { ok: false, message: 'DB not found' },
     stats: { total: 0, byCategory: {}, oldest: null, newest: null, embeddingCount: 0, embeddingCoverage: 0 },
+    ftsDrift: { totalFts: 0, drift: 0 },
     orphans: { count: 0, ids: [] },
     pending: { count: 0, staleCount: 0, staleFiles: [] },
     duplicates: { count: 0, samples: [] },
@@ -120,6 +122,13 @@ export function checkMemoryHealth(): MemoryHealthResult {
         result.duplicates.count = dupes.reduce((sum, d) => sum + d.c - 1, 0)
         result.duplicates.samples = dupes.map(d => `${d.content.slice(0, 60)}... (x${d.c})`)
       } catch {}
+
+      // FTS drift: check that memory_fts is in sync with memories
+      try {
+        const ftsCount = db.prepare('SELECT COUNT(*) as c FROM memory_fts').get() as { c: number }
+        result.ftsDrift.totalFts = ftsCount.c
+        result.ftsDrift.drift = result.stats.total - ftsCount.c
+      } catch {}
     }
   } catch (e: any) {
     log.error(`Memory check error: ${e.message}`)
@@ -173,6 +182,7 @@ export function showMemoryHealth(asJson = false): void {
   if (!result.dbIntegrity.ok) issues.push(`DB integrity failed: ${result.dbIntegrity.message}`)
   if (result.orphans.count > 0) issues.push(`${result.orphans.count} memories without embeddings`)
   if (result.duplicates.count > 0) issues.push(`${result.duplicates.count} duplicate memories`)
+  if (result.ftsDrift.drift > 0) issues.push(`FTS index drift: ${result.ftsDrift.drift} memories missing from search index — run rex search --rebuild-fts`)
   if (result.pending.count > 100) issues.push(`${result.pending.count} files in pending queue (>100)`)
   if (result.pending.staleCount > 0) issues.push(`${result.pending.staleCount} stale pending files (>24h old)`)
 

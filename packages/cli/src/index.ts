@@ -101,6 +101,20 @@ async function main() {
         const { execSync } = await import('node:child_process')
         try { execSync('rex ingest', { stdio: 'inherit', timeout: 120_000 }) } catch {}
         try { execSync('rex recategorize --batch=50', { stdio: 'inherit', timeout: 180_000 }) } catch {}
+        // Auto-rebuild FTS index if drift detected
+        try {
+          const { checkMemoryHealth } = await import('./memory-check.js')
+          const memHealth = checkMemoryHealth()
+          if (memHealth.ftsDrift.drift > 0) {
+            console.log(`  ${COLORS.yellow}!${COLORS.reset} FTS drift detected (${memHealth.ftsDrift.drift} missing) — rebuilding index...`)
+            try {
+              execSync('rex search --rebuild-fts', { stdio: 'inherit', timeout: 60_000 })
+              console.log(`  ${COLORS.green}✓${COLORS.reset} FTS index rebuilt`)
+            } catch {
+              console.log(`  ${COLORS.yellow}!${COLORS.reset} FTS rebuild failed — run: rex search --rebuild-fts`)
+            }
+          }
+        } catch {}
         log.info('Auto-fix complete, running doctor')
         console.log(`\n${COLORS.green}Auto-fix complete.${COLORS.reset} Running doctor...\n`)
       }

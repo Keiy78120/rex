@@ -15,6 +15,7 @@ import { trackUsage, getDailyUsage } from './budget.js'
 import { appendEvent } from './sync-queue.js'
 import { pickModel } from './router.js'
 import { callWithAutoFallback } from './free-tiers.js'
+import { selectAccount, acquireAccount, releaseAccount, getAccountEnv } from './account-pool.js'
 import { createLogger } from './logger.js'
 
 const log = createLogger('BUDGET:orchestrator')
@@ -221,16 +222,27 @@ async function executeOllama(prompt: string, timeout: number): Promise<Omit<Back
 }
 
 function executeClaudeCode(prompt: string, timeout: number): Omit<BackendResult, 'fallbackUsed'> {
+  const poolAccount = selectAccount()
+  if (poolAccount) acquireAccount(poolAccount.id)
   const start = Date.now()
-  const result = execSync(`claude --print ${JSON.stringify(prompt)}`, {
-    encoding: 'utf-8',
-    timeout,
-    env: { ...process.env, CLAUDE_NO_TELEMETRY: '1' },
-  })
-  return {
-    provider: 'claude-code',
-    response: result.trim(),
-    durationMs: Date.now() - start,
+  try {
+    const accountEnv = poolAccount ? getAccountEnv(poolAccount) : {}
+    const result = execSync(`claude --print ${JSON.stringify(prompt)}`, {
+      encoding: 'utf-8',
+      timeout,
+      env: { ...process.env, ...accountEnv, CLAUDE_NO_TELEMETRY: '1' },
+    })
+    if (poolAccount) releaseAccount(poolAccount.id, { error: false })
+    return {
+      provider: 'claude-code',
+      response: result.trim(),
+      durationMs: Date.now() - start,
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    const rateLimited = msg.includes('429') || msg.toLowerCase().includes('rate limit')
+    if (poolAccount) releaseAccount(poolAccount.id, { error: true, rateLimited })
+    throw e
   }
 }
 

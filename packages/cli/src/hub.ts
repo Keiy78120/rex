@@ -805,6 +805,9 @@ export async function startCommander(port?: number): Promise<void> {
   process.on('SIGTERM', shutdown)
   process.on('SIGINT', shutdown)
 
+  // Idle socket timeout — prevents leaked connections from hanging indefinitely
+  server.setTimeout(30_000)
+
   return new Promise<void>((resolve) => {
     server!.listen(listenPort, () => {
       log.info(`Hub listening on port ${listenPort}`)
