@@ -8,6 +8,7 @@
  * Token economy: all detection is execSync/which, no LLM calls here.
  *
  * Spec: docs/plans/action.md §21
+ * @module FLEET
  */
 
 import { execSync } from 'node:child_process'
@@ -18,7 +19,7 @@ import { homedir } from 'node:os'
 import { createLogger } from './logger.js'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 
-const log = createLogger('node-mesh')
+const log = createLogger('FLEET:mesh')
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -272,7 +273,7 @@ function getHubUrl(): string | null {
 }
 
 /**
- * Persist a discovered hub URL to ~/.claude/settings.json env.REX_HUB_URL
+ * Persist a discovered Commander URL to ~/.claude/settings.json env.REX_HUB_URL
  * so it survives daemon restarts and is available to all rex commands.
  * Also updates process.env immediately for the current process.
  *
@@ -294,10 +295,10 @@ export function persistDiscoveredCommander(url: string): boolean {
 
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
     process.env.REX_HUB_URL = url
-    log.info(`Persisted hub URL: ${url}`)
+    log.info(`Persisted Commander URL: ${url}`)
     return true
   } catch (e: any) {
-    log.warn(`Failed to persist hub URL: ${e.message?.slice(0, 80)}`)
+    log.warn(`Failed to persist Commander URL: ${e.message?.slice(0, 80)}`)
     return false
   }
 }
@@ -315,8 +316,8 @@ async function probeHub(url: string): Promise<string | null> {
 }
 
 /**
- * Discover REX hubs on the Tailscale network by probing port 7420 on each online peer.
- * Returns an array of discovered hub URLs (e.g. ["http://100.x.x.x:7420"]).
+ * Discover REX Commanders on the Tailscale network by probing port 7420 on each online peer.
+ * Returns an array of discovered Commander URLs (e.g. ["http://100.x.x.x:7420"]).
  * Results are cached in the mesh-cache alongside node data.
  */
 export async function autoDiscoverCommanders(): Promise<string[]> {
@@ -355,7 +356,7 @@ export async function registerWithCommander(nodeInfo?: FleetNode): Promise<boole
         signal: AbortSignal.timeout(5000),
       })
       if (res.ok) {
-        log.info(`Registered with hub ${commanderUrl}: ${info.id} (${info.capabilities.join(', ') || 'no caps'})`)
+        log.info(`Registered with Commander ${commanderUrl}: ${info.id} (${info.capabilities.join(', ') || 'no caps'})`)
         try { saveFleetCache(await fetchFleetNodes(commanderUrl)) } catch {}
         // Auto-persist Tailscale-discovered hubs (not localhost fallback)
         if (!configured && !commanderUrl.includes('localhost')) {

@@ -1,3 +1,4 @@
+/** @module GATEWAY */
 import { homedir, hostname as getHostname } from 'node:os'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { join, basename, extname } from 'node:path'
@@ -166,7 +167,7 @@ async function checkHubReachable(): Promise<boolean> {
 
   if (wasDegrade && !degradeMode) {
     console.log(`${COLORS.green}Hub recovered — exiting degrade mode${COLORS.reset}`)
-    try { appendEvent('hub.event', { event: 'degrade_exit', reason: 'hub_recovered' }) } catch {}
+    try { appendEvent('commander.event', { event: 'degrade_exit', reason: 'hub_recovered' }) } catch {}
     // Notify user about spooled messages
     try {
       const creds = getCredentials()
@@ -185,7 +186,7 @@ async function checkHubReachable(): Promise<boolean> {
     } catch {}
   } else if (!wasDegrade && degradeMode) {
     console.log(`${COLORS.yellow}Hub unreachable — entering degrade mode${COLORS.reset}`)
-    try { appendEvent('hub.event', { event: 'degrade_enter', reason: 'hub_unreachable' }) } catch {}
+    try { appendEvent('commander.event', { event: 'degrade_enter', reason: 'hub_unreachable' }) } catch {}
   }
 
   return !degradeMode

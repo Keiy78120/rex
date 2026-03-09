@@ -1,3 +1,4 @@
+/** @module FLEET */
 // packages/cli/src/daemon.ts
 import { existsSync, readFileSync, writeFileSync, readdirSync, unlinkSync, copyFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -16,7 +17,7 @@ import { buildLocalFleetNode, registerWithCommander, autoDiscoverCommanders, per
 import { detectSignals, isUnderPressure } from './signal-detector.js'
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
-const log = createLogger('daemon')
+const log = createLogger('FLEET:daemon')
 
 async function checkOllama(): Promise<boolean> {
   try {
@@ -512,7 +513,7 @@ async function tailscaleMeshCycle(): Promise<void> {
     const persisted = persistDiscoveredCommander(discovered)
     if (persisted) {
       lastKnownMeshHubUrl = discovered
-      log.info(`Tailscale: joined new hub at ${discovered}`)
+      log.info(`Tailscale: joined new Commander at ${discovered}`)
       journalAppend('daemon_action', 'mesh', { action: 'hub_joined', url: discovered })
       await sendTelegramNotify(`🌐 REX Mesh: joined Commander at ${discovered}`)
     }

@@ -2,6 +2,7 @@
  * REX Node Identity & Hub Client
  * Each machine running REX gets a persistent UUID.
  * Communicates with the hub if available, degrades gracefully to solo mode.
+ * @module FLEET
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -13,7 +14,7 @@ import { promisify } from 'node:util'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
 
-const log = createLogger('node')
+const log = createLogger('FLEET:node')
 const execFileAsync = promisify(execFile)
 
 const NODE_ID_PATH = join(REX_DIR, 'node-id')
@@ -54,7 +55,7 @@ export async function discoverHub(): Promise<string | null> {
     }
   }
 
-  log.debug('No hub found')
+  log.debug('No Commander found')
   return null
 }
 
@@ -90,7 +91,7 @@ function loadInventoryCliNames(): string[] {
 export async function registerWithCommander(commanderUrl?: string): Promise<boolean> {
   const url = commanderUrl || await discoverHub()
   if (!url) {
-    log.warn('No hub available — running in solo mode')
+    log.warn('No Commander available — running in solo mode')
     return false
   }
 
@@ -152,7 +153,7 @@ export function startHeartbeat(commanderUrl?: string, intervalMs = 60_000): void
         consecutiveFailures = 0
         cachedHubUrl = url
         cachedLastHeartbeat = new Date().toISOString()
-        log.info('Auto-rejoined hub successfully')
+        log.info('Auto-rejoined Commander successfully')
         return
       }
     }

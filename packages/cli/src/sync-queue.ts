@@ -1,10 +1,11 @@
+/** @module MEMORY */
 import { join } from 'node:path'
 import { hostname } from 'node:os'
 import Database from 'better-sqlite3'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
 
-const log = createLogger('sync-queue')
+const log = createLogger('MEMORY:sync')
 
 export const SYNC_QUEUE_DB_PATH = join(REX_DIR, 'sync-queue.sqlite')
 
@@ -21,7 +22,7 @@ export type EventType =
   | 'sync.pull'
   | 'node.register'
   | 'node.heartbeat'
-  | 'hub.event'
+  | 'commander.event'
 
 export interface QueueEvent {
   id: number
