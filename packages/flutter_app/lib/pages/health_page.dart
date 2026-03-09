@@ -25,6 +25,7 @@ class _HealthPageState extends State<HealthPage> {
       rex.checkSessionGuard();
       rex.loadDevMonitor();
       rex.loadSystemMetrics();
+      rex.loadDebt();
     });
   }
 
@@ -44,6 +45,7 @@ class _HealthPageState extends State<HealthPage> {
             rex.checkSessionGuard();
             rex.loadDevMonitor();
             rex.loadSystemMetrics();
+            rex.loadDebt();
           },
         ),
       ],
@@ -197,6 +199,11 @@ class _HealthPageState extends State<HealthPage> {
                 // Dev Activity
                 if (rex.devMonitor.isNotEmpty || rex.isLoadingDevMonitor) ...[
                   _DevActivitySection(monitor: rex.devMonitor, loading: rex.isLoadingDevMonitor),
+                  const SizedBox(height: 8),
+                ],
+                // Tech Debt
+                if (rex.techDebt.isNotEmpty || rex.isLoadingDebt) ...[
+                  _TechDebtSection(items: rex.techDebt, loading: rex.isLoadingDebt),
                   const SizedBox(height: 8),
                 ],
                 // Quick actions
@@ -908,6 +915,87 @@ class _MiniStat extends StatelessWidget {
           ),
         ),
         Text(label, style: TextStyle(fontSize: 10, color: context.rex.textTertiary)),
+      ],
+    );
+  }
+}
+
+class _TechDebtSection extends StatelessWidget {
+  final List<dynamic> items;
+  final bool loading;
+
+  const _TechDebtSection({required this.items, required this.loading});
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && items.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RexSection(title: 'Tech Debt', icon: CupertinoIcons.wrench),
+          const RexCard(child: Center(child: CupertinoActivityIndicator())),
+        ],
+      );
+    }
+
+    final byKind = <String, int>{};
+    int staleCount = 0;
+    for (final item in items) {
+      if (item is Map<String, dynamic>) {
+        final kind = item['kind'] as String? ?? 'TODO';
+        byKind[kind] = (byKind[kind] ?? 0) + 1;
+        final age = item['ageDays'] as int? ?? 0;
+        if (age > 7) staleCount++;
+      }
+    }
+
+    final totalCount = items.length;
+    final chipColor = staleCount > 0 ? RexChipStatus.error : (totalCount > 10 ? RexChipStatus.warning : RexChipStatus.ok);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RexSection(title: 'Tech Debt', icon: CupertinoIcons.wrench),
+        RexCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  RexStatusChip(label: '$totalCount items', status: chipColor),
+                  if (staleCount > 0) ...[
+                    const SizedBox(width: 8),
+                    RexStatusChip(
+                      label: '$staleCount stale (>7d)',
+                      status: RexChipStatus.error,
+                      small: true,
+                    ),
+                  ],
+                ],
+              ),
+              if (byKind.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: byKind.entries.map((e) {
+                    final status = e.key == 'FIXME'
+                        ? RexChipStatus.error
+                        : e.key == 'HACK'
+                            ? RexChipStatus.warning
+                            : RexChipStatus.inactive;
+                    return RexStatusChip(label: '${e.key} ${e.value}', status: status, small: true);
+                  }).toList(),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                'Run: rex debt  to see full list with file locations',
+                style: TextStyle(fontSize: 11, color: context.rex.textTertiary),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

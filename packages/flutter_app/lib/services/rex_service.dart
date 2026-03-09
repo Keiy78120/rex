@@ -2607,6 +2607,29 @@ $transcript
     notifyListeners();
   }
 
+  List<dynamic> _techDebt = [];
+  bool _isLoadingDebt = false;
+
+  List<dynamic> get techDebt => _techDebt;
+  bool get isLoadingDebt => _isLoadingDebt;
+
+  Future<void> loadDebt() async {
+    _isLoadingDebt = true;
+    notifyListeners();
+    try {
+      final result = await _runRexArgs(['debt', '--json'], timeout: 15);
+      final json = _extractJson(result);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is List) {
+          _techDebt = parsed;
+        }
+      }
+    } catch (_) {}
+    _isLoadingDebt = false;
+    notifyListeners();
+  }
+
   Future<void> loadSystemMetrics() async {
     try {
       final result = await _runRexArgs(['metrics', '--json']);
