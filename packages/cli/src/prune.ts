@@ -14,6 +14,55 @@ const COLORS = {
   cyan: '\x1b[36m',
 }
 
+// ── Forgetting Curve ─────────────────────────────────────────────
+// BLOC 3.3 — 0-30 days: active, 30-90 days: compressed, 90+: archived
+// Memory entries are NOT deleted — just marked for lower retrieval priority
+export async function forgettingCurve(opts: { dry?: boolean; json?: boolean } = {}): Promise<{ compressed: number; archived: number } | null> {
+  if (!existsSync(DB_PATH)) return null
+
+  let Database: any
+  try { Database = (await import('better-sqlite3')).default } catch { return null }
+
+  const db = new Database(DB_PATH)
+  db.pragma('journal_mode = WAL')
+
+  // Ensure status column exists (safe on any SQLite version)
+  try {
+    db.exec("ALTER TABLE memories ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+  } catch { /* column already exists */ }
+
+  const now = Date.now()
+  const day30 = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const day90 = new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString()
+
+  const toCompress = (db.prepare("SELECT COUNT(*) as c FROM memories WHERE created_at < ? AND created_at >= ? AND status = 'active'").get(day30, day90) as any).c as number
+  const toArchive  = (db.prepare("SELECT COUNT(*) as c FROM memories WHERE created_at < ? AND status != 'archived'").get(day90) as any).c as number
+
+  if (opts.json) {
+    const result = { compressed: toCompress, archived: toArchive, dry: opts.dry ?? false }
+    console.log(JSON.stringify(result))
+    db.close()
+    return result
+  }
+
+  console.log(`\n${COLORS.bold}REX Forgetting Curve${COLORS.reset}`)
+  console.log(`  ${COLORS.dim}30d → compressed · 90d → archived${COLORS.reset}\n`)
+  console.log(`  To compress (30-90 days):  ${COLORS.yellow}${toCompress}${COLORS.reset}`)
+  console.log(`  To archive  (>90 days):    ${COLORS.red}${toArchive}${COLORS.reset}`)
+
+  if (!opts.dry) {
+    db.prepare("UPDATE memories SET status = 'compressed' WHERE created_at < ? AND created_at >= ? AND status = 'active'").run(day30, day90)
+    db.prepare("UPDATE memories SET status = 'archived'   WHERE created_at < ? AND status != 'archived'").run(day90)
+    console.log(`\n  ${COLORS.green}✓${COLORS.reset} Forgetting curve applied`)
+  } else {
+    console.log(`\n  ${COLORS.dim}[dry-run] No changes made${COLORS.reset}`)
+  }
+
+  db.close()
+  console.log()
+  return { compressed: toCompress, archived: toArchive }
+}
+
 // Use current path, fall back to legacy if migration hasn't run yet
 const DB_PATH = existsSync(MEMORY_DB_PATH) ? MEMORY_DB_PATH : LEGACY_DB_PATH
 const MAX_AGE_DAYS = 180 // 6 months

@@ -338,9 +338,25 @@ async function main() {
     }
 
     case 'prune': {
-      const { prune } = await import('./prune.js')
-      const statsFlag = process.argv.includes('--stats')
-      await prune(statsFlag)
+      const sub = process.argv[3]
+      const { prune, forgettingCurve } = await import('./prune.js')
+      if (sub === 'curve' || sub === 'forget') {
+        const dry = process.argv.includes('--dry-run')
+        const json = process.argv.includes('--json')
+        await forgettingCurve({ dry, json })
+      } else {
+        const statsFlag = process.argv.includes('--stats')
+        await prune(statsFlag)
+      }
+      break
+    }
+
+    case 'forget': {
+      // rex forget — shorthand for rex prune curve
+      const { forgettingCurve } = await import('./prune.js')
+      const dry = process.argv.includes('--dry-run')
+      const json = process.argv.includes('--json')
+      await forgettingCurve({ dry, json })
       break
     }
 
