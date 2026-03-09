@@ -377,6 +377,23 @@ export async function registerWithCommander(nodeInfo?: FleetNode): Promise<boole
 
   for (const commanderUrl of candidates) {
     try {
+      // Version check: verify BRAIN is compatible before registering
+      try {
+        const vRes = await fetch(`${commanderUrl}/api/v1/version`, { signal: AbortSignal.timeout(3000) })
+        if (vRes.ok) {
+          const vData = await vRes.json() as { data?: { minCompatible?: string; api?: string } }
+          const minCompat = vData.data?.minCompatible
+          if (minCompat) {
+            const [minMaj] = minCompat.split('.').map(Number)
+            const [ourMaj] = (info.version ?? '7.0.0').split('.').map(Number)
+            if (ourMaj < minMaj) {
+              log.warn(`BRAIN at ${commanderUrl} requires FLEET v${minCompat}+, we are v${info.version ?? '?'} — skipping`)
+              continue
+            }
+          }
+        }
+      } catch {}  // version check is best-effort — proceed anyway if endpoint missing
+
       const res = await fetch(`${commanderUrl}/api/nodes/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

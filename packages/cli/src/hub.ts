@@ -143,9 +143,17 @@ function parseBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   })
 }
 
+const API_VERSION = 'v1'
+const MIN_COMPATIBLE_VERSION = '6.0.0'  // oldest FLEET node version BRAIN still accepts
+
 function sendJson(res: ServerResponse, statusCode: number, data: unknown, meta?: Record<string, unknown>): void {
   const body = JSON.stringify({ data, meta: meta ?? {}, error: null })
-  res.writeHead(statusCode, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': CORS_ORIGIN })
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': CORS_ORIGIN,
+    'X-Rex-Version': VERSION,
+    'X-Rex-Api': API_VERSION,
+  })
   res.end(body)
 }
 
@@ -227,6 +235,15 @@ addRoute('GET', '/api/health', (_req, res) => {
 // v1 alias for /api/health (OpenClaw addendum spec)
 addRoute('GET', '/api/v1/health', (_req, res) => {
   sendJson(res, 200, buildHealthPayload())
+})
+
+// Version negotiation endpoint — FLEET nodes call this on connect to verify compatibility
+addRoute('GET', '/api/v1/version', (_req, res) => {
+  sendJson(res, 200, {
+    brain: VERSION,
+    api: API_VERSION,
+    minCompatible: MIN_COMPATIBLE_VERSION,
+  })
 })
 
 addRoute('GET', '/api/nodes', (_req, res) => {
