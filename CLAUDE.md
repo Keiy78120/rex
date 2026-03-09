@@ -543,6 +543,16 @@ rex doctor --fix     # Auto-fix then health check
 | **§26 Orchestrator relay race** — SPECIALIST_PROFILES (10 specialists: contextWindow, strengths, weaknesses, avgLatencyMs, costPerToken, staggerMs), `checkSpecialistLimits()`, `relayRace()` avec tier stagger (Tier 0: 0ms, Tier 1: +300ms, Tier 2: +800ms), handoffNotes pour Commander context propre | `orchestrator.ts` |
 | **§25 Fleet terminology** — user-facing labels: Hub→Commander, Node→Specialist, Task routing→Mission assignment dans CLI output, node.ts `showNodeStatus()`, index.ts help text + hub status/start/stop console lines | `orchestrator.ts`, `node.ts`, `index.ts` |
 
+### ✅ Terminé (session 2026-03-13 — metrics + tunnel + gateway fleet)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **`metrics.ts`**: unified monitoring snapshot (system/memory/ingest/daemon/hub/events), `--json`, `--prometheus` output | `metrics.ts`, `index.ts` |
+| **`rex metrics [--json|--prometheus]`**: CLI command exposing RexMetrics snapshot | `index.ts` |
+| **`rex tunnel <user@host>`**: SSH reverse tunnel, keepalive, SIGINT handler | `index.ts` |
+| **Gateway `/metrics`**: Telegram command — RAM%, ingest pending, hub status in one message | `gateway.ts` |
+| **Gateway `/mesh`, `/nodes`, `/fleet`**: fleet status via getMeshStatus() + `fleet_status` callback + Fleet button in Advanced menu | `gateway.ts` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 DONE ✅, Phase 4 (LATER)**:

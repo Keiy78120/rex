@@ -24,6 +24,7 @@ class _HealthPageState extends State<HealthPage> {
       rex.loadBurnRate();
       rex.checkSessionGuard();
       rex.loadDevMonitor();
+      rex.loadSystemMetrics();
     });
   }
 
@@ -42,6 +43,7 @@ class _HealthPageState extends State<HealthPage> {
             rex.loadBurnRate();
             rex.checkSessionGuard();
             rex.loadDevMonitor();
+            rex.loadSystemMetrics();
           },
         ),
       ],
@@ -127,6 +129,11 @@ class _HealthPageState extends State<HealthPage> {
                     sessionGuard: rex.sessionGuard,
                     onClearSignal: () => rex.clearCompactSignal(),
                   ),
+                  const SizedBox(height: 20),
+                ],
+                // System Metrics
+                if (rex.systemMetrics.isNotEmpty) ...[
+                  _SystemMetricsSection(metrics: rex.systemMetrics),
                   const SizedBox(height: 20),
                 ],
                 // Background processes
@@ -766,6 +773,141 @@ class _ActivityStat extends StatelessWidget {
           label,
           style: TextStyle(fontSize: 10, color: context.rex.textTertiary),
         ),
+      ],
+    );
+  }
+}
+
+// ── System Metrics ─────────────────────────────────────────────────────────────
+
+class _SystemMetricsSection extends StatelessWidget {
+  final Map<String, dynamic> metrics;
+  const _SystemMetricsSection({required this.metrics});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.rex;
+    final sys = (metrics['system'] as Map<String, dynamic>?) ?? {};
+    final ingest = (metrics['ingest'] as Map<String, dynamic>?) ?? {};
+    final hub = (metrics['hub'] as Map<String, dynamic>?) ?? {};
+    final daemon = (metrics['daemon'] as Map<String, dynamic>?) ?? {};
+
+    final ramPct = (sys['ramUsedPct'] as num?)?.toDouble() ?? 0;
+    final cpuCount = (sys['cpuCount'] as num?)?.toInt() ?? 0;
+    final uptimeSec = (sys['uptimeSec'] as num?)?.toInt() ?? 0;
+    final uptimeMin = uptimeSec ~/ 60;
+    final pendingChunks = (ingest['pendingCount'] as num?)?.toInt() ?? 0;
+    final hubReachable = hub['reachable'] == true;
+    final hubNodes = (hub['nodeCount'] as num?)?.toInt() ?? 0;
+    final hubHealthy = (hub['healthyNodes'] as num?)?.toInt() ?? 0;
+    final daemonUp = daemon['pidFileExists'] == true;
+
+    Color ramColor() {
+      if (ramPct >= 90) return c.error;
+      if (ramPct >= 75) return c.warning;
+      return c.success;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RexSection(title: 'System Metrics', icon: CupertinoIcons.speedometer),
+        RexCard(
+          child: Column(
+            children: [
+              // RAM usage bar
+              Row(
+                children: [
+                  Text('RAM', style: TextStyle(fontSize: 12, color: c.textSecondary)),
+                  const Spacer(),
+                  Text(
+                    '${ramPct.round()}%',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ramColor()),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              RexProgressBar(
+                value: (ramPct / 100).clamp(0.0, 1.0),
+                color: ramColor(),
+                height: 5,
+              ),
+              const SizedBox(height: 12),
+              // Stat row
+              Row(
+                children: [
+                  Expanded(child: _MiniStat(label: 'CPUs', value: '$cpuCount', icon: CupertinoIcons.memories)),
+                  Expanded(child: _MiniStat(label: 'Uptime', value: '${uptimeMin}m', icon: CupertinoIcons.clock)),
+                  Expanded(child: _MiniStat(
+                    label: 'Ingest',
+                    value: '$pendingChunks',
+                    icon: CupertinoIcons.tray_arrow_down,
+                    valueColor: pendingChunks > 100 ? c.warning : null,
+                  )),
+                  Expanded(child: _MiniStat(
+                    label: 'Daemon',
+                    value: daemonUp ? 'on' : 'off',
+                    icon: CupertinoIcons.gear_alt,
+                    valueColor: daemonUp ? c.success : c.error,
+                  )),
+                ],
+              ),
+              if (hubReachable || hubNodes > 0) ...[
+                const SizedBox(height: 12),
+                Container(height: 0.5, color: c.separator),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    RexStatusChip(
+                      label: hubReachable ? 'Hub Online' : 'Hub Offline',
+                      status: hubReachable ? RexChipStatus.ok : RexChipStatus.error,
+                      small: true,
+                    ),
+                    const SizedBox(width: 10),
+                    if (hubReachable && hubNodes > 0)
+                      Text(
+                        '$hubHealthy/$hubNodes specialists',
+                        style: TextStyle(fontSize: 12, color: c.textSecondary),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color? valueColor;
+
+  const _MiniStat({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, size: 13, color: context.rex.textTertiary),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: valueColor ?? context.rex.text,
+          ),
+        ),
+        Text(label, style: TextStyle(fontSize: 10, color: context.rex.textTertiary)),
       ],
     );
   }

@@ -219,6 +219,9 @@ class RexService extends ChangeNotifier {
   Map<String, dynamic> journalStats = {};
   Map<String, dynamic> cacheStats = {};
 
+  // System Metrics
+  Map<String, dynamic> systemMetrics = {};
+
   // Projects
   List<Map<String, dynamic>> projects = [];
 
@@ -2557,6 +2560,17 @@ $transcript
     } catch (_) {}
     _isLoadingDevMonitor = false;
     notifyListeners();
+  }
+
+  Future<void> loadSystemMetrics() async {
+    try {
+      final result = await _runRexArgs(['metrics', '--json']);
+      final parsed = jsonDecode(_extractJson(result));
+      if (parsed is Map<String, dynamic>) {
+        systemMetrics = parsed;
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   @override
