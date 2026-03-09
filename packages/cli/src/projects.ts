@@ -1,3 +1,4 @@
+/** @module PROJETS */
 import { readdirSync, readFileSync, existsSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
@@ -5,7 +6,7 @@ import { PROJECTS_DIR, SUMMARIES_DIR, ensureRexDirs } from './paths.js'
 import { loadConfig } from './config.js'
 import { createLogger } from './logger.js'
 
-const log = createLogger('projects')
+const log = createLogger('PROJETS:scanner')
 
 export interface ProjectEntry {
   name: string

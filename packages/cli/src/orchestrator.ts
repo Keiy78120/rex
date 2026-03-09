@@ -6,6 +6,7 @@
  * Chain stagger: Script/Ollama (0ms) → Free tier (+300ms) → Subscription (+800ms)
  *
  * Spec: docs/plans/action.md §26
+ * @module BUDGET
  */
 
 import { execSync } from 'node:child_process'
@@ -16,7 +17,7 @@ import { pickModel } from './router.js'
 import { callWithAutoFallback } from './free-tiers.js'
 import { createLogger } from './logger.js'
 
-const log = createLogger('orchestrator')
+const log = createLogger('BUDGET:orchestrator')
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 

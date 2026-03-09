@@ -1,10 +1,11 @@
+/** @module HQ */
 import { join } from 'node:path'
 import { hostname } from 'node:os'
 import Database from 'better-sqlite3'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
 
-const log = createLogger('event-journal')
+const log = createLogger('HQ:journal')
 
 export const JOURNAL_DB_PATH = join(REX_DIR, 'event-journal.sqlite')
 

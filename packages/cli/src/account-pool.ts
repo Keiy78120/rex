@@ -11,6 +11,7 @@
  *
  * Setup: create additional accounts by copying auth from
  *   ~/.claude/ into ~/.claude-account-2/, ~/.claude-account-3/, etc.
+ * @module AGENTS
  */
 
 import { homedir } from 'node:os'
@@ -18,7 +19,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from 'node:path'
 import { createLogger } from './logger.js'
 
-const log = createLogger('account-pool')
+const log = createLogger('AGENTS:pool')
 const HOME = homedir()
 const STATE_PATH = join(HOME, '.claude', 'rex', 'account-pool.json')
 const RATE_LIMIT_COOLDOWN_MS = 60 * 60 * 1000  // 1 hour

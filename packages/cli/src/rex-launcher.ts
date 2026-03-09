@@ -13,6 +13,7 @@
  *   rex relaunch   Kill + relaunch with fresh intent profile
  *
  * Spec: docs/plans/action.md §21
+ * @module AGENTS
  */
 
 import { spawn } from 'node:child_process'
@@ -26,7 +27,7 @@ import type { ContextProfile } from './context-loader.js'
 import type { ProjectIntent } from './project-intent.js'
 import { REX_DIR, LAUNCHER_PID_PATH, RECOVERY_STATE_PATH, ensureRexDirs } from './paths.js'
 
-const log = createLogger('launcher')
+const log = createLogger('AGENTS:launcher')
 
 const CLAUDE_SETTINGS_PATH = join(homedir(), '.claude', 'settings.json')
 

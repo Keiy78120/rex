@@ -10,6 +10,7 @@
  *   3. Claude Code CLI (subscription)
  *   4. Claude API key (pay-per-use)
  *   5. Tailscale (network)
+ * @module OPTIMIZE
  */
 
 import { execSync } from 'node:child_process'
@@ -21,7 +22,7 @@ import { loadConfig, saveConfig } from './config.js'
 import { ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
 
-const log = createLogger('quick-setup')
+const log = createLogger('OPTIMIZE:quick-setup')
 
 const C = {
   reset: '\x1b[0m',

@@ -6,6 +6,7 @@
  *
  * Inspired by: https://github.com/ldayton/Dippy
  * Auto-approves safe commands, blocks/warns destructive ones.
+ * @module TOOLS
  */
 
 // ── Types ──────────────────────────────────────────────

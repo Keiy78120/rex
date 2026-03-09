@@ -13,6 +13,7 @@
  * Rules:
  *  §22 Token Economy — Promise.all for all discovery, script before LLM
  *  §23 REX uses REX  — LLM calls via orchestrate(), never direct SDK
+ * @module OPTIMIZE
  */
 
 import { execSync, execFile } from 'node:child_process'
@@ -25,7 +26,7 @@ import { ensureRexDirs, CONFIG_PATH, PENDING_DIR, MEMORY_DB_PATH } from './paths
 import { loadConfig, saveConfig } from './config.js'
 import { FREE_TIER_PROVIDERS, getApiKey } from './free-tiers.js'
 
-const log = createLogger('setup-wizard')
+const log = createLogger('OPTIMIZE:wizard')
 const execFileAsync = promisify(execFile)
 const SETTINGS_PATH = join(homedir(), '.claude', 'settings.json')
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'

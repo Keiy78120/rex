@@ -6,6 +6,7 @@
  *
  * Inspired by: https://github.com/avifenesh/agnix (156 rules, LSP)
  * REX version: 42 focused rules for the REX ecosystem.
+ * @module TOOLS
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
@@ -13,7 +14,7 @@ import { join, basename } from 'node:path'
 import { homedir } from 'node:os'
 import { createLogger } from './logger.js'
 
-const log = createLogger('config-lint')
+const log = createLogger('TOOLS:config-lint')
 
 // ── Types ──────────────────────────────────────────────
 

@@ -11,6 +11,7 @@
  *   rex mcp discover                    # scan known registries
  *   rex mcp discover --install context7 # install + register
  *   rex mcp discover --search memory    # search by keyword
+ * @module TOOLS
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -20,7 +21,7 @@ import { execSync } from 'node:child_process'
 import { createLogger } from './logger.js'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 
-const log = createLogger('mcp-discover')
+const log = createLogger('TOOLS:mcp-discover')
 
 // ── Types ──────────────────────────────────────────────
 

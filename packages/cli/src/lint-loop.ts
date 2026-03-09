@@ -6,11 +6,12 @@
  * 0 LLM calls if script passes on first try.
  *
  * Spec: docs/plans/action.md §28
+ * @module TOOLS
  */
 
 import { createLogger } from './logger.js'
 
-const log = createLogger('lint-loop')
+const log = createLogger('TOOLS:lint-loop')
 
 // ── Types ──────────────────────────────────────────────────────────
 

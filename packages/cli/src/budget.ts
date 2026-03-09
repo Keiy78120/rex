@@ -1,10 +1,11 @@
+/** @module BUDGET */
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 import { loadConfig } from './config.js'
 import { createLogger } from './logger.js'
 
-const log = createLogger('budget')
+const log = createLogger('BUDGET:tracker')
 
 export const BUDGET_DB_PATH = join(REX_DIR, 'budget.sqlite')
 

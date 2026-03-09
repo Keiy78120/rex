@@ -1,3 +1,4 @@
+/** @module MEMORY */
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { MEMORY_DB_PATH, PENDING_DIR } from './paths.js'
@@ -5,7 +6,7 @@ import { createLogger } from './logger.js'
 import Database from 'better-sqlite3'
 import * as sqliteVec from 'sqlite-vec'
 
-const log = createLogger('memory-check')
+const log = createLogger('MEMORY:check')
 
 const COLORS = {
   reset: '\x1b[0m',

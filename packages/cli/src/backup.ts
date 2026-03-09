@@ -1,10 +1,11 @@
+/** @module HQ */
 import { existsSync, readdirSync, statSync, unlinkSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
 import { REX_DIR, MEMORY_DB_PATH, CONFIG_PATH, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
 
-const log = createLogger('backup')
+const log = createLogger('HQ:backup')
 
 const FULL_BACKUPS_DIR = join(REX_DIR, 'backups-full')
 

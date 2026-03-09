@@ -1,9 +1,10 @@
+/** @module TOOLS */
 import { existsSync, readFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 import { createLogger } from './logger.js'
 
-const log = createLogger('review')
+const log = createLogger('TOOLS:review')
 
 interface StepResult {
   name: string

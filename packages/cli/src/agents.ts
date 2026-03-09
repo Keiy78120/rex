@@ -1,3 +1,4 @@
+/** @module AGENTS */
 // packages/cli/src/agents.ts — REX Autonomous Agents (Claude Code + Ollama)
 import { homedir } from 'node:os'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs'

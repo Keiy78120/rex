@@ -2,6 +2,7 @@
  * REX Task-Aware Model Router
  * Picks the best available local Ollama model for each task type.
  * Mirrors the claude-code-router logic but for internal REX tasks.
+ * @module BUDGET
  */
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'

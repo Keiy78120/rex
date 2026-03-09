@@ -3,6 +3,7 @@
  * Detects and catalogues all available resources on the machine:
  * CLIs, services, hardware, LLM models, and providers.
  * Owned-first, free-first, CLI > MCP > API.
+ * @module HQ
  */
 
 import { execSync } from 'node:child_process'
@@ -13,7 +14,7 @@ import { REX_DIR, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
 import { FREE_TIER_PROVIDERS, getApiKey } from './free-tiers.js'
 
-const log = createLogger('inventory')
+const log = createLogger('HQ:inventory')
 
 export const INVENTORY_PATH = join(REX_DIR, 'inventory.json')
 

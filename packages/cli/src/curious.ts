@@ -13,6 +13,7 @@
  * Rules:
  *  §22 Token Economy — HTTP fetch only, no LLM for discovery itself
  *  §23 REX uses REX  — summaries via orchestrate() if needed
+ * @module CURIOUS
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -20,7 +21,7 @@ import { join } from 'node:path'
 import { createLogger } from './logger.js'
 import { REX_DIR } from './paths.js'
 
-const log = createLogger('curious')
+const log = createLogger('CURIOUS:discovery')
 
 const CURIOUS_CACHE_PATH = join(REX_DIR, 'curious-cache.json')
 const CURIOUS_LOG_PATH   = join(REX_DIR, 'curious.log')

@@ -11,6 +11,7 @@
  *   - Core OS tools (bash, git) are always active
  *   - getToolForCapability() always returns CLI before MCP before API
  *   - Availability is re-checked lazily (no hot loop)
+ * @module TOOLS
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -19,7 +20,7 @@ import { join } from 'node:path'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
 
-const log = createLogger('tool-registry')
+const log = createLogger('TOOLS:registry')
 const REGISTRY_PATH = join(REX_DIR, 'tool-registry.json')
 
 // ── Types ──────────────────────────────────────────────

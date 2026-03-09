@@ -6,6 +6,7 @@
  *
  * Inspired by: https://github.com/hagan/claudia-statusline
  * Used by: `rex status`, daemon healthcheck, Flutter app metrics.
+ * @module BUDGET
  */
 
 import { existsSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs'
@@ -14,7 +15,7 @@ import { homedir } from 'node:os'
 import { createLogger } from './logger.js'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 
-const log = createLogger('burn-rate')
+const log = createLogger('BUDGET:burn-rate')
 
 // ── Types ──────────────────────────────────────────────
 

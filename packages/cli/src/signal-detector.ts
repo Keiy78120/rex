@@ -11,6 +11,7 @@
  * Called by daemon every cycle and by rex-launcher at startup.
  *
  * Complements project-intent.ts (project-level) with system-level signals.
+ * @module CURIOUS
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
@@ -19,7 +20,7 @@ import { join } from 'node:path'
 import { homedir, freemem, totalmem, cpus } from 'node:os'
 import { createLogger } from './logger.js'
 
-const log = createLogger('signal-detector')
+const log = createLogger('CURIOUS:signals')
 const HOME = homedir()
 
 // ── Types ──────────────────────────────────────────────────────────

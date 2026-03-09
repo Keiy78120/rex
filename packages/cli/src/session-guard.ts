@@ -15,6 +15,7 @@
  * Signal files (read by preload.ts on next SessionStart):
  *   ~/.claude/rex/compact-signal.json   { reason, contextPercent, ts }
  *   ~/.claude/rex/session-state.json    { intent, cwd, tokens, ts }
+ * @module TOOLS
  */
 
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs'
@@ -25,7 +26,7 @@ import { REX_DIR } from './paths.js'
 import { createLogger } from './logger.js'
 
 const execFileAsync = promisify(execFile)
-const log = createLogger('session-guard')
+const log = createLogger('TOOLS:session-guard')
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

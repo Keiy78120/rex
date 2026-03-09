@@ -8,6 +8,7 @@
  * Every other tool is intent-driven — only what this session needs.
  *
  * Spec: docs/plans/action.md §20
+ * @module AGENTS
  */
 
 import { existsSync, readFileSync } from 'node:fs'

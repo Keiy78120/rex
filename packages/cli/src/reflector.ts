@@ -1,6 +1,7 @@
 /**
  * REX Reflector — Success pattern extraction & runbook promotion
  * Extracts lessons from successful sessions and promotes high-confidence ones to runbooks.
+ * @module OPTIMIZE
  */
 
 import { join } from 'node:path'
@@ -11,7 +12,7 @@ import { saveRunbook, findRunbooks, getObservations, type Runbook } from './obse
 import { pickModel } from './router.js'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 
-const log = createLogger('reflector')
+const log = createLogger('OPTIMIZE:reflector')
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 

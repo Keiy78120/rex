@@ -1,3 +1,4 @@
+/** @module AGENTS */
 import Database from 'better-sqlite3'
 import * as sqliteVec from 'sqlite-vec'
 import { existsSync, readFileSync } from 'node:fs'
@@ -8,7 +9,7 @@ import { createLogger } from './logger.js'
 import { detectIntent } from './project-intent.js'
 import { buildContextProfile, profileToPreloadLine } from './context-loader.js'
 
-const log = createLogger('preload')
+const log = createLogger('AGENTS:preload')
 
 const MAX_TOKENS = 300  // Hard limit for pre-loaded context
 

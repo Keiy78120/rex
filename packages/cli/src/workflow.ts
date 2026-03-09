@@ -1,9 +1,10 @@
+/** @module HQ */
 import { existsSync, writeFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 import { createLogger } from './logger.js'
 
-const log = createLogger('workflow')
+const log = createLogger('HQ:workflow')
 
 function git(cmd: string, cwd?: string): string {
   return execSync(`git ${cmd}`, {

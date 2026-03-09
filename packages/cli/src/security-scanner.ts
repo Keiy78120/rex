@@ -13,6 +13,7 @@
  * OSS integration: invariantlabs-ai/mcp-scan (via uvx/npx, optional)
  *
  * Spec: docs/plans/action.md §27
+ * @module TOOLS
  */
 
 import { createHash } from 'node:crypto'
@@ -23,7 +24,7 @@ import { homedir, tmpdir } from 'node:os'
 import { createLogger } from './logger.js'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 
-const log = createLogger('security-scanner')
+const log = createLogger('TOOLS:security')
 
 // ── Types ──────────────────────────────────────────────────────────
 

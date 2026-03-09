@@ -17,12 +17,13 @@
  *   rex_review          — run quick code review pipeline
  *
  * §15.4 REX Master Plan — REX as MCP Server
+ * @module TOOLS
  */
 
 import { createInterface } from 'node:readline'
 import { createLogger } from './logger.js'
 
-const log = createLogger('mcp-server')
+const log = createLogger('TOOLS:mcp-server')
 
 // ── MCP types ─────────────────────────────────────────────────────────────
 

@@ -2,6 +2,7 @@
  * REX Provider Registry
  * Registers and selects providers with owned-first, free-first ordering.
  * Selection: free > subscription > pay-per-use, available > degraded.
+ * @module BUDGET
  */
 
 import { execSync } from 'node:child_process'
@@ -10,7 +11,7 @@ import { join } from 'node:path'
 import { createLogger } from './logger.js'
 import { FREE_TIER_PROVIDERS, getApiKey } from './free-tiers.js'
 
-const log = createLogger('providers')
+const log = createLogger('BUDGET:providers')
 
 const HOME = process.env.HOME || '~'
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'

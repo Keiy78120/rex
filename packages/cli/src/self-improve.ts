@@ -1,3 +1,4 @@
+/** @module OPTIMIZE */
 // packages/cli/src/self-improve.ts
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -9,7 +10,7 @@ import { llm } from './llm.js'
 import { pickModel } from './router.js'
 import { createLogger } from './logger.js'
 
-const log = createLogger('self-improve')
+const log = createLogger('OPTIMIZE:self-improve')
 
 interface Lesson {
   id: string

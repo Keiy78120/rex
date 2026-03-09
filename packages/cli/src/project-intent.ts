@@ -6,6 +6,7 @@
  *
  * Intent hierarchy (most specific wins):
  *   new-project > infra > bug-fix > refactor > feature > explore
+ * @module AGENTS
  */
 
 import { existsSync, readFileSync } from 'node:fs'

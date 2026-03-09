@@ -9,6 +9,7 @@
  *
  * Section 23 (action.md): all internal LLM calls MUST route through this.
  * Routing chain: semantic-cache → router → litellm → Ollama → free tier → subscription
+ * @module BUDGET
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -23,7 +24,7 @@ import {
   type FreeTierProvider,
 } from './free-tiers.js'
 
-const log = createLogger('litellm')
+const log = createLogger('BUDGET:litellm')
 
 const USAGE_FILE = join(REX_DIR, 'litellm-usage.json')
 const QUEUE_MAX_SIZE = 50

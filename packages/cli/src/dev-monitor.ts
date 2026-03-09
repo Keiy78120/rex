@@ -13,6 +13,7 @@
  *  - Memory pending queue depth
  *
  * §22 Token Economy — all script-based, zero LLM
+ * @module HQ
  */
 
 import { execSync } from 'node:child_process'
@@ -22,7 +23,7 @@ import { homedir } from 'node:os'
 import { createLogger } from './logger.js'
 import { REX_DIR, PENDING_DIR } from './paths.js'
 
-const log = createLogger('dev-monitor')
+const log = createLogger('HQ:monitor')
 
 const DEV_DIR      = join(homedir(), 'Documents', 'Developer')
 const SESSIONS_DIR = join(homedir(), '.claude', 'projects')

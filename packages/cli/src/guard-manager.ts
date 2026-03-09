@@ -1,9 +1,10 @@
+/** @module TOOLS */
 import { readdirSync, readFileSync, chmodSync, renameSync, existsSync, statSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { createLogger } from './logger.js'
 import { DAEMON_LOG_PATH } from './paths.js'
 
-const log = createLogger('guard-manager')
+const log = createLogger('TOOLS:guards')
 const HOME = process.env.HOME || '~'
 const GUARDS_DIR = join(HOME, '.claude', 'rex-guards')
 

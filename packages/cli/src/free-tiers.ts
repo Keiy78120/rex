@@ -2,6 +2,7 @@
  * REX Free Tier Catalog
  * Vercel AI SDK abstraction over all OpenAI-compatible free tier providers.
  * Routing order: Ollama → Groq → Cerebras → Together → Mistral → OpenRouter → DeepSeek
+ * @module BUDGET
  */
 
 import { generateText, type LanguageModel } from 'ai'
@@ -10,7 +11,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createLogger } from './logger.js'
 
-const log = createLogger('free-tiers')
+const log = createLogger('BUDGET:free-tiers')
 const HOME = process.env.HOME || '~'
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 

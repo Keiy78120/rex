@@ -1,10 +1,11 @@
+/** @module BUDGET */
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import Database from 'better-sqlite3'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
 
-const log = createLogger('semantic-cache')
+const log = createLogger('BUDGET:cache')
 
 export const CACHE_DB_PATH = join(REX_DIR, 'cache.sqlite')
 

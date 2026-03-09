@@ -1,9 +1,10 @@
+/** @module HQ */
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { REX_DIR, ensureRexDirs } from './paths.js'
 import { createLogger } from './logger.js'
 
-const log = createLogger('observer')
+const log = createLogger('HQ:observer')
 
 const DB_PATH = join(REX_DIR, 'sync-queue.sqlite')
 

@@ -1,5 +1,6 @@
 /**
  * REX Sync — Bidirectional sync between local queue and hub
+ * @module MEMORY
  */
 
 import { getUnacked, appendEvent, ackEvent, getQueueStats, getQueueHealth } from './sync-queue.js'
@@ -9,7 +10,7 @@ import { createLogger } from './logger.js'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const log = createLogger('sync')
+const log = createLogger('MEMORY:sync-engine')
 
 const SYNC_STATE_PATH = join(REX_DIR, 'sync-state.json')
 

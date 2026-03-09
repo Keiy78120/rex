@@ -9,6 +9,7 @@
  * - Optional GitHub repo creation via `gh`
  *
  * §11 REX Master Plan — Project Bootstrap
+ * @module PROJETS
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -16,7 +17,7 @@ import { execSync } from 'node:child_process'
 import { join, basename } from 'node:path'
 import { createLogger } from './logger.js'
 
-const log = createLogger('project-init')
+const log = createLogger('PROJETS:init')
 
 // Skills to install per detected stack dependency/framework
 // Refs §11.2 SKILL_MAP

@@ -11,7 +11,8 @@ import { getEventLog, appendEvent, getUnacked, ackEvent, getQueueStats } from '.
 import type { EventType } from './sync-queue.js'
 import { getFleetStatus } from './node-mesh.js'
 
-const log = createLogger('hub')
+/** @module FLEET */
+const log = createLogger('FLEET:commander')
 
 const NODES_PATH = join(REX_DIR, 'hub-nodes.json')
 const DEFAULT_PORT = 7420
