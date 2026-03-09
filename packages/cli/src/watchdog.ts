@@ -1,6 +1,6 @@
 /** @module WATCHDOG */
 import { execSync, execFileSync, spawn } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { REX_DIR } from './paths.js'
@@ -241,6 +241,55 @@ export async function notifyIfNeeded(message: string): Promise<void> {
   } catch {}
 }
 
+// ─── Daemon down > 5 min persistent alert ─────────────────────
+
+const DOWN_STATE_PATH = join(REX_DIR, 'watchdog-down-state.json')
+const DOWN_ALERT_THRESHOLD_MS = 5 * 60_000  // 5 minutes
+
+interface DownState {
+  firstDownAt: string | null  // ISO timestamp of first consecutive failure
+  alerted: boolean            // true once the >5min alert was sent
+}
+
+function readDownState(): DownState {
+  try {
+    if (!existsSync(DOWN_STATE_PATH)) return { firstDownAt: null, alerted: false }
+    return JSON.parse(readFileSync(DOWN_STATE_PATH, 'utf-8')) as DownState
+  } catch { return { firstDownAt: null, alerted: false } }
+}
+
+function writeDownState(state: DownState): void {
+  try { writeFileSync(DOWN_STATE_PATH, JSON.stringify(state, null, 2)) } catch {}
+}
+
+async function trackDaemonDown(
+  daemonStatus: 'running' | 'down' | 'restarted',
+  notifyTelegram: boolean,
+): Promise<void> {
+  const state = readDownState()
+
+  if (daemonStatus === 'running') {
+    // Reset on healthy state
+    if (state.firstDownAt) writeDownState({ firstDownAt: null, alerted: false })
+    return
+  }
+
+  // Daemon not running (down or restarted but still unhealthy)
+  const now = Date.now()
+  if (!state.firstDownAt) {
+    writeDownState({ firstDownAt: new Date().toISOString(), alerted: false })
+    return
+  }
+
+  const downMs = now - new Date(state.firstDownAt).getTime()
+  if (downMs >= DOWN_ALERT_THRESHOLD_MS && !state.alerted) {
+    const msg = `🚨 REX daemon DOWN for > ${Math.round(downMs / 60_000)} minutes — manual intervention may be needed`
+    log.warn(msg)
+    if (notifyTelegram) await notifyIfNeeded(msg)
+    writeDownState({ ...state, alerted: true })
+  }
+}
+
 // ─── Watchdog cycle ───────────────────────────────────────────
 
 export async function runWatchdogCycle(
@@ -309,6 +358,9 @@ export async function runWatchdogCycle(
     },
     actions,
   }
+
+  // Track persistent daemon down (alert if > 5min)
+  await trackDaemonDown(daemonStatus, config.notifyTelegram)
 
   log.debug(`cycle complete: daemon=${daemonStatus} budget=${budgetResult.status} mem=${memHealth} idle=${idleIterations}`)
   return report
