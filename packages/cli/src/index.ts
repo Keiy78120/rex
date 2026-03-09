@@ -157,6 +157,12 @@ async function main() {
       break
     }
 
+    case 'hq': {
+      const { printHQStatus } = await import('./dashboard.js')
+      await printHQStatus()
+      break
+    }
+
     case 'status': {
       const report = await runAllChecks()
       const allResults = report.groups.flatMap(g => g.results)
@@ -291,7 +297,8 @@ async function main() {
       break
     }
 
-    case 'gateway': {
+    case 'gateway':
+    case 'comms': {
       const { gateway } = await import('./gateway.js')
       await gateway()
       break
@@ -1515,6 +1522,7 @@ async function main() {
       break
     }
 
+    case 'lint':
     case 'lint-loop': {
       const targetPath = process.argv[3] ?? process.cwd()
       const maxIterations = Number(process.argv.find(a => a.startsWith('--max='))?.split('=')[1] ?? 5)
