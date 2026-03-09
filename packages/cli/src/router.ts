@@ -17,7 +17,7 @@ export type TaskType =
   | 'optimize'    // CLAUDE.md analysis
 
 // Ordered by preference — first available wins
-const TASK_PREFERENCES: Record<TaskType, string[]> = {
+export const TASK_PREFERENCES: Record<TaskType, string[]> = {
   background:  ['qwen2.5:1.5b', 'qwen3.5:latest', 'qwen3.5:9b'],
   consolidate: ['qwen2.5:1.5b', 'qwen3.5:latest', 'qwen3.5:9b'],
   categorize:  ['qwen3.5:9b', 'qwen3.5:latest', 'qwen2.5:1.5b', 'deepseek-r1:8b'],

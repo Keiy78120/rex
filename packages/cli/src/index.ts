@@ -2836,6 +2836,311 @@ async function main() {
       break
     }
 
+    case 'decide': {
+      // rex decide <task> — show which model/provider would be chosen for a task (BLOC 11.1)
+      const taskArg = process.argv[3]
+      const { pickModel, showModelRouter, TASK_PREFERENCES } = await import('./router.js')
+      if (!taskArg || taskArg === '--help') {
+        const validTasks = ['background', 'categorize', 'consolidate', 'gateway', 'optimize', 'reason', 'code']
+        console.log(`\n${COLORS.bold}rex decide <task>${COLORS.reset} — show which model would handle a task\n`)
+        console.log(`  Valid tasks: ${validTasks.join(', ')}\n`)
+        console.log(`  Example: rex decide code\n`)
+        await showModelRouter()
+        break
+      }
+      const jsonFlag = process.argv.includes('--json')
+      const validTasks = ['background', 'categorize', 'consolidate', 'gateway', 'optimize', 'reason', 'code']
+      if (!validTasks.includes(taskArg)) {
+        console.error(`${COLORS.red}✗${COLORS.reset} Unknown task: "${taskArg}". Valid: ${validTasks.join(', ')}`)
+        process.exit(1)
+      }
+      const chosen = await pickModel(taskArg as import('./router.js').TaskType)
+      const prefs: string[] = TASK_PREFERENCES?.[taskArg] ?? []
+      if (jsonFlag) {
+        console.log(JSON.stringify({ task: taskArg, model: chosen, preferences: prefs }))
+      } else {
+        const line = '─'.repeat(44)
+        console.log(`\n${COLORS.bold}REX Routing Decision${COLORS.reset}\n${line}`)
+        console.log(`  Task:   ${COLORS.cyan}${taskArg}${COLORS.reset}`)
+        console.log(`  Model:  ${COLORS.green}${chosen}${COLORS.reset}`)
+        if (prefs.length > 0) {
+          console.log(`  Prefs:  ${COLORS.dim}${prefs.join(' → ')}${COLORS.reset}`)
+        }
+        console.log(`${line}\n`)
+      }
+      break
+    }
+
+    case 'ci': {
+      // rex ci — run GitHub Actions locally via act (BLOC 6.1)
+      const { execSync: ciExec, execFileSync: ciExecFile } = await import('node:child_process')
+      const { existsSync: ciExists } = await import('node:fs')
+      const { join: ciJoin } = await import('node:path')
+      const jsonFlag = process.argv.includes('--json')
+      const workflow = process.argv.find(a => a.startsWith('--workflow='))?.split('=')[1]
+      const job = process.argv.find(a => a.startsWith('--job='))?.split('=')[1]
+      const dryRun = process.argv.includes('--dry-run')
+      const cwd = process.cwd()
+
+      // Check act is installed
+      let actPath = ''
+      try {
+        actPath = ciExec('which act 2>/dev/null', { stdio: 'pipe' }).toString().trim()
+      } catch { /* not found */ }
+
+      if (!actPath) {
+        if (jsonFlag) {
+          console.log(JSON.stringify({ error: 'act not installed', install: 'brew install act' }))
+        } else {
+          console.log(`${COLORS.yellow}!${COLORS.reset} act not installed — GitHub Actions local runner`)
+          console.log(`  Install: ${COLORS.cyan}brew install act${COLORS.reset} (macOS) or ${COLORS.cyan}curl https://raw.githubusercontent.com/nektos/act/master/install.sh | bash${COLORS.reset}`)
+          console.log(`  Then run: ${COLORS.cyan}rex ci${COLORS.reset}`)
+        }
+        process.exit(1)
+      }
+
+      // Check for .github/workflows
+      const workflowsDir = ciJoin(cwd, '.github', 'workflows')
+      if (!ciExists(workflowsDir)) {
+        if (jsonFlag) {
+          console.log(JSON.stringify({ error: 'No .github/workflows directory found', hint: 'rex init --ci' }))
+        } else {
+          console.log(`${COLORS.yellow}!${COLORS.reset} No .github/workflows directory found`)
+          console.log(`  Generate one: ${COLORS.cyan}rex init --ci${COLORS.reset}`)
+        }
+        process.exit(1)
+      }
+
+      if (dryRun) {
+        const args = ['act', '--list']
+        if (workflow) args.push('--workflows', workflow)
+        if (job) args.push('--job', job)
+        console.log(`${COLORS.dim}[dry-run] Would run: ${args.join(' ')}${COLORS.reset}`)
+        try {
+          ciExecFile('act', ['--list'], { cwd, stdio: 'inherit' })
+        } catch { /* non-zero exit ok for listing */ }
+        break
+      }
+
+      console.log(`${COLORS.bold}REX CI${COLORS.reset} — running GitHub Actions locally with act\n`)
+      const actArgs = ['push']
+      if (workflow) actArgs.push('--workflows', workflow)
+      if (job) actArgs.push('--job', job)
+      actArgs.push('--rm')
+
+      try {
+        ciExecFile('act', actArgs, { cwd, stdio: 'inherit', timeout: 600_000 })
+        if (jsonFlag) console.log(JSON.stringify({ status: 'ok', message: 'CI passed locally' }))
+      } catch (e: any) {
+        if (jsonFlag) console.log(JSON.stringify({ status: 'fail', message: 'CI failed', code: e.status }))
+        process.exit(e.status ?? 1)
+      }
+      break
+    }
+
+    case 'clean': {
+      // rex clean — dead code detection via knip (BLOC 6.2)
+      const { execSync: cleanExec } = await import('node:child_process')
+      const jsonFlag = process.argv.includes('--json')
+      const fix = process.argv.includes('--fix')
+      const cwd = process.cwd()
+
+      // Check knip availability
+      let knipAvailable = false
+      try {
+        cleanExec('npx knip --version 2>/dev/null', { stdio: 'pipe' })
+        knipAvailable = true
+      } catch { /* not available */ }
+
+      if (!knipAvailable) {
+        if (jsonFlag) {
+          console.log(JSON.stringify({ error: 'knip not available', install: 'npm install knip --save-dev' }))
+        } else {
+          console.log(`${COLORS.yellow}!${COLORS.reset} knip not installed in this project`)
+          console.log(`  Install: ${COLORS.cyan}npm install knip --save-dev${COLORS.reset}`)
+          console.log(`  Or run globally: ${COLORS.cyan}npx knip${COLORS.reset}`)
+        }
+        process.exit(1)
+      }
+
+      const knipArgs = ['knip', '--reporter=json']
+      if (fix) knipArgs.push('--fix')
+      const knipCmd = `npx ${knipArgs.join(' ')} 2>/dev/null`
+
+      if (!jsonFlag) {
+        console.log(`${COLORS.bold}REX Clean${COLORS.reset} — dead code detection\n`)
+      }
+
+      try {
+        const out = cleanExec(knipCmd, { cwd, stdio: 'pipe', timeout: 120_000 }).toString()
+        if (jsonFlag) {
+          console.log(out)
+          break
+        }
+        interface KnipResult {
+          files?: string[]
+          issues?: Array<{ file: string; owners?: string[]; symbols?: Array<{ name: string; type: string }> }>
+        }
+        let data: KnipResult = {}
+        try { data = JSON.parse(out) as KnipResult } catch { /* non-JSON output */ }
+        const files = data.files ?? []
+        const issues = data.issues ?? []
+        const totalIssues = issues.reduce((s, i) => s + (i.symbols?.length ?? 0), 0)
+        if (files.length === 0 && totalIssues === 0) {
+          console.log(`${COLORS.green}✓${COLORS.reset} No dead code found — project is clean`)
+        } else {
+          if (files.length > 0) {
+            console.log(`  ${COLORS.yellow}!${COLORS.reset} ${files.length} unused file${files.length !== 1 ? 's' : ''}:`)
+            files.slice(0, 10).forEach(f => console.log(`    ${COLORS.dim}${f}${COLORS.reset}`))
+            if (files.length > 10) console.log(`    ${COLORS.dim}...and ${files.length - 10} more${COLORS.reset}`)
+          }
+          if (totalIssues > 0) {
+            console.log(`  ${COLORS.yellow}!${COLORS.reset} ${totalIssues} unused export${totalIssues !== 1 ? 's' : ''}`)
+            issues.slice(0, 5).forEach(i => {
+              i.symbols?.slice(0, 3).forEach(s => console.log(`    ${COLORS.dim}${i.file}: ${s.name} (${s.type})${COLORS.reset}`))
+            })
+          }
+          console.log(`\n  ${COLORS.dim}Run ${COLORS.reset}rex clean --fix${COLORS.dim} to auto-remove (use with care)${COLORS.reset}`)
+        }
+      } catch (e: any) {
+        // knip exits non-zero when issues found
+        const out = (e.stdout ?? e.stderr ?? '').toString()
+        if (jsonFlag) { console.log(out || '{}'); break }
+        if (out.includes('Unused')) {
+          console.log(`${COLORS.yellow}!${COLORS.reset} Dead code found — run ${COLORS.cyan}npx knip${COLORS.reset} for full report`)
+        } else {
+          console.log(`${COLORS.red}✗${COLORS.reset} knip failed: ${e.message?.slice(0, 80)}`)
+        }
+      }
+      break
+    }
+
+    case 'security': {
+      // rex security — standalone security scan: secrets + dep audit + SAST hints (BLOC 6.5)
+      const { runReview, printReviewResults } = await import('./review.js')
+      const jsonFlag = process.argv.includes('--json')
+      const full = process.argv.includes('--full')
+      const cwd = process.cwd()
+
+      if (!jsonFlag) {
+        console.log(`${COLORS.bold}REX Security Scan${COLORS.reset}\n`)
+      }
+
+      // Always run secrets + dep audit; optionally add tsc check (--full)
+      const { execSync: secExec } = await import('node:child_process')
+      const { existsSync: secExists } = await import('node:fs')
+      const { join: secJoin } = await import('node:path')
+
+      interface SecResult { name: string; status: 'ok' | 'warn' | 'fail' | 'skip'; message: string }
+      const results: SecResult[] = []
+
+      // 1. Secrets scan (staged + all files if --full)
+      const secretPatterns = [
+        /sk-[a-zA-Z0-9]{20,}/,
+        /ghp_[a-zA-Z0-9]{36}/,
+        /AKIA[A-Z0-9]{16}/,
+        /Bearer\s+[a-zA-Z0-9._\-]{20,}/,
+        /password\s*=\s*["'][^"']{4,}["']/i,
+        /api[_-]?key\s*=\s*["'][^"']{8,}["']/i,
+      ]
+      try {
+        const files = full
+          ? secExec('git ls-files 2>/dev/null', { cwd, stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean)
+          : secExec('git diff --cached --name-only 2>/dev/null', { cwd, stdio: 'pipe' }).toString().trim().split('\n').filter(Boolean)
+
+        if (files.length === 0) {
+          results.push({ name: 'Secret scan', status: 'skip', message: full ? 'No tracked files' : 'No staged files' })
+        } else {
+          const { readFileSync: secRead } = await import('node:fs')
+          const hits: string[] = []
+          for (const f of files) {
+            const fp = secJoin(cwd, f)
+            if (!secExists(fp)) continue
+            try {
+              const content = secRead(fp, 'utf-8')
+              for (const pat of secretPatterns) {
+                if (pat.test(content)) { hits.push(f); break }
+              }
+            } catch { /* binary/inaccessible */ }
+          }
+          if (hits.length > 0) {
+            results.push({ name: 'Secret scan', status: 'fail', message: `${hits.length} file${hits.length > 1 ? 's' : ''} with potential secrets: ${hits[0]}` })
+          } else {
+            results.push({ name: 'Secret scan', status: 'ok', message: `${files.length} file${files.length !== 1 ? 's' : ''} scanned, clean` })
+          }
+        }
+      } catch {
+        results.push({ name: 'Secret scan', status: 'skip', message: 'Not in a git repo' })
+      }
+
+      // 2. Dependency audit
+      if (secExists(secJoin(cwd, 'package.json'))) {
+        const pm = secExists(secJoin(cwd, 'pnpm-lock.yaml')) ? 'pnpm' : secExists(secJoin(cwd, 'yarn.lock')) ? 'yarn' : 'npm'
+        try {
+          const out = secExec(`${pm} audit --json 2>&1`, { cwd, stdio: 'pipe', timeout: 60_000 }).toString()
+          const data = JSON.parse(out)
+          const v = data?.metadata?.vulnerabilities ?? data?.vulnerabilities ?? {}
+          const critical = v.critical ?? 0
+          const high = v.high ?? 0
+          const total = Object.values(v as Record<string, number>).reduce((s, n) => s + n, 0)
+          if (critical > 0) results.push({ name: 'Dep audit', status: 'fail', message: `${critical} critical vulnerabilities` })
+          else if (high > 0) results.push({ name: 'Dep audit', status: 'warn', message: `${high} high vulnerabilities` })
+          else if (total > 0) results.push({ name: 'Dep audit', status: 'warn', message: `${total} low/moderate vulnerabilities` })
+          else results.push({ name: 'Dep audit', status: 'ok', message: 'No known vulnerabilities' })
+        } catch (e: any) {
+          const out = (e.stdout ?? e.stderr ?? '').toString()
+          try {
+            const data = JSON.parse(out)
+            const v = data?.metadata?.vulnerabilities ?? data?.vulnerabilities ?? {}
+            const critical = v.critical ?? 0
+            if (critical > 0) results.push({ name: 'Dep audit', status: 'fail', message: `${critical} critical vulnerabilities` })
+            else results.push({ name: 'Dep audit', status: 'warn', message: 'Vulnerabilities found (run audit manually)' })
+          } catch {
+            results.push({ name: 'Dep audit', status: 'skip', message: 'Audit unavailable' })
+          }
+        }
+      } else {
+        results.push({ name: 'Dep audit', status: 'skip', message: 'No package.json' })
+      }
+
+      // 3. SAST: check for .env files committed
+      try {
+        const envFiles = secExec('git ls-files | grep -E "^\\.env" 2>/dev/null', { cwd, stdio: 'pipe' }).toString().trim()
+        if (envFiles) {
+          results.push({ name: 'SAST: .env committed', status: 'fail', message: `Committed .env files: ${envFiles.split('\n')[0]}` })
+        } else {
+          results.push({ name: 'SAST: .env committed', status: 'ok', message: 'No .env files committed' })
+        }
+      } catch {
+        results.push({ name: 'SAST: .env committed', status: 'skip', message: 'git not available' })
+      }
+
+      // 4. SAST: check for console.log with potential data leaks
+      if (full) {
+        try {
+          const matches = secExec('git ls-files | xargs grep -l "console\\.log.*password\\|console\\.log.*token\\|console\\.log.*secret\\|console\\.log.*key" 2>/dev/null || true', { cwd, stdio: 'pipe' }).toString().trim()
+          if (matches) {
+            results.push({ name: 'SAST: data leak logs', status: 'warn', message: `Potential data leak in: ${matches.split('\n')[0]}` })
+          } else {
+            results.push({ name: 'SAST: data leak logs', status: 'ok', message: 'No suspicious console.log patterns' })
+          }
+        } catch {
+          results.push({ name: 'SAST: data leak logs', status: 'skip', message: 'Could not scan' })
+        }
+      }
+
+      if (jsonFlag) {
+        const hasFail = results.some(r => r.status === 'fail')
+        console.log(JSON.stringify({ results, passed: !hasFail }))
+        process.exit(hasFail ? 1 : 0)
+      }
+
+      printReviewResults(results as Array<{ name: string; status: 'ok' | 'warn' | 'fail' | 'skip'; message: string }>)
+      const hasFail = results.some(r => r.status === 'fail')
+      if (hasFail) process.exit(1)
+      break
+    }
+
     case 'help':
     default:
       console.log(`
@@ -2875,9 +3180,21 @@ ${COLORS.bold}Guards:${COLORS.reset}
 
 ${COLORS.bold}Review:${COLORS.reset}
   rex review                  Quick review (TypeScript + secrets)
-  rex review --full           Full review (+ lint + tests + coverage)
+  rex review --full           Full review (+ lint + dep audit + tests + coverage)
   rex review --ai             AI-assisted review (requires provider)
   rex review --json           JSON output
+  rex security                Security scan: secrets + dep audit + SAST checks
+  rex security --full         Also scan all tracked files + data leak logs
+  rex security --json         JSON output
+  rex clean                   Dead code detection via knip (unused files/exports)
+  rex clean --fix             Auto-remove dead code (use with care)
+  rex clean --json            JSON output
+  rex ci                      Run GitHub Actions locally via act
+  rex ci --workflow=<file>    Specify workflow file
+  rex ci --job=<name>         Specify job name
+  rex ci --dry-run            List available workflows without running
+  rex decide <task>           Show which model would be chosen for a task (BLOC 11.1)
+  rex decide                  Show full routing table
   rex debt                    List TODO/FIXME/HACK with age (stale >7d in red)
   rex debt --json             Machine-readable debt list
   rex watch                   Live guard activity tail (color-coded)
