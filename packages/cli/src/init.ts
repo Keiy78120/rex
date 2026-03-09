@@ -1259,5 +1259,36 @@ npx lint-staged
     console.log(`  ${COLORS.yellow}!${COLORS.reset} .husky/pre-commit already exists — skipped`)
   }
 
-  console.log(`  ${COLORS.cyan}i${COLORS.reset} Run: npm install husky lint-staged --save-dev && npx husky install`)
+  // Create .husky/commit-msg for commitlint
+  const commitMsgPath = join(huskyDir, 'commit-msg')
+  if (!existsSync(commitMsgPath)) {
+    const commitMsgScript = `#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+npx --no -- commitlint --edit "$1"
+`
+    writeFileSync(commitMsgPath, commitMsgScript)
+    chmodSync(commitMsgPath, 0o755)
+    ok('Generated .husky/commit-msg hook (commitlint)')
+  } else {
+    console.log(`  ${COLORS.yellow}!${COLORS.reset} .husky/commit-msg already exists — skipped`)
+  }
+
+  // Write .commitlintrc.json
+  const commitlintPath = join(projectDir, '.commitlintrc.json')
+  if (!existsSync(commitlintPath)) {
+    writeFileSync(commitlintPath, JSON.stringify({
+      extends: ['@commitlint/config-conventional'],
+      rules: {
+        'type-enum': [2, 'always', ['feat', 'fix', 'refactor', 'chore', 'docs', 'test', 'perf', 'ci', 'revert']],
+        'subject-case': [1, 'always', 'lower-case'],
+        'header-max-length': [2, 'always', 100],
+      },
+    }, null, 2) + '\n')
+    ok('Generated .commitlintrc.json (conventional commits enforced)')
+  } else {
+    console.log(`  ${COLORS.yellow}!${COLORS.reset} .commitlintrc.json already exists — skipped`)
+  }
+
+  console.log(`  ${COLORS.cyan}i${COLORS.reset} Run: npm install husky lint-staged @commitlint/cli @commitlint/config-conventional --save-dev && npx husky install`)
 }

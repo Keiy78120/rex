@@ -148,6 +148,46 @@ function checkTests(): StepResult {
   })
 }
 
+function checkCoverage(threshold = 60): StepResult {
+  return runStep('Coverage check', () => {
+    const cwd = process.cwd()
+    const pkgPath = join(cwd, 'package.json')
+    if (!existsSync(pkgPath)) {
+      return { status: 'skip', message: 'No package.json found' }
+    }
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies }
+    if (!deps?.vitest && !deps?.jest && !deps?.['@jest/core']) {
+      return { status: 'skip', message: 'No test framework with coverage support found (vitest/jest)' }
+    }
+
+    const isVitest = !!deps?.vitest
+    const cmd = isVitest
+      ? 'npx vitest run --coverage --reporter=verbose 2>&1'
+      : 'npx jest --coverage --coverageReporters=text-summary 2>&1'
+
+    try {
+      const output = execSync(cmd, { cwd, stdio: 'pipe', timeout: 180_000 }).toString()
+      // Parse coverage percentage from vitest/jest output
+      // Vitest: "All files |  85.71 |  100 |  85.71 |  85.71 |"
+      // Jest: "Statements   : 85.71% ( 12/14 )"
+      const vitestMatch = output.match(/All files\s*\|\s*([\d.]+)/)
+      const jestMatch = output.match(/Statements\s*:\s*([\d.]+)%/)
+      const pct = vitestMatch ? parseFloat(vitestMatch[1]) : jestMatch ? parseFloat(jestMatch[1]) : null
+
+      if (pct === null) {
+        return { status: 'skip', message: 'Could not parse coverage output' }
+      }
+      if (pct < threshold) {
+        return { status: 'warn', message: `Coverage ${pct.toFixed(1)}% is below threshold (${threshold}%)` }
+      }
+      return { status: 'ok', message: `Coverage ${pct.toFixed(1)}% ≥ ${threshold}%` }
+    } catch {
+      return { status: 'skip', message: 'Coverage run failed or timed out' }
+    }
+  })
+}
+
 async function checkAI(): Promise<StepResult> {
   const name = 'AI code review'
   try {
@@ -221,6 +261,7 @@ export async function runReview(mode: 'quick' | 'full' | 'ai' | 'pre-push'): Pro
   if (mode === 'full') {
     results.push(checkLint())
     results.push(checkTests())
+    results.push(checkCoverage())
   }
 
   return results

@@ -399,9 +399,17 @@ async function main() {
     }
 
     case 'context': {
-      const targetPath = process.argv[3] || process.cwd()
-      const { context } = await import('./context.js')
-      await context(targetPath)
+      if (process.argv.includes('--inject')) {
+        // rex context --inject [path]
+        // Path is any non-flag arg after position 2 that isn't 'context'
+        const pathArg = process.argv.slice(3).find(a => !a.startsWith('-')) ?? process.cwd()
+        const { injectContext } = await import('./context.js')
+        injectContext(pathArg)
+      } else {
+        const targetPath = process.argv[3] || process.cwd()
+        const { context } = await import('./context.js')
+        await context(targetPath)
+      }
       break
     }
 
@@ -1878,6 +1886,134 @@ async function main() {
       break
     }
 
+    case 'watch': {
+      // rex watch — live guard activity tail, color-coded (BLOC 4.2)
+      // Reads daemon log, filters guard-related lines, color-codes: red=blocked, yellow=warn, green=ok
+      const { DAEMON_LOG_PATH: WATCH_LOG_PATH } = await import('./paths.js')
+      const { execSync: watchExec } = await import('node:child_process')
+      const { existsSync: watchExists, readFileSync: watchRead } = await import('node:fs')
+
+      const GUARD_PATTERNS = [/BLOCK|BLOCKED|block|blocked/, /WARN|warn|warning/, /guard|Guard|GUARD/]
+      const WATCH_RED = '\x1b[31m', WATCH_YELLOW = '\x1b[33m', WATCH_GREEN = '\x1b[32m', WATCH_RESET = '\x1b[0m', WATCH_DIM = '\x1b[2m'
+
+      function colorGuardLine(line: string): string | null {
+        // Only show guard-related lines
+        if (!GUARD_PATTERNS.some(p => p.test(line))) return null
+        if (/BLOCK|BLOCKED|exit 2|blocked/i.test(line)) return `${WATCH_RED}● ${line}${WATCH_RESET}`
+        if (/WARN|warn|warning|skip/i.test(line)) return `${WATCH_YELLOW}! ${line}${WATCH_RESET}`
+        if (/ok|passed|allow/i.test(line)) return `${WATCH_GREEN}✓ ${line}${WATCH_RESET}`
+        return `${WATCH_DIM}· ${line}${WATCH_RESET}`
+      }
+
+      if (!watchExists(WATCH_LOG_PATH)) {
+        console.log(`${WATCH_DIM}No daemon log found at ${WATCH_LOG_PATH}. Start rex daemon first.${WATCH_RESET}`)
+        break
+      }
+
+      console.log(`${WATCH_GREEN}REX Watch${WATCH_RESET} — live guard activity (Ctrl+C to stop)\n`)
+
+      // Show last 20 guard lines from existing log
+      const existing = watchRead(WATCH_LOG_PATH, 'utf-8').split('\n').filter(Boolean)
+      const guardHistory = existing.map(colorGuardLine).filter(Boolean).slice(-20) as string[]
+      for (const line of guardHistory) console.log(line)
+
+      // Then tail live, filtering for guard lines
+      try {
+        const tail = await import('node:child_process')
+        const child = tail.spawn('tail', ['-f', '-n', '0', WATCH_LOG_PATH], { stdio: ['ignore', 'pipe', 'ignore'] })
+        child.stdout.on('data', (chunk: Buffer) => {
+          for (const raw of chunk.toString().split('\n').filter(Boolean)) {
+            const colored = colorGuardLine(raw)
+            if (colored) console.log(colored)
+          }
+        })
+        await new Promise<void>((_, reject) => {
+          child.on('error', reject)
+          child.on('close', () => reject(new Error('tail exited')))
+          process.on('SIGINT', () => { child.kill(); process.exit(0) })
+        })
+      } catch { /* user hit Ctrl+C or tail exited */ }
+      break
+    }
+
+    case 'log': {
+      // rex log — filtered guard/event log viewer (BLOC 4.3)
+      // rex log             → last 50 guard log entries
+      // rex log --today     → today's entries only
+      // rex log --guard <n> → filter by guard name
+      const { DAEMON_LOG_PATH: LOG_PATH } = await import('./paths.js')
+      const { existsSync: logExists, readFileSync: logRead } = await import('node:fs')
+
+      const todayFlag = process.argv.includes('--today')
+      const guardIdx = process.argv.indexOf('--guard')
+      const guardFilter = guardIdx !== -1 ? process.argv[guardIdx + 1] : undefined
+      const nArg = process.argv.find(a => a.startsWith('--lines='))
+      const maxLines = nArg ? parseInt(nArg.split('=')[1]) : 50
+      const jsonFlag = process.argv.includes('--json')
+
+      const LOG_BOLD = '\x1b[1m', LOG_RESET = '\x1b[0m', LOG_DIM = '\x1b[2m'
+      const LOG_RED = '\x1b[31m', LOG_YELLOW = '\x1b[33m', LOG_GREEN = '\x1b[32m', LOG_CYAN = '\x1b[36m'
+
+      // Also check guard-manager logs (daemon log filtered for guard lines)
+      const sources: string[] = []
+      if (logExists(LOG_PATH)) sources.push(logRead(LOG_PATH, 'utf-8'))
+
+      // Also read ~/.claude/rex-guards/*.log files if present
+      const { homedir: logHome } = await import('node:os')
+      const { join: logJoin } = await import('node:path')
+      const { readdirSync: logReaddir } = await import('node:fs')
+      const guardsDir = logJoin(logHome(), '.claude', 'rex-guards')
+      if (logExists(guardsDir)) {
+        for (const f of logReaddir(guardsDir)) {
+          if (f.endsWith('.log')) {
+            try { sources.push(logRead(logJoin(guardsDir, f), 'utf-8')) } catch {}
+          }
+        }
+      }
+
+      let lines = sources.join('\n').split('\n').filter(Boolean)
+
+      // Filter: guard-related lines only (unless we have a dedicated guard log)
+      lines = lines.filter(l => /guard|Guard|GUARD|BLOCK|block|secret|hook|PreToolUse|PostToolUse/.test(l))
+
+      // Filter: --today
+      if (todayFlag) {
+        const today = new Date().toISOString().slice(0, 10)
+        lines = lines.filter(l => l.includes(today))
+      }
+
+      // Filter: --guard <name>
+      if (guardFilter) {
+        const gf = guardFilter.toLowerCase()
+        lines = lines.filter(l => l.toLowerCase().includes(gf))
+      }
+
+      // Tail
+      lines = lines.slice(-maxLines)
+
+      if (jsonFlag) {
+        console.log(JSON.stringify({ lines, total: lines.length }))
+        break
+      }
+
+      const filterLabel = [todayFlag && 'today', guardFilter && `guard:${guardFilter}`].filter(Boolean).join(' + ')
+      console.log(`\n${LOG_BOLD}REX Guard Log${LOG_RESET}${filterLabel ? ` (${filterLabel})` : ''} — ${lines.length} entr${lines.length !== 1 ? 'ies' : 'y'}\n`)
+
+      for (const line of lines) {
+        let color = LOG_DIM
+        if (/BLOCK|BLOCKED|exit 2|blocked/i.test(line)) color = LOG_RED
+        else if (/WARN|warn|warning/i.test(line)) color = LOG_YELLOW
+        else if (/ok|passed|allow|enabled/i.test(line)) color = LOG_GREEN
+        console.log(`  ${color}${line}${LOG_RESET}`)
+      }
+
+      if (lines.length === 0) {
+        console.log(`  ${LOG_DIM}No guard log entries found${filterLabel ? ` for filter: ${filterLabel}` : ''}.${LOG_RESET}`)
+      }
+      console.log('')
+      break
+    }
+
     case 'debt': {
       // List TODO / FIXME / HACK comments across the project (zero LLM)
       // Supports: --stale N (filter by age), --add "note" (add manual item), --json
@@ -2717,7 +2853,7 @@ ${COLORS.bold}Commands:${COLORS.reset}
   rex init --docker   Generate docker-compose.local.yml + .env.docker for VPS deployment
   rex init --ci         Generate .github/workflows/rex-ci.yml (GitHub Actions quality gate)
   rex init --review     Generate .coderabbit.yaml + .deepsource.toml (AI code review)
-  rex init --pre-commit Generate .husky/pre-commit + lint-staged config
+  rex init --pre-commit       Generate husky hooks + lint-staged + commitlint
   rex audit           Run integration audit checks
   rex doctor          Full health check (9 categories)
   rex doctor --fix    Auto-fix common issues then check
@@ -2739,11 +2875,15 @@ ${COLORS.bold}Guards:${COLORS.reset}
 
 ${COLORS.bold}Review:${COLORS.reset}
   rex review                  Quick review (TypeScript + secrets)
-  rex review --full           Full review (+ lint + tests)
+  rex review --full           Full review (+ lint + tests + coverage)
   rex review --ai             AI-assisted review (requires provider)
   rex review --json           JSON output
   rex debt                    List TODO/FIXME/HACK with age (stale >7d in red)
   rex debt --json             Machine-readable debt list
+  rex watch                   Live guard activity tail (color-coded)
+  rex log                     Last 50 guard log entries
+  rex log --today             Today's guard log entries
+  rex log --guard <name>      Filter by guard name
 
 ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex migrate          Migrate ~/.rex-memory/ to ~/.claude/rex/ hub
@@ -2783,7 +2923,8 @@ ${COLORS.bold}LLM & Context:${COLORS.reset}
   rex inventory       Scan local resources (CLIs, services, hardware, models) [alias: resources]
   rex models           Show task-aware model routing table (--catalog for full list)
   rex preload [path]   Show pre-loaded context for a path
-  rex context [path]   Analyze project, recommend MCP/skills
+  rex context [path]          Analyze project, recommend MCP/skills
+  rex context --inject [path] Inject recent session context into CLAUDE.md
   rex projects         Scan and index all dev projects
   rex intent [path]    Detect project intent from git signals (new/feature/fix/refactor)
   rex intent --debug   Show raw signals used for detection
