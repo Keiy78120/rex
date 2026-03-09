@@ -15,6 +15,7 @@ import { cacheClean } from './semantic-cache.js'
 import { getRoutableProviders, pingAllProviders } from './free-tiers.js'
 import { buildLocalFleetNode, registerWithCommander, autoDiscoverCommanders, persistDiscoveredCommander } from './node-mesh.js'
 import { detectSignals, isUnderPressure } from './signal-detector.js'
+import { forgettingCurve } from './prune.js'
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 const log = createLogger('FLEET:daemon')
@@ -420,6 +421,16 @@ async function maintenanceCycle(): Promise<void> {
     }
   } catch (e: any) {
     log.debug(`Duplicate prune skipped: ${e.message?.slice(0, 80)}`)
+  }
+
+  // Apply forgetting curve: compress 30-90d memories, archive 90d+
+  try {
+    const fc = await forgettingCurve({ dry: false })
+    if (fc && (fc.compressed > 0 || fc.archived > 0)) {
+      log.info(`Forgetting curve: ${fc.compressed} compressed, ${fc.archived} archived`)
+    }
+  } catch (e: any) {
+    log.debug(`Forgetting curve skipped: ${e.message?.slice(0, 80)}`)
   }
 
   log.info('Maintenance cycle done')

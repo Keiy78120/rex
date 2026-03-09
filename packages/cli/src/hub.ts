@@ -425,6 +425,31 @@ addRoute('GET', '/api/v1/memory', (_req, res) => {
   }
 })
 
+// Memory search: text search across local memories (BM25 via SQL LIKE fallback)
+addRoute('GET', '/api/v1/memory/search', (req, res) => {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  const query = url.searchParams.get('q') ?? ''
+  const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '10', 10), 50)
+  if (!query.trim()) {
+    sendError(res, 400, 'MISSING_QUERY', 'q parameter required')
+    return
+  }
+  if (!existsSync(MEMORY_DB_PATH)) {
+    sendJson(res, 200, { results: [], total: 0, query })
+    return
+  }
+  try {
+    const pattern = `%${query.replace(/'/g, "''")}%`
+    const out = execFileSync('sqlite3', [MEMORY_DB_PATH, '-json',
+      `SELECT id, content, category, project, created_at FROM memories WHERE content LIKE '${pattern}' ORDER BY created_at DESC LIMIT ${limit};`
+    ], { encoding: 'utf-8', timeout: 5000 })
+    const rows = out.trim() ? JSON.parse(out) as Array<{ id: number; content: string; category: string; project: string; created_at: string }> : []
+    sendJson(res, 200, { results: rows, total: rows.length, query })
+  } catch (err: any) {
+    sendError(res, 500, 'SEARCH_ERROR', err.message?.slice(0, 100) ?? 'Search failed')
+  }
+})
+
 // Events list with limit (alias for /api/events, supports /api/v1/events?limit=N)
 addRoute('GET', '/api/v1/events', (req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost')
