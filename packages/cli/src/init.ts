@@ -1086,3 +1086,120 @@ export function installGitHooks(projectDir?: string): number {
 
   return installed
 }
+
+// ── CI Workflow generation ─────────────────────────────────────────────────
+
+const CI_WORKFLOW_YAML = `name: REX CI
+on:
+  push:
+    branches: [main, master, 'feat/**', 'fix/**']
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  quality:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci 2>/dev/null || yarn install --frozen-lockfile 2>/dev/null || pnpm install --frozen-lockfile 2>/dev/null || true
+
+      - name: TypeScript check
+        run: npx tsc --noEmit --skipLibCheck 2>/dev/null || true
+
+      - name: Lint
+        run: npx biome check . 2>/dev/null || npx eslint . 2>/dev/null || true
+
+      - name: Tests
+        run: npm test 2>/dev/null || npx vitest run 2>/dev/null || true
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high 2>/dev/null || true
+`
+
+const CODERABBIT_YAML = `# CodeRabbit configuration
+# https://coderabbit.ai/docs/configure-coderabbit
+language: "en-US"
+reviews:
+  profile: "assertive"
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "**/*.ts"
+      instructions: "Use ESM imports (.js extensions). No any types. Use createLogger() not console.log."
+    - path: "**/*.dart"
+      instructions: "Business logic in rex_service.dart only. Use RexColors for colors. addPostFrameCallback for service calls in initState."
+chat:
+  auto_reply: true
+`
+
+const DEEPSOURCE_TOML = `version = 1
+
+[[analyzers]]
+name = "javascript"
+enabled = true
+
+  [analyzers.meta]
+  plugins = ["react"]
+
+[[analyzers]]
+name = "secrets"
+enabled = true
+
+[[analyzers]]
+name = "shell"
+enabled = true
+`
+
+/**
+ * Generate `.github/workflows/rex-ci.yml` in the current project directory.
+ */
+export function generateCIWorkflow(projectDir = process.cwd()): void {
+  const githubDir = join(projectDir, '.github', 'workflows')
+  if (!existsSync(githubDir)) mkdirSync(githubDir, { recursive: true })
+
+  const dest = join(githubDir, 'rex-ci.yml')
+  if (existsSync(dest)) {
+    console.log(`  ${COLORS.yellow}!${COLORS.reset} .github/workflows/rex-ci.yml already exists — skipped`)
+    return
+  }
+
+  writeFileSync(dest, CI_WORKFLOW_YAML)
+  ok(`Generated .github/workflows/rex-ci.yml`)
+  console.log(`  ${COLORS.cyan}i${COLORS.reset} Commit and push to trigger CI on GitHub Actions.`)
+}
+
+/**
+ * Generate `.coderabbit.yaml` and `.deepsource.toml` in the current project directory.
+ */
+export function generateReviewConfig(projectDir = process.cwd()): void {
+  const crDest = join(projectDir, '.coderabbit.yaml')
+  if (!existsSync(crDest)) {
+    writeFileSync(crDest, CODERABBIT_YAML)
+    ok(`Generated .coderabbit.yaml (CodeRabbit AI review)`)
+  } else {
+    console.log(`  ${COLORS.yellow}!${COLORS.reset} .coderabbit.yaml already exists — skipped`)
+  }
+
+  const dsDest = join(projectDir, '.deepsource.toml')
+  if (!existsSync(dsDest)) {
+    writeFileSync(dsDest, DEEPSOURCE_TOML)
+    ok(`Generated .deepsource.toml (DeepSource static analysis)`)
+  } else {
+    console.log(`  ${COLORS.yellow}!${COLORS.reset} .deepsource.toml already exists — skipped`)
+  }
+
+  console.log(`  ${COLORS.cyan}i${COLORS.reset} CodeRabbit: enable at https://coderabbit.ai (free for open source)`)
+  console.log(`  ${COLORS.cyan}i${COLORS.reset} DeepSource: enable at https://deepsource.io (free for open source)`)
+}

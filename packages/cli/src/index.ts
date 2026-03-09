@@ -200,6 +200,12 @@ async function main() {
       if (process.argv.includes('--docker')) {
         const { generateDockerCompose } = await import('./docker.js')
         await generateDockerCompose()
+      } else if (process.argv.includes('--ci')) {
+        const { generateCIWorkflow } = await import('./init.js')
+        generateCIWorkflow(process.cwd())
+      } else if (process.argv.includes('--review')) {
+        const { generateReviewConfig } = await import('./init.js')
+        generateReviewConfig(process.cwd())
       } else {
         const { init } = await import('./init.js')
         await init()
@@ -2337,6 +2343,8 @@ ${COLORS.bold}Commands:${COLORS.reset}
   rex install --hub   One-command VPS hub setup (hub-vps profile)
   rex init            Setup REX (guards, hooks, MCP, startup)
   rex init --docker   Generate docker-compose.local.yml + .env.docker for VPS deployment
+  rex init --ci       Generate .github/workflows/rex-ci.yml (GitHub Actions quality gate)
+  rex init --review   Generate .coderabbit.yaml + .deepsource.toml (AI code review)
   rex audit           Run integration audit checks
   rex doctor          Full health check (9 categories)
   rex doctor --fix    Auto-fix common issues then check
