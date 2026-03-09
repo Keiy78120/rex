@@ -22,6 +22,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
     rex.loadBudget();
     rex.loadRunbooks();
     rex.loadModelRouter();
+    rex.loadLlmUsage();
   }
 
   @override
@@ -92,6 +93,8 @@ class _ProvidersPageState extends State<ProvidersPage> {
                 _ProvidersSection(providers: rex.providers),
                 const SizedBox(height: 8),
                 _FreeTiersSection(),
+                const SizedBox(height: 8),
+                _LlmUsageSection(usage: rex.llmUsage),
                 const SizedBox(height: 8),
                 _ModelRouterSection(),
                 const SizedBox(height: 8),
@@ -421,6 +424,70 @@ class _ModelRouterSection extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+// -- LLM Usage Section --
+
+class _LlmUsageSection extends StatelessWidget {
+  final Map<String, dynamic> usage;
+  const _LlmUsageSection({required this.usage});
+
+  @override
+  Widget build(BuildContext context) {
+    if (usage.isEmpty) return const SizedBox.shrink();
+    final c = context.rex;
+    final providers = (usage['providers'] as Map<String, dynamic>?) ?? {};
+    if (providers.isEmpty) return const SizedBox.shrink();
+    final totalReq = (usage['totalRequests'] as int?) ?? 0;
+    final totalErrors = (usage['totalErrors'] as int?) ?? 0;
+    return RexCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        RexSection(title: 'LLM Usage', icon: CupertinoIcons.chart_bar_alt_fill),
+        Row(children: [
+          _UsageStat(label: 'Requests', value: '$totalReq', color: c.text),
+          const SizedBox(width: 20),
+          _UsageStat(label: 'Errors', value: '$totalErrors',
+              color: totalErrors > 0 ? c.error : c.textSecondary),
+        ]),
+        const SizedBox(height: 10),
+        ...providers.entries.map((e) {
+          final p = e.value as Map<String, dynamic>;
+          final req = (p['requests'] as int?) ?? 0;
+          final errors = (p['errors'] as int?) ?? 0;
+          final rl = (p['rateLimits'] as int?) ?? 0;
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(children: [
+              Expanded(child: Text(e.key,
+                  style: TextStyle(fontSize: 12, color: c.text))),
+              Text('$req req', style: TextStyle(fontSize: 11, color: c.textSecondary)),
+              const SizedBox(width: 10),
+              if (errors > 0)
+                Text('$errors err', style: TextStyle(fontSize: 11, color: c.error)),
+              if (rl > 0) ...[
+                const SizedBox(width: 6),
+                RexStatusChip(label: 'RL $rl', status: RexChipStatus.pending, small: true),
+              ],
+            ]),
+          );
+        }),
+      ]),
+    );
+  }
+}
+
+class _UsageStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  const _UsageStat({required this.label, required this.value, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: color)),
+      Text(label, style: TextStyle(fontSize: 11, color: context.rex.textSecondary)),
+    ]);
   }
 }
 

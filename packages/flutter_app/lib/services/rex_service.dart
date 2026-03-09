@@ -2267,6 +2267,23 @@ $transcript
     } catch (_) {}
   }
 
+  Map<String, dynamic> _llmUsage = {};
+  Map<String, dynamic> get llmUsage => _llmUsage;
+
+  Future<void> loadLlmUsage() async {
+    try {
+      final out = await _runRexArgs(['llm-usage', '--json'], timeout: 10);
+      final json = _extractJson(out);
+      if (json.isNotEmpty) {
+        final parsed = jsonDecode(json);
+        if (parsed is Map<String, dynamic>) {
+          _llmUsage = parsed;
+          notifyListeners();
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<String> runQuickSetup() async {
     try {
       return await _runRexArgs(['setup', '--quick'], timeout: 30);
