@@ -215,6 +215,9 @@ rex doctor --fix     # Auto-fix then health check
 | `terminal_page.dart`: embedded xterm 4 terminal — PTY backed zsh -l, REX dark theme (cursor #E5484D), NVM PATH, restart button | `packages/flutter_app/lib/pages/terminal_page.dart` |
 | Sidebar item 24 + IndexedStack: Terminal wired in ADMIN group (chevron_right_square icon) | `packages/flutter_app/lib/widgets/rex_sidebar.dart`, `lib/main.dart` |
 | pubspec.yaml: xterm ^4.0.0 + pty ^0.1.1 added | `packages/flutter_app/pubspec.yaml` |
+| `rex mcp browse [tag]`: lists marketplace entries grouped by source, optional tag filter | `packages/cli/src/mcp_registry.ts` |
+| `sendCustomNotification()`: wired to loadAdaptersFromEnv() — dispatches to Discord + any configured adapter | `packages/cli/src/proactive-dispatch.ts` |
+| Flutter: Pending Signals section in CuriousPage — loads rex notify --pending --json, confirm/dismiss per signal | `packages/flutter_app/lib/pages/curious_page.dart`, `rex_service.dart` |
 
 ### ✅ Phases 1-3 complètes (sessions 2026-03-05 → 2026-03-14)
 
