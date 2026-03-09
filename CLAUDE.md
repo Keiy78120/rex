@@ -518,6 +518,15 @@ rex doctor --fix     # Auto-fix then health check
 | `lint-loop.ts`: script-first iterative correction loop — tsc/eslint/secrets analyzers, orchestrate() for LLM corrections, converges on diff (§28) | `lint-loop.ts` |
 | `rex lint-loop <path> [--eslint\|--secrets] [--max=N]`: CLI command | `index.ts` |
 
+### ✅ Terminé (session 2026-03-13 — VPS deploy + models setup)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **`rex vps setup <user@host>`**: SSH provisioning — Node.js install, rex-claude npm install, env vars push, systemd rex-daemon + rex-gateway, health check | `vps-deploy.ts`, `index.ts` |
+| **`rex vps status <user@host>`**: SSH status check — daemon/gateway active, hub API, uptime/disk | `vps-deploy.ts`, `index.ts` |
+| **`rex models setup [--pull]`**: RAM-aware Ollama model recommender — auto-detect system RAM, map to model tier, show installed vs missing, `--pull` auto-installs | `index.ts` |
+| **Phase 3 Brain VPS**: marked ✅ DONE | `CLAUDE.md` |
+
 ### ✅ Terminé (session 2026-03-13 — Tailscale mesh auto-persist)
 
 | Ce qui a ete fait | Fichier(s) |
@@ -596,7 +605,7 @@ CLI, Gateway Telegram, Memory, Flutter app, Doctor, Daemon, Agents, MCP registry
 | **Hub API** | ✅ DONE | /health, /nodes, /tasks, /events, /chat, /memory, /monitor + auth token auto |
 | **Sync durable** | ✅ DONE | Event journal append-only, sync-queue.ts, self-sync loop fixed |
 | **Node mesh** | ✅ DONE | node-mesh.ts, hub registration, heartbeat, routeTask() |
-| **Brain VPS** | 🔄 PARTIAL | Daemon + hub run on any machine; VPS deployment via systemd documented |
+| **Brain VPS** | ✅ DONE | `rex vps setup <user@host>` — SSH deploy daemon+gateway+systemd; `rex vps status` |
 | **Tailscale mesh auto** | ✅ DONE | persistDiscoveredHub() + tailscaleMeshCycle() every 5min in daemon |
 | **Tunnels + fallback** | FUTURE | SSH fallback, RustDesk option |
 | **Cross-platform desktop** | FUTURE | Flutter for Windows + Linux (after macOS stable) |

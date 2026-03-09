@@ -714,6 +714,32 @@ async function main() {
       break
     }
 
+    case 'vps': {
+      const sub = process.argv[3]
+      if (sub === 'setup') {
+        const host = process.argv[4]
+        if (!host) {
+          console.log('Usage: rex vps setup <user@host> [--node=22] [--skip-install] [--dry-run]')
+          process.exit(1)
+        }
+        const nodeArg = process.argv.find(a => a.startsWith('--node='))
+        const nodeVersion = nodeArg ? nodeArg.split('=')[1] : '22'
+        const skipInstall = process.argv.includes('--skip-install')
+        const dryRun = process.argv.includes('--dry-run')
+        const { deployVps } = await import('./vps-deploy.js')
+        const ok = await deployVps({ host, nodeVersion, skipInstall, dryRun })
+        process.exit(ok ? 0 : 1)
+      } else if (sub === 'status') {
+        const host = process.argv[4]
+        if (!host) { console.log('Usage: rex vps status <user@host>'); process.exit(1) }
+        const { checkVpsStatus } = await import('./vps-deploy.js')
+        await checkVpsStatus(host)
+      } else {
+        console.log('Commands: rex vps setup <user@host>  rex vps status <user@host>')
+      }
+      break
+    }
+
     case 'queue': {
       const sub = process.argv[3]
       const { getQueueStats, replayUnacked, getEventLog } = await import('./sync-queue.js')
