@@ -110,6 +110,31 @@ async function main() {
         break
       }
       const report = await runAllChecks()
+      if (process.argv.includes('--json')) {
+        const { getPlatformReport } = await import('./platform-warnings.js')
+        const pr = getPlatformReport()
+        const allResults = report.groups.flatMap(g => g.results)
+        const output = {
+          status: report.status,
+          passed: allResults.filter(r => r.status === 'pass').length,
+          total: allResults.length,
+          groups: report.groups.map(g => ({
+            name: g.name,
+            results: g.results.map(r => ({ name: r.name, status: r.status, message: r.message })),
+          })),
+          platform: {
+            profile: pr.profile,
+            os: pr.os,
+            cpuCores: pr.cpuCores,
+            hasGpu: pr.hasGpu,
+            isDocker: pr.isDocker,
+            warnings: pr.warnings.length,
+          },
+        }
+        console.log(JSON.stringify(output))
+        process.exit(report.status === 'broken' ? 1 : 0)
+        break
+      }
       console.log(formatReport(report))
       // Memory integrity check
       try {
