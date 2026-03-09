@@ -1983,7 +1983,7 @@ $transcript
   Future<List<Map<String, dynamic>>> getFreeTiers() async {
     final output = await _runRexArgs(['free-tiers', '--json']);
     final json = _extractJson(output);
-    if (json == null) return [];
+    if (json.isEmpty) return [];
     try {
       final parsed = jsonDecode(json) as List<dynamic>;
       return parsed.whereType<Map<String, dynamic>>().toList();

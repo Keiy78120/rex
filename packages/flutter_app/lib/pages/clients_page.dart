@@ -431,13 +431,13 @@ class _CreateForm extends StatelessWidget {
                 spacing: 4,
                 runSpacing: 4,
                 children: trades.map((t) {
-                  final selected = planCtrl.text == t || tradeCtrl.text == t;
+                  final selected = tradeCtrl.text == t;
                   return GestureDetector(
                     onTap: () => tradeCtrl.text = t,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: tradeCtrl.text == t
+                        color: selected
                             ? context.rex.accent.withValues(alpha: 0.12)
                             : context.rex.card,
                         borderRadius: BorderRadius.circular(4),

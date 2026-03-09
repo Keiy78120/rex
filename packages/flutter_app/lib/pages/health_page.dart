@@ -404,7 +404,7 @@ class _TokenBudgetSection extends StatelessWidget {
     final dailyLimit = (burnRate['dailyLimit'] as num?)?.toInt() ?? 0;
     final tokensPerHour = (burnRate['burnRatePerHour'] as num?)?.toInt() ?? 0;
 
-    Color _barColor(double pct) {
+    Color barColor(double pct) {
       if (pct >= 90) return c.error;
       if (pct >= 70) return c.warning;
       return c.success;
@@ -458,7 +458,7 @@ class _TokenBudgetSection extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: _barColor(contextPct),
+                        color: barColor(contextPct),
                       ),
                     ),
                   ],
@@ -466,7 +466,7 @@ class _TokenBudgetSection extends StatelessWidget {
                 const SizedBox(height: 6),
                 RexProgressBar(
                   value: (contextPct / 100).clamp(0.0, 1.0),
-                  color: _barColor(contextPct),
+                  color: barColor(contextPct),
                   height: 6,
                 ),
                 const SizedBox(height: 14),
@@ -482,7 +482,7 @@ class _TokenBudgetSection extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: _barColor(dailyPct),
+                        color: barColor(dailyPct),
                       ),
                     ),
                   ],
@@ -490,7 +490,7 @@ class _TokenBudgetSection extends StatelessWidget {
                 const SizedBox(height: 6),
                 RexProgressBar(
                   value: (dailyPct / 100).clamp(0.0, 1.0),
-                  color: _barColor(dailyPct),
+                  color: barColor(dailyPct),
                   height: 6,
                 ),
                 if (tokensPerHour > 0) ...[
@@ -664,7 +664,7 @@ class _DevActivitySection extends StatelessWidget {
     final commits = monitor['totalCommits'] as int? ?? 0;
     final sessions = monitor['sessionCount'] as int? ?? 0;
     final pending = monitor['pendingMemories'] as int? ?? 0;
-    final topProjects = (monitor['topProjects'] as List<dynamic>?)?.cast<String>() ?? [];
+    // topProjects available via monitor['topProjects'] if needed
     final commitsList = (monitor['commits'] as List<dynamic>?)
         ?.whereType<Map<String, dynamic>>()
         .take(5)

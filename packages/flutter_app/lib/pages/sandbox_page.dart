@@ -4,8 +4,6 @@ import 'package:provider/provider.dart';
 import '../services/rex_service.dart';
 import '../theme.dart';
 import '../widgets/rex_page_layout.dart';
-import '../widgets/rex_shared.dart';
-
 // ── Types ───────────────────────────────────────────────────────────────────
 
 class SandboxMessage {
@@ -45,8 +43,6 @@ class _SandboxPageState extends State<SandboxPage> {
   final _messages = <SandboxMessage>[];
   bool _isRunning = false;
   String _taskType = 'general';
-
-  static const _taskTypes = ['general', 'code', 'classify', 'review'];
 
   @override
   void dispose() {

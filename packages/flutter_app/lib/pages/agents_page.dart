@@ -487,7 +487,6 @@ class _AgentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.rex;
     final chipStatus = agent.running
         ? RexChipStatus.ok
         : agent.enabled

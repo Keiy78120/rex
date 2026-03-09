@@ -196,19 +196,6 @@ int _tierOrder(String tier) {
   }
 }
 
-Color _tierColor(String tier) {
-  switch (tier) {
-    case 'free':
-      return CupertinoColors.systemGreen;
-    case 'subscription':
-      return CupertinoColors.systemBlue;
-    case 'pay-per-use':
-      return CupertinoColors.systemOrange;
-    default:
-      return CupertinoColors.systemGrey;
-  }
-}
-
 String _tierLabel(String tier) {
   switch (tier) {
     case 'free':
