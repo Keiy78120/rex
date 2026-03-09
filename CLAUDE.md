@@ -560,6 +560,10 @@ rex doctor --fix     # Auto-fix then health check
 | **Network page**: §25 Fleet terminology — `'Commander'` section, SPECIALISTS label above node list, Start/Stop Commander buttons | `network_page.dart` |
 | **Gateway page**: §25 Fleet terminology — `'Comms'` section (Telegram = Comms adapter), degraded mode banner (running + Ollama offline), Adapter/Backend stat rows, `'Start/Stop Comms'` buttons, Capabilities section | `gateway_page.dart` |
 | **Health page**: System Metrics section — `rex metrics --json` driven (RAM%, CPUs, uptime, ingest pending, daemon status, hub specialists) | `health_page.dart`, `rex_service.dart` |
+| **Providers page**: LLM Usage section — requests/errors/rate-limits per provider from `rex llm-usage --json` | `providers_page.dart`, `rex_service.dart` |
+| **Network page**: Tailscale Mesh Peers section — online/offline status, direct vs relay per peer | `network_page.dart` |
+| **sources.md**: phases 2 and 3 updated to DONE | `sources.md` |
+| **Flutter analyzer**: zero warnings — fixed unused vars, dead code, unused imports across 6 files | all pages |
 
 ### 🔄 En cours / A faire
 
