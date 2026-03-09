@@ -612,6 +612,10 @@ rex doctor --fix     # Auto-fix then health check
 | **`rex resources` alias**: `rex resources [--json]` = alias for `rex inventory` | `index.ts` |
 | **`_TechDebtSection`**: Health page section showing TODO/FIXME/HACK counts + stale (>7d) chips | `health_page.dart` |
 | **`loadDebt()`**: RexService method calling `rex debt --json` → `techDebt` state | `rex_service.dart` |
+| **Fix `rex debt` false positives**: grep pattern now requires comment marker (`//|#|*`) — string literals no longer trigger | `index.ts` |
+| **Fix skills.ts template**: `TODO` placeholder strings replaced with `<angle-bracket>` style — no longer false positives | `skills.ts` |
+| **`rex install --hub` shortcut**: `--hub` maps to `hub-vps` profile automatically | `index.ts`, `install.ts` |
+| **Accurate hub-hint step**: hub-hint now shows correct `rex hub start/token/status` commands | `install.ts` |
 
 ### 🔄 En cours / A faire
 
