@@ -54,9 +54,9 @@ ENV NODE_ENV=production
 # Create rex symlink
 RUN ln -s /app/packages/cli/dist/index.js /usr/local/bin/rex && chmod +x /usr/local/bin/rex
 
-EXPOSE 3117
+EXPOSE 7420
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD curl -f http://localhost:3117/api/health || exit 1
+  CMD curl -f http://localhost:7420/api/health || exit 1
 
-CMD ["node", "/app/packages/cli/dist/index.js", "hub", "--port", "3117"]
+CMD ["node", "/app/packages/cli/dist/index.js", "hub", "--port=7420"]
