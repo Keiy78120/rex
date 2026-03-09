@@ -203,6 +203,16 @@ rex doctor --fix     # Auto-fix then health check
 | Hub WebSocket (port 7420): WS upgrade on HTTP server, auth, heartbeat, broadcastHubEvent() | `packages/cli/src/hub.ts` |
 | Flutter WebSocket clients: connectHubWs() + connectGatewayWs() via dart:io, auto-reconnect | `packages/flutter_app/lib/services/rex_service.dart` |
 
+### ✅ Terminé (session 2026-03-15 — memory page Lessons + Runbooks)
+
+| Ce qui a été fait | Fichier(s) |
+|-------------------|-----------|
+| Memory page: Lessons section (top 5 non-promoted, shows text + category + occurrences) | `packages/flutter_app/lib/pages/memory_page.dart` |
+| Memory page: Runbooks section (top 3, shows name + description + successCount) | `packages/flutter_app/lib/pages/memory_page.dart` |
+| CLI: `rex self-review --list [--json]` to expose lessons as structured output | `packages/cli/src/index.ts`, `packages/cli/src/self-improve.ts` |
+| RexService: `loadLessons()` + `lessons` state wired to memory page | `packages/flutter_app/lib/services/rex_service.dart` |
+| Final audit: Phases 1-3 confirmed complete, Tailscale auto-discovery verified in node-mesh.ts | — |
+
 ### ✅ Terminé (session 2026-03-14 — proactive dispatch + Discord + terminal)
 
 | Ce qui a été fait | Fichier(s) |
