@@ -8,14 +8,13 @@ import { MEMORY_DB_PATH, PENDING_DIR, BACKUPS_DIR, DAEMON_LOG_PATH, INGEST_STATE
 import { loadConfig } from './config.js'
 import { createLogger, rotateLog } from './logger.js'
 import { collectInventory, saveInventoryCache } from './inventory.js'
-import { syncBidirectional } from './sync.js'
-import { purgeOldEvents } from './sync-queue.js'
 import { appendEvent as journalAppend, purgeOldJournalEvents } from './event-journal.js'
 import { cacheClean } from './semantic-cache.js'
 import { getRoutableProviders, pingAllProviders } from './free-tiers.js'
 import { buildLocalFleetNode, registerWithCommander, autoDiscoverCommanders, persistDiscoveredCommander } from './node-mesh.js'
-import { detectSignals, isUnderPressure } from './signal-detector.js'
+import { isUnderPressure } from './signal-detector.js'
 import { forgettingCurve } from './prune.js'
+// Note: syncBidirectional and purgeOldEvents are lazy-loaded at first use (5min+ delay)
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 const log = createLogger('FLEET:daemon')
@@ -474,6 +473,7 @@ async function refreshInventory(): Promise<void> {
 // ─── Auto Sync (every 5 min) ─────────────────────────────
 async function autoSync(): Promise<void> {
   try {
+    const { syncBidirectional } = await import('./sync.js')
     const result = await syncBidirectional()
     if (result.pushed > 0 || result.pulled > 0) {
       log.info(`Sync: pushed ${result.pushed}, pulled ${result.pulled}`)
@@ -484,8 +484,9 @@ async function autoSync(): Promise<void> {
 }
 
 // ─── Queue Purge (every 24h) ─────────────────────────────
-function purgeQueue(): void {
+async function purgeQueue(): Promise<void> {
   try {
+    const { purgeOldEvents } = await import('./sync-queue.js')
     const purged = purgeOldEvents(30)
     if (purged > 0) log.info(`Purged ${purged} old events`)
   } catch (e: any) {
@@ -629,9 +630,9 @@ export async function daemon(): Promise<void> {
   // Run daily backup on start
   await dailyBackup()
 
-  // Run initial inventory and queue purge
+  // Run initial inventory and queue purge (purge is lazy-loaded — non-blocking)
   await refreshInventory()
-  purgeQueue()
+  purgeQueue().catch(() => {})
 
   // ─── Graceful shutdown ───────────────────────────────────
   let daemonRunning = true
@@ -716,7 +717,7 @@ export async function daemon(): Promise<void> {
 
     // Queue purge every 24h
     if (now - lastPurge >= 24 * 60 * 60 * 1000) {
-      purgeQueue()
+      purgeQueue().catch(() => {})
       lastPurge = now
     }
 
