@@ -650,6 +650,23 @@ rex doctor --fix     # Auto-fix then health check
 | `rex-mcp-server.ts`: fixed 4 errors — `./search.js` → `spawnSync rex search`, `recordObservation` → `addObservation`, `getNodes` → `buildLocalNodeInfo`, `runReview` arg type | `rex-mcp-server.ts` |
 | **CI: `tsc --noEmit` step added** — type errors now block CI | `.github/workflows/ci.yml` |
 
+### ✅ Terminé (session 2026-03-14 — Fleet/Commander rename + @module system)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **Full naming audit** — hub→Commander, nodes→Fleet/Specialist, gateway→Comms verified in all files | all `cli/src/*.ts` |
+| **perl rename** — MeshNode→FleetNode, registerWithHub→registerWithCommander, getMeshStatus→getFleetStatus | `node-mesh.ts`, `daemon.ts`, `hub.ts`, `node.ts` |
+| **String literals fixed** — "No hub found"→"No Commander found", "Registered with hub"→"Registered with Commander" | `node.ts`, `daemon.ts` |
+| **EventType fix** — 'hub.event'→'commander.event' in sync-queue.ts + gateway.ts (TS error resolved) | `sync-queue.ts`, `gateway.ts` |
+| **dashboard.ts (NEW)** — HQ aggregate module: getHQSnapshot(), printHQStatus(), Promise.all 0 LLM | `packages/cli/src/dashboard.ts` |
+| **`rex hq` command** — prints HQ snapshot (fleet/budget/memory/curious alerts) | `index.ts` |
+| **`rex comms` alias** — falls through to gateway (Comms = module name) | `index.ts` |
+| **`rex lint` alias** — falls through to lint-loop | `index.ts` |
+| **@module system** — 47 files now have `/** @module MODULE */` header + `createLogger('MODULE:name')` | all `cli/src/*.ts` |
+| **action.md updated** — terminology table rewritten (single source of truth), file status table updated | `docs/plans/action.md` |
+| **CI: tsc --noEmit** — type checking blocks CI on errors | `.github/workflows/ci.yml` |
+| **README update** — Commander/Fleet/Specialists/Comms naming + 10 modules (background agent) | `README.md` |
+
 ### 🔄 En cours / A faire
 
 **Phase 2 DONE, Phase 3 DONE ✅, Phase 4 (LATER)**:
