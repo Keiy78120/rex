@@ -1851,9 +1851,37 @@ async function main() {
 
     case 'debt': {
       // List TODO / FIXME / HACK comments across the project (zero LLM)
+      // Supports: --stale N (filter by age), --add "note" (add manual item), --json
       const cwd = process.cwd()
       const jsonFlag = process.argv.includes('--json')
       const { execSync: debtExec } = await import('node:child_process')
+      const { existsSync: debtExists, readFileSync: debtRead, writeFileSync: debtWrite, mkdirSync: debtMkdir } = await import('node:fs')
+      const { join: debtJoin } = await import('node:path')
+      const { homedir: debtHome } = await import('node:os')
+
+      const DEBT_FILE = debtJoin(debtHome(), '.claude', 'rex', 'tech-debt.json')
+
+      // --add "note" : append manual debt entry
+      const addIdx = process.argv.indexOf('--add')
+      if (addIdx !== -1) {
+        const note = process.argv[addIdx + 1]
+        if (!note) { console.error('Usage: rex debt --add "description"'); process.exit(1) }
+        interface ManualDebt { text: string; addedAt: string }
+        let manual: ManualDebt[] = []
+        if (debtExists(DEBT_FILE)) {
+          try { manual = JSON.parse(debtRead(DEBT_FILE, 'utf-8')) as ManualDebt[] } catch {}
+        } else {
+          debtMkdir(debtJoin(debtHome(), '.claude', 'rex'), { recursive: true })
+        }
+        manual.push({ text: note, addedAt: new Date().toISOString() })
+        debtWrite(DEBT_FILE, JSON.stringify(manual, null, 2))
+        console.log(`\x1b[32m✓\x1b[0m Added manual debt: ${note}`)
+        break
+      }
+
+      // --stale N : only show items older than N days
+      const staleIdx = process.argv.indexOf('--stale')
+      const staleMin = staleIdx !== -1 ? parseInt(process.argv[staleIdx + 1] ?? '7') : 0
 
       interface DebtItem { file: string; line: number; kind: string; text: string; ageDays: number }
       const items: DebtItem[] = []
@@ -1876,15 +1904,30 @@ async function main() {
             ).trim()
             if (logOut) ageDays = Math.floor((Date.now() / 1000 - parseInt(logOut)) / 86400)
           } catch {}
+          if (staleMin && ageDays < staleMin) continue
           items.push({ file, line: parseInt(lineStr), kind, text: text.trim().slice(0, 120), ageDays })
         }
       } catch {}
+
+      // Also load manual items
+      interface ManualDebt { text: string; addedAt: string }
+      if (debtExists(DEBT_FILE)) {
+        try {
+          const manual = JSON.parse(debtRead(DEBT_FILE, 'utf-8')) as ManualDebt[]
+          for (const m of manual) {
+            const ageDays = Math.floor((Date.now() - new Date(m.addedAt).getTime()) / 86400_000)
+            if (staleMin && ageDays < staleMin) continue
+            items.push({ file: '~/.claude/rex/tech-debt.json', line: 0, kind: 'TODO', text: `[manual] ${m.text}`, ageDays })
+          }
+        } catch {}
+      }
 
       if (jsonFlag) { console.log(JSON.stringify(items)); break }
 
       const debtBold = '\x1b[1m', debtReset = '\x1b[0m', debtDim = '\x1b[2m'
       const debtRed = '\x1b[31m', debtYellow = '\x1b[33m', debtCyan = '\x1b[36m'
-      console.log(`\n${debtBold}REX Tech Debt — ${items.length} item(s)${debtReset}`)
+      const staleLabel = staleMin ? ` (>=${staleMin}d old)` : ''
+      console.log(`\n${debtBold}REX Tech Debt — ${items.length} item(s)${staleLabel}${debtReset}`)
       console.log('─'.repeat(72))
       const byKind: Record<string, DebtItem[]> = { FIXME: [], HACK: [], TODO: [], XXX: [] }
       for (const it of items) { byKind[it.kind]?.push(it) }
@@ -1893,12 +1936,52 @@ async function main() {
         const color = kind === 'FIXME' ? debtRed : kind === 'HACK' ? debtYellow : debtCyan
         console.log(`\n${color}${debtBold}${kind} (${list.length})${debtReset}`)
         for (const it of list.sort((a, b) => b.ageDays - a.ageDays)) {
-          const stale = it.ageDays > 7 ? `${debtRed}${it.ageDays}d old${debtReset}` : `${debtDim}${it.ageDays}d${debtReset}`
-          console.log(`  ${debtBold}${it.file}:${it.line}${debtReset}  ${stale}`)
+          const staleColor = it.ageDays > 7 ? `${debtRed}${it.ageDays}d old${debtReset}` : `${debtDim}${it.ageDays}d${debtReset}`
+          console.log(`  ${debtBold}${it.file}:${it.line}${debtReset}  ${staleColor}`)
           console.log(`    ${debtDim}${it.text}${debtReset}`)
         }
       }
-      console.log(`\n${debtDim}Stale items (>7d) shown in red. Use --json for machine output.${debtReset}\n`)
+      console.log(`\n${debtDim}Use --stale N to filter by age. --add "note" to add manual item. --json for machine output.${debtReset}\n`)
+      break
+    }
+
+    case 'rules': {
+      // BLOC 16.3 — list all rules (auto-promoted + manual) from ~/.claude/rules/
+      const { existsSync: rulesExists, readdirSync: rulesReaddir, readFileSync: rulesRead } = await import('node:fs')
+      const { join: rulesJoin } = await import('node:path')
+      const { homedir: rulesHome } = await import('node:os')
+      const jsonFlag = process.argv.includes('--json')
+
+      const RULES_DIR = rulesJoin(rulesHome(), '.claude', 'rules')
+      interface RuleEntry { name: string; title: string; excerpt: string; auto: boolean }
+      const rules: RuleEntry[] = []
+
+      if (rulesExists(RULES_DIR)) {
+        const files = rulesReaddir(RULES_DIR).filter(f => f.endsWith('.md')).sort()
+        for (const f of files) {
+          try {
+            const content = rulesRead(rulesJoin(RULES_DIR, f), 'utf-8')
+            const firstLine = content.split('\n').find(l => l.trim())?.replace(/^#\s*/, '') ?? f.replace('.md', '')
+            const excerpt = content.split('\n').filter(l => l.trim() && !l.startsWith('#')).slice(0, 2).join(' ').slice(0, 120)
+            rules.push({ name: f, title: firstLine, excerpt, auto: f.startsWith('auto-') })
+          } catch {}
+        }
+      }
+
+      if (jsonFlag) { console.log(JSON.stringify(rules)); break }
+
+      const BOLD = '\x1b[1m', RESET = '\x1b[0m', DIM = '\x1b[2m', CYAN = '\x1b[36m', GREEN = '\x1b[32m', YELLOW = '\x1b[33m'
+      console.log(`\n${BOLD}REX Rules — ${rules.length} rule(s)${RESET}  (${RULES_DIR})`)
+      console.log('─'.repeat(72))
+      if (rules.length === 0) {
+        console.log(`  ${DIM}No rules found. Rules are auto-promoted from patterns or added manually.${RESET}`)
+      }
+      for (const r of rules) {
+        const badge = r.auto ? `${YELLOW}[auto]${RESET}` : `${GREEN}[manual]${RESET}`
+        console.log(`\n  ${badge} ${BOLD}${r.title}${RESET}  ${DIM}${r.name}${RESET}`)
+        if (r.excerpt) console.log(`    ${DIM}${r.excerpt}…${RESET}`)
+      }
+      console.log(`\n${DIM}Auto rules are promoted by 'rex archive promote'. Manual rules live in ${RULES_DIR}/${RESET}\n`)
       break
     }
 
