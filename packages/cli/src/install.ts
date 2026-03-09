@@ -300,16 +300,39 @@ function printSummary(profile: InstallProfile, res: ResourceReport) {
   console.log()
 }
 
+function printDryRun(profile: InstallProfile, res: ResourceReport) {
+  const p = PROFILES[profile]
+  const line = COLORS.dim + '-'.repeat(45) + COLORS.reset
+  console.log(`\n${line}`)
+  console.log(`\n  ${COLORS.bold}[DRY RUN] Would install profile: ${p.label}${COLORS.reset}`)
+  console.log(`  ${COLORS.dim}${p.desc}${COLORS.reset}\n`)
+  console.log(`  Steps that would run:`)
+  for (const step of p.steps) {
+    const labels: Record<string, string> = {
+      'init': 'Install guards, hooks, memory MCP',
+      'setup-ollama': 'Install / configure Ollama + models',
+      'daemon': res.os === 'darwin' ? 'Install daemon LaunchAgent' : 'Print systemd unit hint',
+      'gateway': res.os === 'darwin' ? 'Install gateway LaunchAgent' : 'Print gateway start hint',
+      'flutter-app': res.flutter ? 'Build + install Flutter desktop app' : 'Skip (Flutter SDK not found)',
+      'systemd-hint': 'Print systemd unit for daemon',
+      'hub-hint': 'Print hub API setup hint',
+    }
+    console.log(`  ${COLORS.cyan}→${COLORS.reset} ${labels[step] ?? step}`)
+  }
+  console.log(`\n  ${COLORS.dim}Run without --dry-run to execute.${COLORS.reset}\n`)
+}
+
 export async function install(options: InstallOptions = {}) {
   const profileFlag = options.profile
     || process.argv.find(a => a.startsWith('--profile='))?.split('=')[1] as InstallProfile | undefined
   const nonInteractive = options.yes
     || process.argv.includes('--yes')
     || process.argv.includes('-y')
+  const dryRun = process.argv.includes('--dry-run')
 
   const line = '='.repeat(45)
   console.log(`\n${line}`)
-  console.log(`${COLORS.bold}        REX INSTALL — One Command Setup${COLORS.reset}`)
+  console.log(`${COLORS.bold}        REX INSTALL — One Command Setup${dryRun ? ' [DRY RUN]' : ''}${COLORS.reset}`)
   console.log(`${line}`)
 
   ensureRexDirs()
@@ -331,14 +354,20 @@ export async function install(options: InstallOptions = {}) {
     info(`Using profile: ${COLORS.bold}${profile}${COLORS.reset}`)
   } else if (profileFlag) {
     warn(`Unknown profile "${profileFlag}"`)
-    profile = await selectProfile(res, nonInteractive)
+    profile = await selectProfile(res, nonInteractive || dryRun)
   } else {
-    profile = await selectProfile(res, nonInteractive)
+    profile = await selectProfile(res, nonInteractive || dryRun)
   }
 
   // Warn if desktop-full on non-macOS
   if (profile === 'desktop-full' && res.os !== 'darwin') {
     warn('desktop-full profile targets macOS — Flutter app step will be skipped')
+  }
+
+  // Dry run: print plan and exit
+  if (dryRun) {
+    printDryRun(profile, res)
+    return
   }
 
   const p = PROFILES[profile]
