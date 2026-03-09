@@ -3218,12 +3218,24 @@ async function main() {
         console.log('\x1b[2mCtrl+C to stop\x1b[0m')
         process.on('SIGINT', () => { process.exit(0) })
         await new Promise(() => {})  // keep alive
+      } else if (sub === 'load' || sub === 'load-test') {
+        const rps = parseInt(process.argv.find(a => a.startsWith('--rps='))?.split('=')[1] ?? '5', 10)
+        const duration = parseInt(process.argv.find(a => a.startsWith('--duration='))?.split('=')[1] ?? '30', 10)
+        const url = process.argv.find(a => a.startsWith('--url='))?.split('=').slice(1).join('=')
+        const concurrency = parseInt(process.argv.find(a => a.startsWith('--concurrency='))?.split('=')[1] ?? String(rps * 2), 10)
+        const { runLoadTest, printLoadTestResult } = await import('./load-test.js')
+        const opts = { rps, duration, url, concurrency }
+        console.log(`\n\x1b[2mRunning load test: ${rps} rps × ${duration}s…\x1b[0m`)
+        const result = await runLoadTest(opts)
+        printLoadTestResult(result, opts)
       } else {
         console.log('Usage:')
         console.log('  rex test mock            Start mock LLM server (OpenAI + Ollama compatible)')
         console.log('  rex test mock --port=N   Custom port (default: 11435)')
         console.log('  rex test aw              Start mock ActivityWatch server (port 5600)')
         console.log('  rex test aw --state=idle Simulate idle/sleeping state')
+        console.log('  rex test load            Load test (default: 5 rps, 30s)')
+        console.log('  rex test load --rps=10 --duration=60 --url=http://...')
       }
       break
     }
