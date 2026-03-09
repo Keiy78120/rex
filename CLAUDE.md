@@ -203,7 +203,20 @@ rex doctor --fix     # Auto-fix then health check
 | Hub WebSocket (port 7420): WS upgrade on HTTP server, auth, heartbeat, broadcastHubEvent() | `packages/cli/src/hub.ts` |
 | Flutter WebSocket clients: connectHubWs() + connectGatewayWs() via dart:io, auto-reconnect | `packages/flutter_app/lib/services/rex_service.dart` |
 
-### ✅ Phases 1-3 complètes (sessions 2026-03-05 → 2026-03-13)
+### ✅ Terminé (session 2026-03-14 — proactive dispatch + Discord + terminal)
+
+| Ce qui a été fait | Fichier(s) |
+|-------------------|-----------|
+| `proactive-dispatch.ts`: ProactiveSignal bridge → macOS native notifications (osascript) + Telegram fallback, pending-signals.json store, suggestAction() per signal type | `packages/cli/src/proactive-dispatch.ts` |
+| `rex notify` CLI command: 4 modes — `--pending` (list), `--confirm <id>`, `--dismiss <id>`, custom message | `packages/cli/src/index.ts` |
+| Daemon curious cycle: dispatchDiscoveries() wired after runCurious() (auto-notify on new finds) | `packages/cli/src/daemon.ts` |
+| Discord webhook adapter: full HTTP POST implementation replacing stub — 2000 char limit, 204 = success, Telegram Markdown strip | `packages/cli/src/gateway-adapter.ts` |
+| `loadAdaptersFromEnv()`: reads REX_TELEGRAM_BOT_TOKEN + REX_DISCORD_WEBHOOK_URL from settings.json + process.env | `packages/cli/src/gateway-adapter.ts` |
+| `terminal_page.dart`: embedded xterm 4 terminal — PTY backed zsh -l, REX dark theme (cursor #E5484D), NVM PATH, restart button | `packages/flutter_app/lib/pages/terminal_page.dart` |
+| Sidebar item 24 + IndexedStack: Terminal wired in ADMIN group (chevron_right_square icon) | `packages/flutter_app/lib/widgets/rex_sidebar.dart`, `lib/main.dart` |
+| pubspec.yaml: xterm ^4.0.0 + pty ^0.1.1 added | `packages/flutter_app/pubspec.yaml` |
+
+### ✅ Phases 1-3 complètes (sessions 2026-03-05 → 2026-03-14)
 
 **Phase 1 — Core** : CLI (35+ commands), Gateway Telegram, Memory (SQLite+embeddings), Flutter app (20+ pages), Doctor, Daemon, Agents, MCP registry, Provider detection, Budget, Event journal, Semantic cache, Backup, Git workflow, Guard manager, Review pipeline, Observer/Reflector, Orchestrator, Resource inventory.
 
@@ -214,7 +227,7 @@ rex doctor --fix     # Auto-fix then health check
 **Modules clés** (tous dans `packages/cli/src/`) :
 `curious.ts`, `dev-monitor.ts`, `daemon.ts`, `gateway.ts`, `hub.ts`, `orchestrator.ts`, `litellm.ts`, `free-tiers.ts`, `project-intent.ts`, `context-loader.ts`, `node-mesh.ts`, `memory-check.ts`, `observer.ts`, `reflector.ts`, `backup.ts`, `sync.ts`, `review.ts`, `workflow.ts`, `guard-manager.ts`, `resource-hub.ts`, `rex-mcp-server.ts`, `security-scanner.ts`, `lint-loop.ts`
 
-**Flutter** (20+ pages) : health, memory, gateway, voice, agents, mcp, optimize, logs, settings, network, providers, review, workflow, projects, observer, token, curious, dev-monitor, resource-hub, sidebar.
+**Flutter** (25 pages) : health, memory, gateway, voice, agents, mcp, optimize, logs, settings, network, providers, review, workflow, projects, observer, token, curious, dev-monitor, resource-hub, hub, audio, sandbox, guards, training, terminal.
 
 ### 🔄 En cours / A faire
 
