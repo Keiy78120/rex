@@ -981,6 +981,32 @@ async function main() {
       break
     }
 
+    case 'wake': {
+      // rex wake <mac-address|node-id>  — send Wake-on-LAN magic packet
+      const target = process.argv[3]
+      if (!target) {
+        console.log('Usage: rex wake <mac-address>  (e.g. rex wake 52:f1:cf:b2:a5:32)')
+        console.log('  Or set REX_MAC_ADDRESS in ~/.claude/settings.json for quick wake.')
+        break
+      }
+      const mac = target.includes(':') ? target : null
+      if (!mac) {
+        // Try to resolve node-id to MAC from fleet nodes
+        console.log(`\x1b[33m!\x1b[0m Node ID lookup not yet supported — pass MAC directly: rex wake <mac>`)
+        break
+      }
+      const { wakeNode } = await import('./node.js')
+      const ok = await wakeNode(mac)
+      if (ok) {
+        console.log(`\x1b[32m✓\x1b[0m WOL magic packet sent to ${mac}`)
+      } else {
+        console.log(`\x1b[31m✗\x1b[0m WOL failed — install wakeonlan or etherwake first`)
+        console.log('  macOS: brew install wakeonlan')
+        console.log('  Linux: apt install wakeonlan')
+      }
+      break
+    }
+
     case 'metrics': {
       const { collectMetrics, toPrometheus, printMetrics } = await import('./metrics.js')
       const prometheusFlag = process.argv.includes('--prometheus')
