@@ -379,6 +379,92 @@ async function main() {
     }
 
     case 'models': {
+      const subCmd = process.argv[3]
+      if (subCmd === 'setup') {
+        // rex models setup — zero-LLM RAM-aware Ollama model recommender
+        const { totalmem } = await import('node:os')
+        const { execFile } = await import('node:child_process')
+        const { promisify } = await import('node:util')
+        const execFileAsync = promisify(execFile)
+        const BOLD = '\x1b[1m', RESET = '\x1b[0m', DIM = '\x1b[2m'
+        const GREEN = '\x1b[32m', CYAN = '\x1b[36m', YELLOW = '\x1b[33m', RED = '\x1b[31m'
+
+        const ramGb = Math.round(totalmem() / (1024 ** 3))
+        const pullFlag = process.argv.includes('--pull')
+
+        // RAM tiers → recommended models
+        const TIERS: Array<{ minGb: number; label: string; models: string[] }> = [
+          { minGb: 0,  label: '< 8 GB',   models: ['nomic-embed-text'] },
+          { minGb: 8,  label: '8–12 GB',  models: ['nomic-embed-text', 'qwen2.5:3b'] },
+          { minGb: 12, label: '12–16 GB', models: ['nomic-embed-text', 'qwen2.5-coder:7b', 'deepseek-r1:8b'] },
+          { minGb: 16, label: '16–24 GB', models: ['nomic-embed-text', 'qwen2.5-coder:7b', 'deepseek-r1:8b', 'qwen2.5:14b'] },
+          { minGb: 24, label: '24–32 GB', models: ['nomic-embed-text', 'qwen2.5-coder:14b', 'deepseek-r1:14b', 'qwen3:14b'] },
+          { minGb: 32, label: '32 GB+',   models: ['nomic-embed-text', 'qwen3-coder:30b', 'deepseek-r1:32b', 'qwen3:30b-a3b'] },
+        ]
+        const tier = [...TIERS].reverse().find(t => ramGb >= t.minGb) ?? TIERS[0]
+
+        console.log(`\n${BOLD}REX Model Setup${RESET}`)
+        console.log(DIM + '─'.repeat(48) + RESET)
+        console.log(`  RAM detected:  ${CYAN}${ramGb} GB${RESET}`)
+        console.log(`  RAM tier:      ${CYAN}${tier.label}${RESET}`)
+
+        // Check Ollama
+        let ollamaRunning = false
+        let pulledModels: string[] = []
+        try {
+          const res = await fetch('http://localhost:11434/api/tags', { signal: AbortSignal.timeout(3000) })
+          if (res.ok) {
+            ollamaRunning = true
+            const data = await res.json() as { models?: Array<{ name: string }> }
+            pulledModels = (data.models ?? []).map(m => m.name.split(':')[0] + ':' + (m.name.split(':')[1] ?? 'latest'))
+          }
+        } catch { /* Ollama not running */ }
+
+        console.log(`  Ollama:        ${ollamaRunning ? `${GREEN}running${RESET}` : `${RED}not running${RESET}`}`)
+        console.log()
+        console.log(`${BOLD}Recommended models for ${tier.label}:${RESET}`)
+        console.log(DIM + '─'.repeat(48) + RESET)
+
+        const missing: string[] = []
+        for (const model of tier.models) {
+          const base = model.split(':')[0]
+          const tag = model.split(':')[1] ?? 'latest'
+          const fullName = `${base}:${tag}`
+          const pulled = pulledModels.some(p => p === fullName || p.startsWith(base + ':'))
+          const dot = pulled ? `${GREEN}●${RESET}` : `${YELLOW}○${RESET}`
+          const status = pulled ? `${DIM}already pulled${RESET}` : `${YELLOW}not installed${RESET}`
+          console.log(`  ${dot} ${model.padEnd(30)} ${status}`)
+          if (!pulled) missing.push(model)
+        }
+
+        if (missing.length === 0) {
+          console.log(`\n${GREEN}✓ All recommended models are already installed.${RESET}`)
+        } else {
+          console.log(`\n${YELLOW}${missing.length} model(s) missing.${RESET}`)
+          if (pullFlag) {
+            if (!ollamaRunning) {
+              console.log(`${RED}Ollama is not running. Start it first: ollama serve${RESET}`)
+              process.exit(1)
+            }
+            console.log(`\nPulling missing models...`)
+            for (const model of missing) {
+              console.log(`\n  ${CYAN}→ ollama pull ${model}${RESET}`)
+              try {
+                await execFileAsync('ollama', ['pull', model], { timeout: 300_000 })
+                console.log(`  ${GREEN}✓ ${model} pulled${RESET}`)
+              } catch (e: unknown) {
+                const err = e as { message?: string }
+                console.log(`  ${RED}✗ Failed: ${err.message?.slice(0, 80)}${RESET}`)
+              }
+            }
+          } else {
+            console.log(`\nRun ${CYAN}rex models setup --pull${RESET} to install them automatically.`)
+          }
+        }
+        console.log()
+        break
+      }
+
       const catalogFlag = process.argv.includes('--catalog')
       if (catalogFlag) {
         const { FREE_MODELS, getModelsSummary } = await import('./free-models.js')

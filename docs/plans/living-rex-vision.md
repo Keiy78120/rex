@@ -432,7 +432,7 @@ Il est curieux : il cherche activement de nouvelles solutions.
 | Gateway mobile | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Ingest adaptatif | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Setup wizard zero-config | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Tunnels sécurisés auto | ❌ | ❌ | ❌ | ❌ | 🔄 |
+| Tunnels sécurisés auto (Tailscale) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Monitor vie dev | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Fine-tuning modèle | ❌ | ❌ | ❌ | ❌ | 🔄 |
 | Curieux / proactif | ❌ | ❌ | ❌ | ❌ | ✅ |

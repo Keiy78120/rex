@@ -518,6 +518,15 @@ rex doctor --fix     # Auto-fix then health check
 | `lint-loop.ts`: script-first iterative correction loop — tsc/eslint/secrets analyzers, orchestrate() for LLM corrections, converges on diff (§28) | `lint-loop.ts` |
 | `rex lint-loop <path> [--eslint\|--secrets] [--max=N]`: CLI command | `index.ts` |
 
+### ✅ Terminé (session 2026-03-13 — Tailscale mesh auto-persist)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| **`persistDiscoveredHub(url)`**: saves Tailscale-discovered hub to `~/.claude/settings.json env.REX_HUB_URL` + updates `process.env` immediately | `node-mesh.ts` |
+| **Auto-persist in `registerWithHub()`**: persists non-localhost hubs on successful registration | `node-mesh.ts` |
+| **`tailscaleMeshCycle()`**: every 5min in daemon — auto-discovers hubs via Tailscale, persists + sends Telegram notify on join/change | `daemon.ts` |
+| **Phase 3 Tailscale mesh auto**: marked ✅ DONE in CLAUDE.md Phase 3 table | `CLAUDE.md` |
+
 ### ✅ Terminé (session 2026-03-13 — §25 Fleet terminology + §26 Orchestrator relay)
 
 | Ce qui a ete fait | Fichier(s) |
@@ -588,7 +597,7 @@ CLI, Gateway Telegram, Memory, Flutter app, Doctor, Daemon, Agents, MCP registry
 | **Sync durable** | ✅ DONE | Event journal append-only, sync-queue.ts, self-sync loop fixed |
 | **Node mesh** | ✅ DONE | node-mesh.ts, hub registration, heartbeat, routeTask() |
 | **Brain VPS** | 🔄 PARTIAL | Daemon + hub run on any machine; VPS deployment via systemd documented |
-| **Tailscale mesh auto** | 🔜 NEXT | Auto-join nodes, tailscale status check wired in node-mesh.ts |
+| **Tailscale mesh auto** | ✅ DONE | persistDiscoveredHub() + tailscaleMeshCycle() every 5min in daemon |
 | **Tunnels + fallback** | FUTURE | SSH fallback, RustDesk option |
 | **Cross-platform desktop** | FUTURE | Flutter for Windows + Linux (after macOS stable) |
 
