@@ -18,9 +18,11 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import Database from 'better-sqlite3'
 import { createLogger } from './logger.js'
 import { REX_DIR, MEMORY_DB_PATH } from './paths.js'
+import type { SignalType } from './signal-detector.js'
 
 const log = createLogger('CURIOUS:discovery')
 
@@ -31,7 +33,8 @@ const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface Discovery {
-  type: 'model' | 'mcp' | 'news' | 'repo' | 'pattern'
+  type: 'model' | 'mcp' | 'news' | 'repo' | 'pattern' | 'open_loop'
+  signalType?: SignalType   // DISCOVERY | PATTERN | OPEN_LOOP
   title: string
   detail: string
   url?: string
@@ -47,6 +50,7 @@ interface CuriousCache {
   seenRepos: string[]
   seenNewsIds: number[]
   seenPatterns: string[]
+  seenBlogUrls: string[]
 }
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
@@ -64,6 +68,7 @@ function loadCache(): CuriousCache {
     seenRepos: [],
     seenNewsIds: [],
     seenPatterns: [],
+    seenBlogUrls: [],
   }
 }
 
@@ -165,6 +170,194 @@ async function fetchHackerNews(): Promise<Array<{ id: number; title: string; url
   }
 }
 
+// ── Awesome-MCP-Servers source ────────────────────────────────────────────────
+
+async function fetchAwesomeMcpServers(): Promise<Array<{ name: string; description: string; url: string; stars: number }>> {
+  // Search GitHub for top MCP server repos (broader topic set)
+  try {
+    const url = 'https://api.github.com/search/repositories?q=topic:mcp+topic:mcp-server&sort=stars&order=desc&per_page=15'
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(8000),
+      headers: {
+        'User-Agent': 'rex-curious/1.0',
+        'Accept': 'application/vnd.github.v3+json',
+      },
+    })
+    if (!res.ok) return []
+    const data = await res.json() as { items?: Array<{ full_name: string; description: string; html_url: string; stargazers_count: number }> }
+    return (data.items ?? []).map(r => ({
+      name: r.full_name,
+      description: r.description ?? '',
+      url: r.html_url,
+      stars: r.stargazers_count,
+    }))
+  } catch {
+    return []
+  }
+}
+
+// ── RSS / Atom feed fetcher (HuggingFace blog, Simon Willison) ───────────────
+
+async function fetchRssFeed(feedUrl: string, source: string): Promise<Array<{ title: string; url: string; summary: string; source: string }>> {
+  try {
+    const res = await fetch(feedUrl, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'User-Agent': 'rex-curious/1.0', 'Accept': 'application/xml,application/atom+xml,text/xml' },
+    })
+    if (!res.ok) return []
+    const text = await res.text()
+    const items: Array<{ title: string; url: string; summary: string; source: string }> = []
+
+    // Works for both RSS <item> and Atom <entry>
+    const itemRe = /<(?:item|entry)[\s>]([\s\S]*?)<\/(?:item|entry)>/g
+    let m: RegExpExecArray | null
+    while ((m = itemRe.exec(text)) !== null && items.length < 8) {
+      const block = m[1]
+      const titleMatch = /<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/i.exec(block)
+      const linkHrefMatch = /<link[^>]*href="([^"]+)"/i.exec(block)
+      const linkTextMatch = /<link>([^<]+)<\/link>/i.exec(block)
+      const summaryMatch = /<(?:summary|description)>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(?:summary|description)>/i.exec(block)
+      const title = (titleMatch?.[1] ?? '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim()
+      const url = (linkHrefMatch?.[1] ?? linkTextMatch?.[1] ?? '').trim()
+      const summary = (summaryMatch?.[1] ?? '').replace(/<[^>]+>/g, '').slice(0, 120).trim()
+      if (title && url) items.push({ title, url, summary, source })
+    }
+    return items
+  } catch {
+    return []
+  }
+}
+
+// ── r/LocalLLaMA Reddit API ───────────────────────────────────────────────────
+
+async function fetchLocalLlama(): Promise<Array<{ title: string; url: string; score: number }>> {
+  try {
+    const res = await fetch('https://www.reddit.com/r/LocalLLaMA/new.json?limit=15', {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'User-Agent': 'rex-curious/1.0' },
+    })
+    if (!res.ok) return []
+    const data = await res.json() as {
+      data?: { children?: Array<{ data: { title: string; url: string; permalink: string; score: number } }> }
+    }
+    return (data.data?.children ?? []).map(c => ({
+      title: c.data.title,
+      url: c.data.url.startsWith('https://www.reddit.com') ? c.data.url : `https://reddit.com${c.data.permalink}`,
+      score: c.data.score,
+    }))
+  } catch {
+    return []
+  }
+}
+
+// ── OPEN_LOOP detection (unresolved issues >7 days in memory) ─────────────────
+
+const OPEN_LOOP_PATTERNS = [
+  'TODO', 'FIXME', 'HACK', 'BUG', 'OPEN ISSUE', 'UNRESOLVED',
+  'still broken', 'needs fix', "can't figure", 'stuck on', 'not working',
+  'need to investigate', 'follow up', 'revisit',
+]
+const OPEN_LOOP_DAYS = 7
+
+function detectOpenLoops(cache: CuriousCache): Discovery[] {
+  if (!existsSync(MEMORY_DB_PATH)) return []
+  const discoveries: Discovery[] = []
+  const now = new Date()
+  const cutoff = new Date(now.getTime() - OPEN_LOOP_DAYS * 24 * 60 * 60 * 1000).toISOString()
+
+  try {
+    const db = new Database(MEMORY_DB_PATH, { readonly: true })
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>
+    const tableNames = new Set(tables.map(t => t.name))
+
+    // Check memories table for old unresolved patterns
+    if (tableNames.has('memories')) {
+      for (const pattern of OPEN_LOOP_PATTERNS) {
+        const rows = db.prepare(
+          `SELECT content, created_at FROM memories WHERE content LIKE ? AND created_at < ? LIMIT 3`
+        ).all(`%${pattern}%`, cutoff) as Array<{ content: string; created_at: string }>
+
+        for (const row of rows) {
+          const snippet = row.content.slice(0, 80).replace(/\n/g, ' ')
+          const key = `open_loop:${pattern}:${row.created_at}`
+          const isNew = !cache.seenPatterns.includes(key)
+          if (isNew) {
+            const daysAgo = Math.round((now.getTime() - new Date(row.created_at).getTime()) / (24 * 60 * 60 * 1000))
+            discoveries.push({
+              type: 'open_loop',
+              signalType: 'OPEN_LOOP',
+              title: `Open loop: "${pattern}" (${daysAgo}d old)`,
+              detail: snippet,
+              source: 'memory',
+              seenAt: now.toISOString(),
+              isNew,
+            })
+            cache.seenPatterns.push(key)
+          }
+        }
+      }
+    }
+
+    db.close()
+  } catch {}
+
+  return discoveries
+}
+
+// ── Telegram notification helper ──────────────────────────────────────────────
+
+async function sendTelegramAlert(message: string): Promise<void> {
+  try {
+    const settingsPath = join(homedir(), '.claude', 'settings.json')
+    if (!existsSync(settingsPath)) return
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as { env?: Record<string, string> }
+    const env = settings.env ?? {}
+    const token = process.env.REX_TELEGRAM_BOT_TOKEN || env.REX_TELEGRAM_BOT_TOKEN
+    const chatId = process.env.REX_TELEGRAM_CHAT_ID || env.REX_TELEGRAM_CHAT_ID
+    if (!token || !chatId) return
+
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(8000),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
+      }),
+    })
+  } catch {}
+}
+
+/**
+ * Build and send Telegram notifications for new discoveries.
+ * Groups by SignalType: DISCOVERY, PATTERN, OPEN_LOOP.
+ */
+export async function sendProactiveNotifications(discoveries: Discovery[]): Promise<void> {
+  const newItems = discoveries.filter(d => d.isNew)
+  if (newItems.length === 0) return
+
+  const byType: Record<string, Discovery[]> = {}
+  for (const d of newItems) {
+    const bucket = d.signalType ?? (d.type === 'pattern' ? 'PATTERN' : d.type === 'open_loop' ? 'OPEN_LOOP' : 'DISCOVERY')
+    if (!byType[bucket]) byType[bucket] = []
+    byType[bucket].push(d)
+  }
+
+  const icons: Record<string, string> = { DISCOVERY: '🔭', PATTERN: '🔁', OPEN_LOOP: '🔓' }
+
+  for (const [type, items] of Object.entries(byType)) {
+    const icon = icons[type] ?? '·'
+    const lines = items.slice(0, 5).map(d => {
+      const urlLine = d.url ? `\n  🔗 ${d.url}` : ''
+      return `• *${d.title}*\n  ${d.detail}${urlLine}`
+    })
+    const msg = `${icon} *REX ${type}* (${items.length} new)\n\n${lines.join('\n\n')}`
+    await sendTelegramAlert(msg)
+  }
+}
+
 // ── Memory pattern detection (0 LLM, pure SQL) ───────────────────────────────
 
 const ERROR_PATTERNS = [
@@ -203,6 +396,7 @@ function detectMemoryPatterns(cache: CuriousCache): Discovery[] {
         const isNew = !cache.seenPatterns.includes(keyword)
         discoveries.push({
           type: 'pattern',
+          signalType: 'PATTERN',
           title: label,
           detail: `Found ${row.cnt} times in memory — consider adding a rule`,
           source: 'memory',
@@ -242,16 +436,24 @@ export async function runCurious(opts: { silent?: boolean } = {}): Promise<Curio
     ...new Set([...cache.seenPatterns, ...memoryPatterns.map(p => p.title)]),
   ]
 
+  // OPEN_LOOP: unresolved issues >7 days (sync, 0 LLM)
+  const openLoops = detectOpenLoops(cache)
+  discoveries.push(...openLoops)
+
   // Run all fetches in parallel
-  const [ollamaLibrary, installedModels, mcpRepos, aiRepos, hnStories] = await Promise.all([
+  const [ollamaLibrary, installedModels, mcpRepos, aiRepos, awesomeMcps, hnStories, hfBlog, simonBlog, localLlama] = await Promise.all([
     fetchOllamaLibrary(),
     fetchInstalledOllamaModels(),
     fetchGitHubTrending('mcp-server'),
     fetchGitHubTrending('ai-agent'),
+    fetchAwesomeMcpServers(),
     fetchHackerNews(),
+    fetchRssFeed('https://huggingface.co/blog/feed.xml', 'huggingface.co'),
+    fetchRssFeed('https://simonwillison.net/atom/entries/', 'simonwillison.net'),
+    fetchLocalLlama(),
   ])
 
-  // ── Models: new popular models not yet installed ──
+  // ── Models: new popular models not yet installed ── [DISCOVERY]
   const installedSet = new Set(installedModels)
   for (const model of ollamaLibrary.slice(0, 20)) {
     const baseName = model.name.split(':')[0]
@@ -261,6 +463,7 @@ export async function runCurious(opts: { silent?: boolean } = {}): Promise<Curio
     if (!isInstalled && model.pulls > 10000) {
       discoveries.push({
         type: 'model',
+        signalType: 'DISCOVERY',
         title: `New model available: ${baseName}`,
         detail: `${(model.pulls / 1000).toFixed(0)}k pulls on Ollama library`,
         url: `https://ollama.com/library/${baseName}`,
@@ -272,13 +475,17 @@ export async function runCurious(opts: { silent?: boolean } = {}): Promise<Curio
   }
   cache.seenModels = [...new Set([...cache.seenModels, ...ollamaLibrary.map(m => m.name.split(':')[0])])]
 
-  // ── MCPs: trending repos not in cache ──
-  const allMcpRepos = [...mcpRepos, ...aiRepos]
+  // ── MCPs: trending repos + awesome-mcp-servers ── [DISCOVERY]
+  const allMcpRepos = [...mcpRepos, ...aiRepos, ...awesomeMcps]
+  const seenRepoNames = new Set<string>()
   for (const repo of allMcpRepos) {
+    if (seenRepoNames.has(repo.name)) continue
+    seenRepoNames.add(repo.name)
     const isNew = !cache.seenRepos.includes(repo.name)
     if (repo.stars > 100 || isNew) {
       discoveries.push({
         type: repo.name.toLowerCase().includes('mcp') ? 'mcp' : 'repo',
+        signalType: 'DISCOVERY',
         title: repo.name,
         detail: repo.description.slice(0, 120) || `${repo.stars}★ on GitHub`,
         url: repo.url,
@@ -290,11 +497,12 @@ export async function runCurious(opts: { silent?: boolean } = {}): Promise<Curio
   }
   cache.seenRepos = [...new Set([...cache.seenRepos, ...allMcpRepos.map(r => r.name)])]
 
-  // ── HN: relevant stories not yet seen ──
+  // ── HN: relevant stories not yet seen ── [DISCOVERY]
   for (const story of hnStories) {
     const isNew = !cache.seenNewsIds.includes(story.id)
     discoveries.push({
       type: 'news',
+      signalType: 'DISCOVERY',
       title: story.title,
       detail: `${story.score} points on Hacker News`,
       url: story.url ?? `https://news.ycombinator.com/item?id=${story.id}`,
@@ -304,6 +512,43 @@ export async function runCurious(opts: { silent?: boolean } = {}): Promise<Curio
     })
   }
   cache.seenNewsIds = [...new Set([...cache.seenNewsIds, ...hnStories.map(s => s.id)]).values()].slice(-200)
+
+  // ── Blog posts: HuggingFace + Simon Willison ── [DISCOVERY]
+  const allBlogPosts = [...hfBlog, ...simonBlog]
+  for (const post of allBlogPosts) {
+    const isNew = !cache.seenBlogUrls.includes(post.url)
+    if (isNew) {
+      discoveries.push({
+        type: 'news',
+        signalType: 'DISCOVERY',
+        title: post.title,
+        detail: post.summary || `Article on ${post.source}`,
+        url: post.url,
+        source: post.source,
+        seenAt: new Date().toISOString(),
+        isNew: true,
+      })
+    }
+  }
+  cache.seenBlogUrls = [...new Set([...cache.seenBlogUrls, ...allBlogPosts.map(p => p.url)])].slice(-500)
+
+  // ── r/LocalLLaMA: new posts ── [DISCOVERY]
+  for (const post of localLlama) {
+    const isNew = !cache.seenBlogUrls.includes(post.url)
+    if (isNew) {
+      discoveries.push({
+        type: 'news',
+        signalType: 'DISCOVERY',
+        title: post.title,
+        detail: `${post.score} upvotes on r/LocalLLaMA`,
+        url: post.url,
+        source: 'reddit.com/r/LocalLLaMA',
+        seenAt: new Date().toISOString(),
+        isNew: true,
+      })
+    }
+  }
+  cache.seenBlogUrls = [...new Set([...cache.seenBlogUrls, ...localLlama.map(p => p.url)])].slice(-500)
 
   const newCount = discoveries.filter(d => d.isNew).length
   cache.lastRun = new Date().toISOString()

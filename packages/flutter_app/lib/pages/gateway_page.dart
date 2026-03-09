@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:macos_ui/macos_ui.dart';
@@ -19,29 +20,75 @@ class _GatewayPageState extends State<GatewayPage> {
   final _notifyController = TextEditingController();
   String _notifyResult = '';
   bool _notifySending = false;
-  Timer? _statusTimer;
+
+  // WebSocket live connection to gateway port 7421
+  WebSocket? _ws;
+  bool _wsConnected = false;
+  StreamSubscription? _wsSub;
+  Timer? _reconnectTimer;
+  final List<Map<String, dynamic>> _recentMessages = [];
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RexService>().checkGateway();
-      _startStatusPolling();
+      _connectWs();
     });
   }
 
   @override
   void dispose() {
-    _statusTimer?.cancel();
+    _reconnectTimer?.cancel();
+    _wsSub?.cancel();
+    _ws?.close();
     _notifyController.dispose();
     super.dispose();
   }
 
-  void _startStatusPolling() {
-    _statusTimer?.cancel();
-    _statusTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!mounted) return;
+  Future<void> _connectWs() async {
+    _reconnectTimer?.cancel();
+    try {
+      final ws = await WebSocket.connect('ws://localhost:7421')
+          .timeout(const Duration(seconds: 5));
+      if (!mounted) {
+        ws.close();
+        return;
+      }
+      _ws = ws;
+      setState(() { _wsConnected = true; });
       context.read<RexService>().checkGateway();
+      _wsSub = ws.listen(
+        (data) {
+          if (!mounted) return;
+          try {
+            final msg = jsonDecode(data as String) as Map<String, dynamic>;
+            if (msg['channel'] == 'telegram') {
+              setState(() {
+                _recentMessages.insert(0, msg);
+                if (_recentMessages.length > 10) _recentMessages.removeLast();
+              });
+            }
+          } catch (_) {}
+        },
+        onDone: _onWsDisconnected,
+        onError: (_) => _onWsDisconnected(),
+        cancelOnError: true,
+      );
+    } catch (_) {
+      _onWsDisconnected();
+    }
+  }
+
+  void _onWsDisconnected() {
+    if (!mounted) return;
+    _wsSub?.cancel();
+    _ws = null;
+    setState(() { _wsConnected = false; });
+    context.read<RexService>().checkGateway();
+    // Retry every 10s — also serves as "poll" to detect gateway coming back online
+    _reconnectTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted) _connectWs();
     });
   }
 
@@ -149,7 +196,28 @@ class _GatewayPageState extends State<GatewayPage> {
                   const SizedBox(height: 12),
                 ],
                 // Comms card (Fleet: Telegram gateway = Comms)
-                RexSection(title: 'Comms', icon: CupertinoIcons.paperplane),
+                RexSection(
+                  title: 'Comms',
+                  icon: CupertinoIcons.paperplane,
+                  action: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: _wsConnected ? c.success : c.textTertiary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _wsConnected ? 'Live' : 'Offline',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: _wsConnected ? c.success : c.textTertiary,
+                      ),
+                    ),
+                  ]),
+                ),
                 RexCard(
                   trailing: RexStatusChip(
                     label: rex.gatewayRunning ? 'Active' : 'Offline',
@@ -276,6 +344,94 @@ class _GatewayPageState extends State<GatewayPage> {
                   ),
                 ),
 
+                const SizedBox(height: 8),
+                // Live message feed (WebSocket stream)
+                RexSection(title: 'Live Feed', icon: CupertinoIcons.antenna_radiowaves_left_right),
+                if (_recentMessages.isEmpty)
+                  RexEmptyState(
+                    icon: CupertinoIcons.antenna_radiowaves_left_right,
+                    title: _wsConnected ? 'Waiting for messages…' : 'Gateway offline',
+                    subtitle: _wsConnected
+                        ? 'Incoming Telegram messages will appear here in real-time.'
+                        : 'Start the gateway to receive live messages.',
+                  )
+                else
+                  RexCard(
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      children: _recentMessages.asMap().entries.map((entry) {
+                        final i = entry.key;
+                        final msg = entry.value;
+                        final from = (msg['from'] as String?) ?? 'unknown';
+                        final text = (msg['text'] as String?) ?? '';
+                        final ts = (msg['ts'] as String?) ?? '';
+                        final time = ts.isNotEmpty
+                            ? ts.substring(11, 16) // HH:MM from ISO string
+                            : '';
+                        return Column(
+                          children: [
+                            if (i > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 44),
+                                child: Container(height: 0.5, color: c.separator),
+                              ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 9,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    CupertinoIcons.chat_bubble_text,
+                                    size: 16,
+                                    color: c.accent,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(children: [
+                                          Text(
+                                            from,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: c.textSecondary,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          Text(
+                                            time,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: c.textTertiary,
+                                            ),
+                                          ),
+                                        ]),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          text.length > 120
+                                              ? '${text.substring(0, 120)}…'
+                                              : text,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: c.text,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 const SizedBox(height: 8),
                 // Features card
                 RexSection(title: 'Capabilities', icon: CupertinoIcons.bolt),

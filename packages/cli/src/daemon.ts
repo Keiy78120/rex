@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync, readdirSync, unlinkSync, copyF
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'
 import { homedir, cpus, loadavg } from 'node:os'
-import { MEMORY_DB_PATH, PENDING_DIR, BACKUPS_DIR, DAEMON_LOG_PATH, ensureRexDirs } from './paths.js'
+import { MEMORY_DB_PATH, PENDING_DIR, BACKUPS_DIR, DAEMON_LOG_PATH, INGEST_STATE_PATH, ensureRexDirs } from './paths.js'
 import { loadConfig } from './config.js'
 import { createLogger, rotateLog } from './logger.js'
 import { collectInventory, saveInventoryCache } from './inventory.js'
@@ -246,6 +246,21 @@ function trackAndDetectStuck(currentPending: number): boolean {
   return ingestHistory.every(c => c >= baseline)
 }
 
+function writeIngestState(pendingBefore: number, pendingAfter: number, durationMs: number): void {
+  try {
+    const chunksProcessed = Math.max(0, pendingBefore - pendingAfter)
+    const durationMin = durationMs / 60_000
+    const chunksPerMin = durationMin > 0 ? Math.round(chunksProcessed / durationMin) : 0
+    writeFileSync(INGEST_STATE_PATH, JSON.stringify({
+      lastEmbedAt: new Date().toISOString(),
+      chunksProcessed,
+      chunksPerMin,
+      pendingAfter,
+      durationMs,
+    }))
+  } catch { /* non-critical */ }
+}
+
 // ─── Ingest Cycle (adaptive, every 30 min) ────────────────
 async function ingestCycle(): Promise<void> {
   const pending = countPending()
@@ -276,13 +291,17 @@ async function ingestCycle(): Promise<void> {
     return
   }
 
+  const cycleStart = Date.now()
+
   if (pending > 2000) {
     // Urgency mode: embed only, skip categorize, alert
     log.warn(`Pending queue critical (${pending}) — embed-only urgency mode`)
     await sendTelegramNotify(`⚠️ REX: Ingest queue critical — ${pending} pending chunks, embed-only mode`)
     runCmd('rex ingest --max=200', 300_000)
     log.info('Ingest cycle done (urgency mode)')
-    trackAndDetectStuck(countPending())  // track after processing
+    const afterUrgency = countPending()
+    writeIngestState(pending, afterUrgency, Date.now() - cycleStart)
+    trackAndDetectStuck(afterUrgency)
     return
   }
 
@@ -291,7 +310,9 @@ async function ingestCycle(): Promise<void> {
     log.warn(`Pending queue large (${pending}) — embed-only, deferring categorize`)
     runCmd('rex ingest --max=100', 240_000)
     log.info('Ingest cycle done (backlog mode, categorize deferred)')
-    trackAndDetectStuck(countPending())  // track after processing
+    const afterBacklog = countPending()
+    writeIngestState(pending, afterBacklog, Date.now() - cycleStart)
+    trackAndDetectStuck(afterBacklog)
     return
   }
 
@@ -300,7 +321,9 @@ async function ingestCycle(): Promise<void> {
     log.info(`Ollama slow (${latencyMs}ms) — embed-only mode, skipping categorize`)
     runCmd('rex ingest')
     log.info('Ingest cycle done (slow-ollama mode)')
-    trackAndDetectStuck(countPending())
+    const afterSlow = countPending()
+    writeIngestState(pending, afterSlow, Date.now() - cycleStart)
+    trackAndDetectStuck(afterSlow)
     return
   }
 
@@ -312,6 +335,7 @@ async function ingestCycle(): Promise<void> {
 
   // Stuck detection: if pending count hasn't improved after STUCK_WINDOW cycles, alert
   const afterPending = countPending()
+  writeIngestState(pending, afterPending, Date.now() - cycleStart)
   const isStuck = trackAndDetectStuck(afterPending)
   if (isStuck) {
     const now = Date.now()
@@ -632,13 +656,14 @@ export async function daemon(): Promise<void> {
       lastPurge = now
     }
 
-    // Curious discovery every 24h
+    // Curious discovery every 24h — sends Telegram for DISCOVERY/PATTERN/OPEN_LOOP
     if (now - lastCurious >= 24 * 60 * 60 * 1000) {
       try {
-        const { runCurious } = await import('./curious.js')
+        const { runCurious, sendProactiveNotifications } = await import('./curious.js')
         const result = await runCurious({ silent: true })
         if (result.newCount > 0) {
           log.info(`Curious: ${result.newCount} new discoveries`)
+          await sendProactiveNotifications(result.discoveries)
         }
       } catch (e: any) {
         log.debug(`Curious cycle skipped: ${e.message?.slice(0, 80)}`)

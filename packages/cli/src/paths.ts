@@ -22,6 +22,7 @@ export const INSPIRATIONS_DIR = join(REX_DIR, 'inspirations')
 
 export const LAUNCHER_PID_PATH = join(REX_DIR, 'launcher.pid')
 export const RECOVERY_STATE_PATH = join(REX_DIR, 'recovery-state.json')
+export const INGEST_STATE_PATH = join(REX_DIR, 'ingest-state.json')
 
 export const LEGACY_MEMORY_DIR = join(HOME, '.rex-memory')
 export const LEGACY_DB_PATH = join(LEGACY_MEMORY_DIR, 'db', 'rex.sqlite')

@@ -811,6 +811,9 @@ class _SystemMetricsSection extends StatelessWidget {
     final uptimeSec = (sys['uptimeSec'] as num?)?.toInt() ?? 0;
     final uptimeMin = uptimeSec ~/ 60;
     final pendingChunks = (ingest['pendingCount'] as num?)?.toInt() ?? 0;
+    final chunksPerMin = (ingest['chunksPerMin'] as num?)?.toInt() ?? 0;
+    final estimatedClearMin = (ingest['estimatedClearMin'] as num?)?.toInt();
+    final lastEmbedAt = ingest['lastEmbedAt'] as String?;
     final hubReachable = hub['reachable'] == true;
     final hubNodes = (hub['nodeCount'] as num?)?.toInt() ?? 0;
     final hubHealthy = (hub['healthyNodes'] as num?)?.toInt() ?? 0;
@@ -853,7 +856,7 @@ class _SystemMetricsSection extends StatelessWidget {
                   Expanded(child: _MiniStat(label: 'CPUs', value: '$cpuCount', icon: CupertinoIcons.memories)),
                   Expanded(child: _MiniStat(label: 'Uptime', value: '${uptimeMin}m', icon: CupertinoIcons.clock)),
                   Expanded(child: _MiniStat(
-                    label: 'Ingest',
+                    label: 'Pending',
                     value: '$pendingChunks',
                     icon: CupertinoIcons.tray_arrow_down,
                     valueColor: pendingChunks > 100 ? c.warning : null,
@@ -866,6 +869,38 @@ class _SystemMetricsSection extends StatelessWidget {
                   )),
                 ],
               ),
+              if (chunksPerMin > 0 || lastEmbedAt != null) ...[
+                const SizedBox(height: 10),
+                Container(height: 0.5, color: c.separator),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    if (chunksPerMin > 0)
+                      Expanded(child: _MiniStat(
+                        label: 'Speed',
+                        value: '${chunksPerMin}/m',
+                        icon: CupertinoIcons.speedometer,
+                        valueColor: c.textSecondary,
+                      )),
+                    if (estimatedClearMin != null && estimatedClearMin > 0)
+                      Expanded(child: _MiniStat(
+                        label: 'Clear in',
+                        value: estimatedClearMin >= 60
+                            ? '${(estimatedClearMin / 60).round()}h'
+                            : '${estimatedClearMin}m',
+                        icon: CupertinoIcons.clock_fill,
+                        valueColor: estimatedClearMin > 120 ? c.warning : c.textSecondary,
+                      )),
+                    if (lastEmbedAt != null && lastEmbedAt.length >= 16)
+                      Expanded(child: _MiniStat(
+                        label: 'Last embed',
+                        value: lastEmbedAt.substring(11, 16),
+                        icon: CupertinoIcons.checkmark_circle,
+                        valueColor: c.success,
+                      )),
+                  ],
+                ),
+              ],
               if (hubReachable || hubNodes > 0) ...[
                 const SizedBox(height: 12),
                 Container(height: 0.5, color: c.separator),

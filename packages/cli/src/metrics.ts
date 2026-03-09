@@ -9,7 +9,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { cpus, freemem, totalmem, uptime } from 'node:os'
 import { createLogger } from './logger.js'
-import { REX_DIR } from './paths.js'
+import { REX_DIR, INGEST_STATE_PATH } from './paths.js'
 
 const log = createLogger('metrics')
 
@@ -31,6 +31,9 @@ export interface RexMetrics {
     pendingDir: string
     pendingCount: number
     lockActive: boolean
+    lastEmbedAt: string | null
+    chunksPerMin: number
+    estimatedClearMin: number | null
   }
   daemon: {
     pidFileExists: boolean
@@ -110,7 +113,21 @@ function ingestMetrics(): RexMetrics['ingest'] {
     } catch { return false }
   })()
 
-  return { pendingDir, pendingCount, lockActive }
+  let lastEmbedAt: string | null = null
+  let chunksPerMin = 0
+  try {
+    if (existsSync(INGEST_STATE_PATH)) {
+      const state = JSON.parse(readFileSync(INGEST_STATE_PATH, 'utf-8')) as {
+        lastEmbedAt?: string; chunksPerMin?: number
+      }
+      lastEmbedAt = state.lastEmbedAt ?? null
+      chunksPerMin = state.chunksPerMin ?? 0
+    }
+  } catch { /* ok */ }
+
+  const estimatedClearMin = chunksPerMin > 0 ? Math.ceil(pendingCount / chunksPerMin) : null
+
+  return { pendingDir, pendingCount, lockActive, lastEmbedAt, chunksPerMin, estimatedClearMin }
 }
 
 // ── Daemon ───────────────────────────────────────────────────

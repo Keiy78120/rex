@@ -66,4 +66,56 @@
 
 ---
 
+## PHASE 8 — Fix Claude Gateway
+
+- ✅ Supprimer tous les CLAUDE_CODE_* de claudeEnv() (pas seulement CLAUDECODE)
+- ✅ Injecter PATH complet (.local/bin, nvm bin) pour daemon/LaunchAgent
+- ✅ Documenter la limitation dans action.md (GATEWAY section)
+
+## PHASE 9 — Free Tiers & Providers
+
+- ✅ DeepSeek déjà présent dans free-tiers.ts (deepseek-chat, deepseek-reasoner)
+- ✅ Ajouter Qwen API (Alibaba Cloud) à free-tiers.ts (qwen-turbo/plus/max/coder-plus, DASHSCOPE_API_KEY)
+- ✅ LiteLLM config — litellm.ts auto-rotate inclut tous les providers du catalogue
+
+## PHASE 10 — CURIOUS Proactif (3 signaux + Telegram)
+
+- ✅ Ajouter type SignalType: DISCOVERY | PATTERN | OPEN_LOOP dans signal-detector.ts
+- ✅ DISCOVERY: modèles + MCPs + repos détectés → notif Telegram groupée par type
+- ✅ PATTERN: erreur/pattern récurrent ≥3 fois → notif Telegram (signalType PATTERN)
+- ✅ OPEN_LOOP: patterns TODO/BUG/FIXME non résolus >7j → notif Telegram
+- ✅ Cron source: awesome-mcp-servers (fetchAwesomeMcpServers via GitHub API topic:mcp)
+- ✅ sendProactiveNotifications() dans daemon.ts curious cycle
+
+## PHASE 11 — Fleet Thermal Awareness
+
+- ✅ CPU/RAM via os.loadavg + freemem/totalmem (natif Node.js — zero dépendance externe)
+- ✅ ThermalStatus dans FleetNode (cpuLoadPercent, ramUsedPercent, healthy)
+- ✅ routeTask() filtre nodes avec CPU >80% ou RAM >90%
+- ✅ buildLocalFleetNode() inclut thermalStatus live
+- ⚠️ thermalStatus des nodes distants: ils doivent envoyer leurs stats au hub via heartbeat (phase future)
+
+## PHASE 12 — Docker Compose (VPS + local)
+
+- ✅ docker-compose.yml étendu (rex-hub + rex-daemon + rex-gateway + ollama + healthchecks)
+- ✅ .env.docker.example créé avec toutes les vars nécessaires
+- ✅ rex init --docker déjà dans index.ts → docker.ts (génère docker-compose.local.yml + .env.docker)
+- ⚠️ Test docker compose up --detach localement — à faire manuellement (pas de Dockerfile encore)
+
+## PHASE 13 — WebSocket Gateway Server
+
+- ✅ ws npm package installé dans packages/cli
+- ✅ WS server dans gateway.ts (port 7421, GatewayMessage format normalisé)
+- ✅ Format message: { channel, from, text, ts, meta }
+- ✅ Broadcast inbound Telegram messages aux clients WS connectés
+- ✅ Flutter: remplacer polling par WS connection vers gateway (dart:io WebSocket, port 7421, live feed + 10s reconnect)
+
+## PHASE 14 — Ink CLI (VPS terminal)
+
+- ✅ ink + react installés dans packages/cli
+- ✅ packages/cli/src/ink-tui.ts créé (3 tabs: Health, Logs, Fleet — keyboard nav)
+- ✅ rex tui ajouté dans index.ts
+
+---
+
 Quand tout est ✅ → echo "REX COMPLETE - All tasks done" dans le terminal.
