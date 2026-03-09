@@ -1,5 +1,6 @@
 /**
  * REX LiteLLM Config Generator
+ * @module BUDGET
  *
  * Generates a litellm_config.yaml from detected providers.
  * Order: Ollama (local) → free tier APIs → subscription

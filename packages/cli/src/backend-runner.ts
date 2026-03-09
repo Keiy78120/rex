@@ -2,6 +2,7 @@
  * REX Backend Runner
  * Thin delegation layer: semantic cache → orchestrator (ollama → claude-code → claude-api).
  * Single entry point for all internal prompt execution.
+ * @module AGENTS
  */
 
 import { hashPrompt, cacheGet, cacheSet } from './semantic-cache.js'

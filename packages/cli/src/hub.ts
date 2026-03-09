@@ -1,3 +1,4 @@
+/** @module FLEET — Commander API (port 7420) */
 import { createServer, get as httpGet, IncomingMessage, ServerResponse, Server } from 'node:http'
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'

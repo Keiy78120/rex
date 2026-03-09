@@ -1,5 +1,6 @@
 /**
  * REX Sandbox
+ * @module TOOLS
  *
  * Thin routing layer over OS-level and Docker isolation runtimes.
  * REX does NOT implement isolation primitives — it delegates to OSS runtimes.

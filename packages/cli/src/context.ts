@@ -1,3 +1,4 @@
+/** @module PROJETS */
 import { existsSync, readFileSync } from 'node:fs'
 import { join, basename } from 'node:path'
 

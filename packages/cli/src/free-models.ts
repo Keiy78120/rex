@@ -1,5 +1,6 @@
 /**
  * REX Free Model Catalog
+ * @module BUDGET
  *
  * Authoritative catalog of all known free/local LLM models and their limits.
  * Updated periodically — entries sourced from provider docs + WebSearch.

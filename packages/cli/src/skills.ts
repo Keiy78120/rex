@@ -1,4 +1,4 @@
-// packages/cli/src/skills.ts — REX Skills System
+/** @module TOOLS */
 import { homedir } from 'node:os'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'

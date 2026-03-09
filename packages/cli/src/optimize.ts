@@ -1,3 +1,4 @@
+/** @module OPTIMIZE */
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'

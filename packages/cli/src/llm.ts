@@ -3,6 +3,7 @@
  * Chain: Ollama (local) → free tier APIs → subscription
  * Routes through litellm.ts for usage tracking and cooldown management.
  * Section 23 (action.md): all internal LLM calls MUST use this module.
+ * @module BUDGET
  */
 
 import { callWithFallback } from './litellm.js'

@@ -1,3 +1,4 @@
+/** @module MEMORY */
 import { existsSync, copyFileSync, mkdirSync, symlinkSync, renameSync, readdirSync, lstatSync } from 'node:fs'
 import { join } from 'node:path'
 import { execSync } from 'node:child_process'

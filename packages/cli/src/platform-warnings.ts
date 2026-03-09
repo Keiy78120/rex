@@ -2,6 +2,7 @@
  * REX Platform Warnings
  * Detects platform limitations and warns about unavailable features.
  * Shown in `rex doctor` and `rex doctor --platform`.
+ * @module TOOLS
  */
 
 import { execSync } from 'node:child_process'

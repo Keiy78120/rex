@@ -1,3 +1,4 @@
+/** @module FLEET */
 import { writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'

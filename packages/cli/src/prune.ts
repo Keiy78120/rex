@@ -1,3 +1,4 @@
+/** @module OPTIMIZE */
 import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'

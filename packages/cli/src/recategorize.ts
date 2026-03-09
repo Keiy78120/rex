@@ -1,4 +1,4 @@
-// packages/cli/src/recategorize.ts
+/** @module MEMORY */
 import Database from 'better-sqlite3'
 import * as sqliteVec from 'sqlite-vec'
 import { MEMORY_DB_PATH } from './paths.js'

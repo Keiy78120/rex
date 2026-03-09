@@ -2,6 +2,7 @@
  * REX VPS Deployment
  * SSH-based provisioning: install rex-claude, configure daemon + gateway as systemd services.
  * Completes Phase 3 Brain VPS.
+ * @module FLEET
  */
 
 import { execFile } from 'node:child_process'

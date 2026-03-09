@@ -1,3 +1,4 @@
+/** @module TOOLS */
 import { spawnSync } from 'node:child_process'
 
 type CheckStatus = 'pass' | 'warn' | 'fail'
