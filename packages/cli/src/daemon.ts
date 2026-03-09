@@ -599,6 +599,8 @@ export async function daemon(): Promise<void> {
   let lastNodeRegister = 0  // register immediately on start
   let lastSessionGuard = 0  // check immediately
   let lastTailscaleMesh = 0  // discover Tailscale hubs immediately on start
+  let lastWatchdog = 0  // run immediately on start
+  let lastUserCycles = 0  // detect user state immediately
   let lastCurious = Date.now() - 23 * 60 * 60 * 1000  // run ~1h after daemon start
   let lastProviderPing = 0  // ping providers immediately on start
   let lastDailySummaryDate = ''  // tracks 'YYYY-MM-DD' to send once per day
@@ -821,6 +823,41 @@ export async function daemon(): Promise<void> {
     if (now - lastTailscaleMesh >= 5 * 60_000) {
       await tailscaleMeshCycle()
       lastTailscaleMesh = now
+    }
+
+    // User cycle detection every 5 min — gates paid API tier
+    if (now - lastUserCycles >= 5 * 60_000) {
+      try {
+        const { detectUserCycle } = await import('./user-cycles.js')
+        const snap = await detectUserCycle()
+        if (snap.state === 'sleeping') {
+          log.debug('User cycle: SLEEPING — paid API gated')
+        } else if (snap.state === 'waking_up') {
+          const { buildMorningDigest } = await import('./user-state.js')
+          const digest = await buildMorningDigest()
+          if (digest) await sendTelegramNotify(`🌅 *REX Morning Digest*\n\n${digest}`)
+        }
+      } catch (e: any) {
+        log.debug(`User cycles skipped: ${e.message?.slice(0, 80)}`)
+      }
+      lastUserCycles = now
+    }
+
+    // Watchdog cycle every 60s — daemon health + budget circuit-breaker
+    if (now - lastWatchdog >= 60_000) {
+      try {
+        const { runWatchdogCycle } = await import('./watchdog.js')
+        const report = await runWatchdogCycle()
+        if (report.checks.budget === 'exceeded') {
+          log.warn('Watchdog: daily budget exceeded — LLM calls blocked')
+        }
+        if (report.checks.loopDetected) {
+          log.warn(`Watchdog: loop detected (${report.checks.idleIterations} idle iterations)`)
+        }
+      } catch (e: any) {
+        log.debug(`Watchdog skipped: ${e.message?.slice(0, 80)}`)
+      }
+      lastWatchdog = now
     }
 
     // Session guard — check context window + daily budget every 5 min

@@ -337,6 +337,7 @@ async function main() {
       break
     }
 
+    case 'distill':    // rex distill — nightly memory dedup (BLOC 3.3 cron alias)
     case 'prune': {
       const sub = process.argv[3]
       const { prune, forgettingCurve } = await import('./prune.js')
@@ -507,6 +508,7 @@ async function main() {
       break
     }
 
+    case 'compress':     // rex compress — alias for consolidate (BLOC 3.3 cron)
     case 'consolidate': {
       try {
         const memDir = findMemoryPackage()
@@ -1241,6 +1243,29 @@ async function main() {
       break
     }
 
+    // ── Codex OAuth device-code flow ────────────────────────────────────────────
+    case 'codex': {
+      const sub = process.argv[3] ?? 'auth'
+      if (sub === 'auth') {
+        const { startCodexDeviceFlow, pollCodexToken, saveCodexCredentials } = await import('./providers.js')
+        console.log('Starting Codex OAuth device-code flow...')
+        const flow = await startCodexDeviceFlow()
+        console.log(`\n🔑 Visit: ${flow.verification_uri}`)
+        console.log(`   Code:  ${flow.user_code}\n`)
+        console.log(`Waiting for authorization (${flow.expires_in}s)...`)
+        const token = await pollCodexToken(flow.device_code, flow.interval, flow.expires_in)
+        saveCodexCredentials(token)
+        console.log('✅ Codex OAuth credentials saved.')
+      } else if (sub === 'status') {
+        const { loadCodexToken } = await import('./providers.js')
+        const t = loadCodexToken()
+        console.log(t ? '✅ Codex token: active' : '❌ Codex token: not configured (run `rex codex auth`)')
+      } else {
+        console.log('Usage:\n  rex codex auth    — start device-code OAuth flow\n  rex codex status  — check token status')
+      }
+      break
+    }
+
     case 'budget': {
       const { showBudget, getBudgetSummary } = await import('./budget.js')
       const jsonFlag = process.argv.includes('--json')
@@ -1530,6 +1555,257 @@ async function main() {
         console.log(JSON.stringify(report, null, 2))
       } else {
         printDevStatus(report)
+      }
+      break
+    }
+
+    case 'activitywatch': {
+      // rex activitywatch [--json] — query ActivityWatch status + top apps
+      const jsonFlag = process.argv.includes('--json')
+      const hours = parseInt(process.argv.find(a => a.startsWith('--hours='))?.split('=')[1] ?? '8')
+      const { getAwStatus, getTopApps, getProductivitySnapshot } = await import('./activitywatch-bridge.js')
+      const status = await getAwStatus()
+      if (!status.available) {
+        if (jsonFlag) console.log(JSON.stringify({ available: false }))
+        else console.log(`${COLORS.yellow}ActivityWatch not running${COLORS.reset} — install at activitywatch.net`)
+        break
+      }
+      const [apps, productivity] = await Promise.all([
+        getTopApps(hours, 10),
+        getProductivitySnapshot(hours),
+      ])
+      if (jsonFlag) {
+        console.log(JSON.stringify({ status, apps, productivity }, null, 2))
+        break
+      }
+      const BOLD = '\x1b[1m', RESET = '\x1b[0m', DIM = '\x1b[2m', CYAN = '\x1b[36m', GREEN = '\x1b[32m'
+      console.log(`\n${BOLD}ActivityWatch — last ${hours}h${RESET}  ${DIM}v${status.version ?? '?'}${RESET}`)
+      console.log('─'.repeat(56))
+      console.log(`  Dev     ${GREEN}${productivity.devToolsMin}min${RESET}   Browser ${productivity.browserMin}min   Comms ${productivity.communicationMin}min`)
+      console.log(`  Focus   ${CYAN}${productivity.totalFocusMin}min${RESET}   Top app: ${productivity.topApp}`)
+      console.log()
+      for (const app of apps.slice(0, 8)) {
+        const min = Math.round(app.duration / 60)
+        const bar = '█'.repeat(Math.min(20, Math.round(min / 10)))
+        console.log(`  ${app.app.slice(0, 22).padEnd(22)} ${DIM}${bar}${RESET} ${min}min`)
+      }
+      console.log()
+      break
+    }
+
+    case 'patterns': {
+      // rex patterns [--json] [--hours=N] — detect behavioral patterns → CURIOUS signals
+      const jsonFlag = process.argv.includes('--json')
+      const hours = parseInt(process.argv.find(a => a.startsWith('--hours='))?.split('=')[1] ?? '8')
+      const { detectPatterns } = await import('./pattern-detector.js')
+      const report = await detectPatterns(hours)
+      if (jsonFlag) {
+        console.log(JSON.stringify(report, null, 2))
+        break
+      }
+      const BOLD = '\x1b[1m', RESET = '\x1b[0m', DIM = '\x1b[2m', GREEN = '\x1b[32m', YELLOW = '\x1b[33m'
+      const awLabel = report.awAvailable ? `${GREEN}●${RESET}` : `${DIM}○${RESET}`
+      const hmLabel = report.hammerEventsCount > 0 ? `${GREEN}●${RESET}` : `${DIM}○${RESET}`
+      console.log(`\n${BOLD}REX Patterns${RESET}  ActivityWatch ${awLabel}  Hammerspoon ${hmLabel} (${report.hammerEventsCount} events)`)
+      console.log('─'.repeat(56))
+      if (report.signals.length === 0) {
+        console.log(`  ${DIM}No patterns detected — run longer sessions or install ActivityWatch${RESET}`)
+      } else {
+        for (const sig of report.signals) {
+          const icon = sig.kind === 'DISCOVERY' ? '🔭' : sig.kind === 'PATTERN' ? '🔁' : '🔓'
+          const conf = `${Math.round(sig.confidence * 100)}%`
+          console.log(`\n  ${icon}  ${YELLOW}${sig.kind}${RESET}  ${DIM}conf:${conf}${RESET}`)
+          console.log(`     ${sig.message}`)
+          if (sig.detail) console.log(`     ${DIM}${sig.detail}${RESET}`)
+        }
+      }
+      console.log()
+      break
+    }
+
+    case 'record': {
+      // rex record list          — list recorded audio sessions
+      // rex record start [label] — start recording (Ctrl+C to stop + auto-transcribe)
+      // rex record transcribe <file> — transcribe an existing audio file
+      const sub = process.argv[3]
+      const jsonFlag = process.argv.includes('--json')
+
+      if (!sub || sub === 'list') {
+        const { listSessions } = await import('./audio-logger.js')
+        const sessions = listSessions()
+        if (jsonFlag) { console.log(JSON.stringify(sessions, null, 2)); break }
+        const BOLD = '\x1b[1m', RESET = '\x1b[0m', DIM = '\x1b[2m', GREEN = '\x1b[32m'
+        console.log(`\n${BOLD}REX Audio — ${sessions.length} session(s)${RESET}`)
+        console.log('─'.repeat(56))
+        for (const s of sessions.slice(0, 20)) {
+          const dur = s.duration ? `${s.duration}s` : '?'
+          const tx = s.transcript ? `${GREEN}✓${RESET}` : `${DIM}—${RESET}`
+          console.log(`  ${tx} ${s.id.slice(0, 32)}  ${DIM}${dur}${RESET}`)
+        }
+        console.log()
+        break
+      }
+
+      if (sub === 'start') {
+        const label = process.argv[4] ?? 'session'
+        const { startRecording } = await import('./audio-logger.js')
+        console.log(`\x1b[32mRecording started\x1b[0m — press Ctrl+C to stop`)
+        const { stop } = await startRecording(label)
+        process.on('SIGINT', async () => {
+          console.log('\nStopping recording...')
+          const session = await stop()
+          console.log(`\x1b[32m✓\x1b[0m Saved: ${session.file}`)
+          if (session.transcript) console.log(`  Transcript: ${session.transcript.slice(0, 120)}...`)
+          process.exit(0)
+        })
+        await new Promise(() => {}) // keep alive
+        break
+      }
+
+      if (sub === 'transcribe') {
+        const file = process.argv[4]
+        if (!file) { console.log('Usage: rex audio transcribe <file>'); break }
+        const { transcribeFile } = await import('./audio-logger.js')
+        console.log(`Transcribing ${file}...`)
+        const transcript = await transcribeFile(file)
+        if (transcript) console.log(transcript)
+        else console.log('\x1b[33mNo Whisper binary found\x1b[0m — install whisper.cpp or openai-whisper')
+        break
+      }
+
+      console.log('Usage: rex audio [list|start [label]|transcribe <file>]')
+      break
+    }
+
+    case 'monitor-setup': {
+      // rex monitor-setup — guide to install ActivityWatch + Hammerspoon rex-monitor config
+      const { join: msJoin } = await import('node:path')
+      const { homedir: msHome } = await import('node:os')
+      const { existsSync: msExists, copyFileSync: msCopy, mkdirSync: msMkdir } = await import('node:fs')
+      const BOLD = '\x1b[1m', RESET = '\x1b[0m', DIM = '\x1b[2m', GREEN = '\x1b[32m', CYAN = '\x1b[36m', YELLOW = '\x1b[33m'
+
+      console.log(`\n${BOLD}REX Monitor Setup${RESET}`)
+      console.log('─'.repeat(56))
+
+      // 1. ActivityWatch
+      console.log(`\n  ${BOLD}1. ActivityWatch${RESET}  ${DIM}app usage + focus time${RESET}`)
+      const { getAwStatus } = await import('./activitywatch-bridge.js')
+      const awStatus = await getAwStatus()
+      if (awStatus.available) {
+        console.log(`     ${GREEN}● Running${RESET}  ${awStatus.bucketsCount} bucket(s)  v${awStatus.version ?? '?'}`)
+      } else {
+        console.log(`     ${YELLOW}○ Not running${RESET}`)
+        console.log(`     Download: ${CYAN}https://activitywatch.net/downloads/${RESET}`)
+        console.log(`     Then: open ActivityWatch and start aw-watcher-window`)
+      }
+
+      // 2. Hammerspoon rex-monitor.lua
+      console.log(`\n  ${BOLD}2. Hammerspoon${RESET}  ${DIM}app switches + clipboard tracking${RESET}`)
+      const hammerspoonInitPath = msJoin(msHome(), '.hammerspoon', 'init.lua')
+      const rexMonitorSrc = msJoin(msHome(), '.nvm', 'versions', 'node', 'v22.20.0', 'lib', 'node_modules', 'rex-claude', 'dist', 'hammerspoon', 'rex-monitor.lua')
+
+      // Try to find rex-monitor.lua in dist
+      const luaPaths = [
+        rexMonitorSrc,
+        msJoin(process.env.npm_config_prefix ?? '', 'lib', 'node_modules', 'rex-claude', 'dist', 'hammerspoon', 'rex-monitor.lua'),
+      ]
+      const luaSrc = luaPaths.find(msExists)
+
+      if (msExists(hammerspoonInitPath)) {
+        if (luaSrc) {
+          const destDir = msJoin(msHome(), '.hammerspoon')
+          msMkdir(destDir, { recursive: true })
+          const destFile = msJoin(destDir, 'rex-monitor.lua')
+          msCopy(luaSrc, destFile)
+          console.log(`     ${GREEN}✓ Installed${RESET}: ~/.hammerspoon/rex-monitor.lua`)
+          console.log(`     ${DIM}Add to init.lua: require("rex-monitor")${RESET}`)
+        } else {
+          console.log(`     ${YELLOW}○ Hammerspoon found${RESET} but rex-monitor.lua not in dist — run pnpm build first`)
+        }
+      } else {
+        console.log(`     ${YELLOW}○ Hammerspoon not found${RESET}`)
+        console.log(`     Download: ${CYAN}https://www.hammerspoon.org${RESET}`)
+      }
+
+      // 3. Pattern detection
+      console.log(`\n  ${BOLD}3. Pattern detection${RESET}`)
+      console.log(`     Run: ${CYAN}rex patterns${RESET} to detect behavioral patterns`)
+      console.log(`     Run: ${CYAN}rex activitywatch${RESET} to see app usage statistics`)
+
+      console.log('\n' + '─'.repeat(56))
+      console.log(`  ${DIM}Once set up, REX will proactively suggest workflow improvements${RESET}\n`)
+      break
+    }
+
+    case 'monitor-daemon': {
+      // rex monitor-daemon [--interval=60] [--once] [--status] [--json]
+      const jsonFlag = process.argv.includes('--json')
+      const onceFlag = process.argv.includes('--once')
+      const statusFlag = process.argv.includes('--status')
+      const intervalArg = process.argv.find(a => a.startsWith('--interval='))
+      const intervalMin = intervalArg ? parseInt(intervalArg.split('=')[1]) : 60
+
+      const { runMonitorCycle, startMonitorDaemon, printMonitorStatus } = await import('./monitor-daemon.js')
+
+      if (statusFlag) {
+        printMonitorStatus(jsonFlag)
+        break
+      }
+
+      if (onceFlag) {
+        const result = await runMonitorCycle()
+        if (jsonFlag) {
+          console.log(JSON.stringify({
+            signalsFound: result.signalsFound,
+            signalsDispatched: result.signalsDispatched,
+            awAvailable: result.awAvailable,
+            hammerEventsCount: result.hammerEventsCount,
+            durationMs: result.durationMs,
+          }))
+        } else {
+          console.log(`\nMonitor cycle complete:`)
+          console.log(`  Signals found    : ${result.signalsFound}`)
+          console.log(`  Signals sent     : ${result.signalsDispatched}`)
+          console.log(`  ActivityWatch    : ${result.awAvailable ? '✓' : '✗'}`)
+          console.log(`  Hammer events    : ${result.hammerEventsCount}`)
+          console.log(`  Duration         : ${result.durationMs}ms\n`)
+        }
+        break
+      }
+
+      // Daemon mode — runs indefinitely
+      await startMonitorDaemon(intervalMin)
+      break
+    }
+
+    case 'templates': {
+      // rex templates [list|show <id>]
+      const { loadAllTemplates, printTemplateList, printTemplateDetail, getTemplate } = await import('./agent-templates/base-template.js')
+      await loadAllTemplates()
+
+      const sub = process.argv[3]
+      const jsonFlag = process.argv.includes('--json')
+
+      if (sub === 'show') {
+        const id = process.argv[4] as any
+        if (!id) { console.log('Usage: rex templates show <id>'); break }
+        const t = getTemplate(id)
+        if (!t) { console.log(`Template "${id}" not found`); break }
+        if (jsonFlag) {
+          console.log(JSON.stringify(t, null, 2))
+        } else {
+          const { printTemplateDetail: detail } = await import('./agent-templates/base-template.js')
+          detail(t)
+        }
+        break
+      }
+
+      // Default: list
+      if (jsonFlag) {
+        const { listTemplates } = await import('./agent-templates/base-template.js')
+        console.log(JSON.stringify(listTemplates()))
+      } else {
+        printTemplateList()
       }
       break
     }
@@ -2540,6 +2816,12 @@ async function main() {
       break
     }
 
+    case 'meeting': {
+      const { meeting } = await import('./meeting.js')
+      await meeting(process.argv.slice(3))
+      break
+    }
+
     case 'route': {
       // rex route "<message>"         → show routing decision
       // rex route --explain           → show policy overview
@@ -2710,6 +2992,93 @@ async function main() {
           }
         }
       }
+      break
+    }
+
+    // ── client:* — Template-based agent provisioning ───────────────────────
+    case 'client:create': {
+      const { createClient, printClientDetail } = await import('./client-factory.js')
+      const { loadAllTemplates, getTemplate } = await import('./agent-templates/base-template.js')
+      await loadAllTemplates()
+      const templateArg = process.argv.find(a => a.startsWith('--template='))?.split('=').slice(1).join('=')
+          || (process.argv.indexOf('--template') !== -1 ? process.argv[process.argv.indexOf('--template') + 1] : undefined)
+      const nameArg = process.argv.find(a => a.startsWith('--name='))?.split('=').slice(1).join('=')
+          || (process.argv.indexOf('--name') !== -1 ? process.argv[process.argv.indexOf('--name') + 1] : undefined)
+      const planArg = (process.argv.find(a => a.startsWith('--plan='))?.split('=')[1] ?? 'pro') as 'starter' | 'pro' | 'enterprise'
+      const dryRun  = process.argv.includes('--dry-run')
+      if (!templateArg || !nameArg) {
+        console.error('Usage: rex client:create --template <dg|drh|ceo|coo|freelance> --name <id> [--plan=pro] [--dry-run]')
+        process.exit(1)
+      }
+      const tmpl = getTemplate(templateArg)
+      if (!tmpl) {
+        console.error(`Unknown template: ${templateArg}. Available: ${['dg','drh','ceo','coo','freelance'].join(', ')}`)
+        process.exit(1)
+      }
+      const client = await createClient({ name: nameArg, trade: tmpl.id, plan: planArg, dryRun })
+      // Write template artefacts alongside client config
+      if (!dryRun) {
+        const { join: pjoin } = await import('node:path')
+        const { writeFileSync: wfs } = await import('node:fs')
+        const { REX_DIR: rd } = await import('./paths.js')
+        const clientDir = pjoin(rd, 'clients', client.id)
+        wfs(pjoin(clientDir, 'system-prompt.md'), tmpl.systemPrompt)
+        wfs(pjoin(clientDir, 'memory-init.json'), JSON.stringify(tmpl.memoryInit, null, 2))
+        wfs(pjoin(clientDir, 'template.json'), JSON.stringify({ id: tmpl.id, name: tmpl.name, integrations: tmpl.integrations, mcpServers: tmpl.mcpServers, monitorModules: tmpl.monitorModules }, null, 2))
+      }
+      printClientDetail(client)
+      break
+    }
+
+    case 'client:list': {
+      const { listClients, printClients } = await import('./client-factory.js')
+      const jsonOut = process.argv.includes('--json')
+      const cs = listClients()
+      if (jsonOut) {
+        console.log(JSON.stringify({ clients: cs, total: cs.length }, null, 2))
+      } else {
+        printClients(cs)
+      }
+      break
+    }
+
+    case 'client:logs': {
+      const { getClientLogs } = await import('./client-factory.js')
+      const id = process.argv[3]
+      const lines = parseInt(process.argv.find(a => a.startsWith('--lines='))?.split('=')[1] ?? '100')
+      if (!id) { console.error('Usage: rex client:logs <id> [--lines=N]'); process.exit(1) }
+      console.log(await getClientLogs(id, lines))
+      break
+    }
+
+    case 'client:stop': {
+      const { stopClient } = await import('./client-factory.js')
+      const id = process.argv[3]
+      if (!id) { console.error('Usage: rex client:stop <id>'); process.exit(1) }
+      await stopClient(id)
+      console.log(`Stopped: ${id}`)
+      break
+    }
+
+    case 'client:update': {
+      // Update client plan / model — persists to index.json
+      const { getClient, listClients } = await import('./client-factory.js')
+      const { writeFileSync: wf2 } = await import('node:fs')
+      const { join: pj2 } = await import('node:path')
+      const { REX_DIR: rd2 } = await import('./paths.js')
+      const id = process.argv[3]
+      if (!id) { console.error('Usage: rex client:update <id> [--plan=<starter|pro|enterprise>]'); process.exit(1) }
+      const c = getClient(id)
+      if (!c) { console.error(`Client not found: ${id}`); process.exit(1) }
+      const newPlan = process.argv.find(a => a.startsWith('--plan='))?.split('=')[1]
+      if (newPlan && ['starter', 'pro', 'enterprise'].includes(newPlan)) {
+        c.plan = newPlan as 'starter' | 'pro' | 'enterprise'
+      }
+      c.updatedAt = new Date().toISOString()
+      const all = listClients().map(x => x.id === id ? c : x)
+      wf2(pj2(rd2, 'clients', 'index.json'), JSON.stringify(all, null, 2))
+      wf2(pj2(rd2, 'clients', id, 'config.json'), JSON.stringify(c, null, 2))
+      console.log(`Updated ${id}: plan=${c.plan}`)
       break
     }
 
@@ -3204,6 +3573,130 @@ async function main() {
       break
     }
 
+    // ── Relay Engine ────────────────────────────────────────────────────────
+    case 'relay': {
+      const { runRelay, formatRelayDocument } = await import('./relay-engine.js')
+      const jsonFlag = process.argv.includes('--json')
+      const mentorEnabled = process.argv.includes('--mentor')
+      const taskArg = process.argv.slice(3).filter(a => !a.startsWith('--')).join(' ').trim()
+      if (!taskArg) {
+        console.error('Usage: rex relay "<task>" [--mentor] [--json]')
+        process.exit(1)
+      }
+      if (!jsonFlag) {
+        console.log(`\n${COLORS.bold}REX Relay Engine${COLORS.reset} — multi-model sequential reasoning\n`)
+      }
+      const doc = await runRelay(taskArg, '', { mentorEnabled })
+      if (jsonFlag) {
+        console.log(JSON.stringify(doc, null, 2))
+      } else {
+        console.log(formatRelayDocument(doc))
+      }
+      break
+    }
+
+    // ── User State ──────────────────────────────────────────────────────────
+    case 'user-state': {
+      const { detectUserState, buildMorningDigest } = await import('./user-state.js')
+      const jsonFlag = process.argv.includes('--json')
+      const digestFlag = process.argv.includes('--digest')
+      const info = await detectUserState()
+      if (digestFlag) {
+        const digest = await buildMorningDigest()
+        if (jsonFlag) console.log(JSON.stringify({ state: info.state, digest }))
+        else { console.log(`\n${COLORS.bold}Morning Digest${COLORS.reset}\n`); console.log(digest) }
+        break
+      }
+      if (jsonFlag) {
+        console.log(JSON.stringify(info, null, 2))
+      } else {
+        const indicator = info.state === 'AWAKE_ACTIVE' ? `${COLORS.green}●${COLORS.reset}` :
+          info.state === 'SLEEPING' ? `${COLORS.dim}●${COLORS.reset}` : `${COLORS.yellow}●${COLORS.reset}`
+        console.log(`\n${COLORS.bold}REX User State${COLORS.reset}`)
+        console.log(`  ${indicator} ${info.state}  (score: ${info.sleepScore.toFixed(2)})`)
+        console.log(`  Allowed tiers: ${info.allowedTiers.join(', ')}`)
+        console.log(`  ${COLORS.dim}${info.reason}${COLORS.reset}\n`)
+      }
+      break
+    }
+
+    // ── User Cycles (XState) ────────────────────────────────────────────────
+    case 'user-cycles': {
+      const { detectUserCycle } = await import('./user-cycles.js')
+      const jsonFlag = process.argv.includes('--json')
+      const snap = await detectUserCycle()
+      if (jsonFlag) {
+        console.log(JSON.stringify(snap, null, 2))
+      } else {
+        const stateColor: Record<string, string> = {
+          awake_active: COLORS.green,
+          awake_idle: COLORS.yellow,
+          sleeping: COLORS.dim,
+          waking_up: COLORS.cyan,
+        }
+        const col = stateColor[snap.state] ?? COLORS.reset
+        console.log(`\n${COLORS.bold}REX User Cycles${COLORS.reset} (XState)`)
+        console.log(`  State: ${col}${snap.state.toUpperCase()}${COLORS.reset}`)
+        console.log(`  Sleep score: ${snap.context.sleepScore.toFixed(2)}`)
+        console.log(`  Idle: ${snap.context.idleMinutes}min`)
+        console.log(`  Allowed: ${snap.context.allowedTiers.join(', ')}`)
+        console.log(`  Updated: ${snap.updatedAt}\n`)
+      }
+      break
+    }
+
+    // ── Watchdog ────────────────────────────────────────────────────────────
+    case 'watchdog': {
+      const sub = process.argv[3]
+      const { runWatchdogCycle, startWatchdog } = await import('./watchdog.js')
+      const jsonFlag = process.argv.includes('--json')
+      if (sub === 'start') {
+        console.log(`${COLORS.bold}REX Watchdog${COLORS.reset} starting (60s interval)…`)
+        startWatchdog()
+        // Keep process alive
+        await new Promise<never>(() => {})
+        break
+      }
+      // Single cycle
+      const report = await runWatchdogCycle()
+      if (jsonFlag) {
+        console.log(JSON.stringify(report, null, 2))
+      } else {
+        const statusIcon = (s: string) => s === 'ok' || s === 'running' ? `${COLORS.green}✓${COLORS.reset}` :
+          s === 'restarted' ? `${COLORS.yellow}↺${COLORS.reset}` : `${COLORS.red}✗${COLORS.reset}`
+        console.log(`\n${COLORS.bold}REX Watchdog${COLORS.reset}`)
+        console.log(`  Daemon:  ${statusIcon(report.checks.daemon)} ${report.checks.daemon}`)
+        console.log(`  Budget:  ${statusIcon(report.checks.budget)} ${report.checks.budget}`)
+        console.log(`  Memory:  ${statusIcon(report.checks.memoryHealth)} ${report.checks.memoryHealth}`)
+        if (report.checks.loopDetected) console.log(`  ${COLORS.red}!${COLORS.reset} Loop detected (${report.checks.idleIterations} idle iterations)`)
+        if (report.actions.length > 0) {
+          console.log(`  Actions: ${report.actions.join(', ')}`)
+        }
+        console.log()
+      }
+      break
+    }
+
+    // ── Rex Runner (.rex files) ──────────────────────────────────────────────
+    case 'run': {
+      const filePath = process.argv[3]
+      if (!filePath || filePath.startsWith('--')) {
+        console.error('Usage: rex run <file.rex> [--dry-run] [--json]')
+        process.exit(1)
+      }
+      const { runRexFile, printRexResult } = await import('./rex-runner.js')
+      const dryRun = process.argv.includes('--dry-run')
+      const jsonFlag = process.argv.includes('--json')
+      const result = await runRexFile(filePath, { dryRun })
+      if (jsonFlag) {
+        console.log(JSON.stringify(result, null, 2))
+      } else {
+        printRexResult(result)
+      }
+      if (result.errors > 0) process.exit(1)
+      break
+    }
+
     case 'help':
     default:
       console.log(`
@@ -3264,6 +3757,24 @@ ${COLORS.bold}Review:${COLORS.reset}
   rex log                     Last 50 guard log entries
   rex log --today             Today's guard log entries
   rex log --guard <name>      Filter by guard name
+
+${COLORS.bold}REX Monitor (ActivityWatch + Hammerspoon):${COLORS.reset}
+  rex monitor-setup            Install ActivityWatch bridge + Hammerspoon config
+  rex monitor-daemon           Start monitor daemon (runs every 60min)
+  rex monitor-daemon --once    Run one cycle and exit
+  rex monitor-daemon --status  Show daemon status
+  rex activitywatch            App usage stats (last 8h) — requires ActivityWatch
+  rex activitywatch --hours=N  Custom time window
+  rex patterns                 Detect behavioral patterns → CURIOUS signals
+  rex patterns --json          Machine-readable pattern report
+  rex record list               List recorded audio sessions + transcripts
+  rex record start [label]      Start recording (Ctrl+C to stop + auto-transcribe)
+  rex record transcribe <file>  Transcribe an existing audio file
+
+${COLORS.bold}Agent Templates (client personas):${COLORS.reset}
+  rex templates               List available agent templates
+  rex templates show <id>     Show full template config (dg, drh, ceo, coo, freelance)
+  rex templates show <id> --json  JSON output
 
 ${COLORS.bold}Memory (requires Ollama):${COLORS.reset}
   rex migrate          Migrate ~/.rex-memory/ to ~/.claude/rex/ hub
@@ -3464,6 +3975,13 @@ ${COLORS.bold}MCP Registry:${COLORS.reset}
   rex mcp scan                 Security scan via mcp-scan (tool poisoning, prompt injection)
   rex mcp refresh-marketplace  Refresh cache from awesome-mcp-servers + Smithery
 
+${COLORS.bold}Meetings:${COLORS.reset}
+  rex meeting ingest <file>   Ingest transcript → summarize → store in memory
+  rex meeting list            List ingested meetings
+  rex meeting show <id>       Show meeting details + action items
+  rex meeting search <query>  Search meetings (title, summary, actions)
+  rex meeting actions         List all action items from recent meetings
+
 ${COLORS.bold}Voice & Calls:${COLORS.reset}
   rex call status             Current call detection status (Hammerspoon)
   rex call events --tail 20   Recent call start/end events
@@ -3475,6 +3993,18 @@ ${COLORS.bold}Voice & Calls:${COLORS.reset}
   rex audio start             Start audio capture (ffmpeg avfoundation)
   rex audio stop              Stop audio capture
   rex audio list              List saved recordings
+
+${COLORS.bold}Relay & AI Cycles:${COLORS.reset}
+  rex relay "<task>"          Multi-model sequential reasoning (Ollama→Groq→Haiku→Mentor)
+  rex relay "<task>" --mentor Allow Opus extended thinking as last resort
+  rex relay "<task>" --json   JSON output (full relay document)
+  rex user-state              Current user activity state (AWAKE_ACTIVE/IDLE/SLEEPING)
+  rex user-state --digest     Show morning digest
+  rex user-cycles             User cycle detection via XState machine
+  rex watchdog                Run one watchdog cycle (daemon + budget + memory)
+  rex watchdog start          Start continuous watchdog (60s interval)
+  rex run <file.rex>          Execute .rex literate file (#!exec blocks)
+  rex run <file.rex> --dry-run  Parse only, don't execute
 
 ${COLORS.bold}Info:${COLORS.reset}
   rex help             Show this help

@@ -47,11 +47,15 @@
     "@types/ws": "^8.18.1",
     "ai": "^6.0.116",
     "better-sqlite3": "^11.8.1",
+    "effect": "^3.19.19",
     "ink": "^6.8.0",
     "openai": "^6.27.0",
     "react": "^19.2.4",
+    "rxjs": "^7.8.2",
+    "simple-statistics": "^7.8.8",
     "sqlite-vec": "^0.1.6",
-    "ws": "^8.19.0"
+    "ws": "^8.19.0",
+    "xstate": "^5.28.0"
   },
   "devDependencies": {
     "@rex/core": "workspace:*",
