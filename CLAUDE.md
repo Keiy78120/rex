@@ -678,12 +678,24 @@ rex doctor --fix     # Auto-fix then health check
 | Flutter Curious page: 🔁 Patterns filter tab + patterns shown first in 'all' view | `curious_page.dart` |
 | Phase 3 heading updated — `🔄 IN PROGRESS` → `✅ DONE` (all items were already done) | `CLAUDE.md` |
 
+### ✅ Terminé (session 2026-03-14 — BLOC 6.2 guards)
+
+| Ce qui a ete fait | Fichier(s) |
+|-------------------|-----------|
+| `any-type-guard.sh` — PostToolUse: detects `: any` in TS files, suggests `unknown`/proper types | `src/guards/`, `~/.claude/rex-guards/` |
+| `console-log-guard.sh` — PostToolUse: detects console.log outside tests, suggests createLogger() | `src/guards/`, `~/.claude/rex-guards/` |
+| `a11y-guard.sh` — PostToolUse: img without alt, button without aria-label in TSX/JSX | `src/guards/`, `~/.claude/rex-guards/` |
+| `perf-guard.sh` — PostToolUse: useEffect without deps array, fetch inside loops | `src/guards/`, `~/.claude/rex-guards/` |
+| `import-guard.sh` — PostToolUse: unused named imports in TS files | `src/guards/`, `~/.claude/rex-guards/` |
+| `honesty-guard.sh` — UserPromptSubmit: "c'est fait" without evidence → inject verification prompt | `src/guards/`, `~/.claude/rex-guards/` |
+| All 6 guards wired in `~/.claude/settings.json` hooks | `settings.json` |
+
 ### 🔄 En cours / A faire
 
-**Phase 2 DONE, Phase 3 DONE ✅, Phase 4 (LATER)**:
+**Phase 2 DONE, Phase 3 DONE ✅, BLOC 6.2 DONE ✅, Phase 4 (LATER)**:
 - All 28 action.md sections implemented
 - All Phase 3 items complete (hub, sync, mesh, VPS deploy, Tailscale auto-join)
-- Alternative Ollama backends (llm-backend.ts) — ✅ DONE
+- All BLOC 6.2 guards implemented (6/6)
 - Cross-platform Flutter (Windows/Linux) — Phase 4 later
 - LangGraph spike — Phase 4 later
 - Training pipeline — Phase 4 later
