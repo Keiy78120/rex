@@ -21,7 +21,7 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-import { discoverAccounts, selectAccount, getAccountEnv } from '../../src/account-pool.js'
+import { discoverAccounts, selectAccount, getAccountEnv, acquireAccount, releaseAccount, markRateLimited } from '../../src/account-pool.js'
 
 // ── discoverAccounts ──────────────────────────────────────────────────────────
 
@@ -90,5 +90,73 @@ describe('getAccountEnv', () => {
       lastUsedAt: null,
     }
     expect(() => getAccountEnv(account)).not.toThrow()
+  })
+
+  it('CLAUDE_CONFIG_DIR matches configDir', () => {
+    const account = {
+      id: 3,
+      configDir: '/home/user/.claude-account-3',
+      activeTasks: 0,
+      totalTasksRun: 0,
+      totalErrors: 0,
+      rateLimitedUntil: null,
+      lastUsedAt: null,
+    }
+    const env = getAccountEnv(account)
+    expect(env.CLAUDE_CONFIG_DIR).toBe('/home/user/.claude-account-3')
+  })
+
+  it('REX_ACCOUNT_ID is a string of the account id', () => {
+    const account = {
+      id: 5,
+      configDir: '/tmp/acc5',
+      activeTasks: 0,
+      totalTasksRun: 0,
+      totalErrors: 0,
+      rateLimitedUntil: null,
+      lastUsedAt: null,
+    }
+    const env = getAccountEnv(account)
+    expect(env.REX_ACCOUNT_ID).toBe('5')
+  })
+})
+
+// ── acquireAccount ────────────────────────────────────────────────────────────
+
+describe('acquireAccount', () => {
+  it('does not throw for missing account id', () => {
+    expect(() => acquireAccount(9999)).not.toThrow()
+  })
+
+  it('does not throw for id 1', () => {
+    expect(() => acquireAccount(1)).not.toThrow()
+  })
+})
+
+// ── releaseAccount ────────────────────────────────────────────────────────────
+
+describe('releaseAccount', () => {
+  it('does not throw for missing account id', () => {
+    expect(() => releaseAccount(9999)).not.toThrow()
+  })
+
+  it('does not throw with error flag', () => {
+    expect(() => releaseAccount(9999, { error: true })).not.toThrow()
+  })
+
+  it('does not throw with rateLimited flag', () => {
+    expect(() => releaseAccount(9999, { rateLimited: true })).not.toThrow()
+  })
+})
+
+// ── markRateLimited ───────────────────────────────────────────────────────────
+
+describe('markRateLimited', () => {
+  it('does not throw for missing account id', () => {
+    expect(() => markRateLimited(9999)).not.toThrow()
+  })
+
+  it('does not throw with custom cooldown', () => {
+    expect(() => markRateLimited(9999, 30_000)).not.toThrow()
   })
 })

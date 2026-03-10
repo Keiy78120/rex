@@ -104,4 +104,78 @@ describe('printRexResult', () => {
     }
     expect(() => printRexResult(result)).not.toThrow()
   })
+
+  it('does not throw with populated results', () => {
+    const result = {
+      filePath: '/tmp/test.rex',
+      totalBlocks: 2,
+      executableBlocks: 1,
+      results: [{
+        blockIndex: 0,
+        heading: 'Build project',
+        language: 'bash',
+        stdout: 'building',
+        stderr: '',
+        exitCode: 0,
+        durationMs: 45,
+      }],
+      durationMs: 50,
+      errors: 0,
+    }
+    expect(() => printRexResult(result)).not.toThrow()
+  })
+
+  it('does not throw with error results', () => {
+    const result = {
+      filePath: '/tmp/test.rex',
+      totalBlocks: 1,
+      executableBlocks: 1,
+      results: [{
+        blockIndex: 0,
+        language: 'bash',
+        stdout: '',
+        stderr: 'command not found',
+        exitCode: 127,
+        durationMs: 10,
+        error: 'Process exited with code 127',
+      }],
+      durationMs: 15,
+      errors: 1,
+    }
+    expect(() => printRexResult(result)).not.toThrow()
+  })
+})
+
+// ── parseRexFile — edge cases ─────────────────────────────────────────────────
+
+describe('parseRexFile — edge cases', () => {
+  it('returns empty array when readFileSync returns empty string', async () => {
+    const { readFileSync } = await import('node:fs')
+    vi.mocked(readFileSync).mockReturnValueOnce('')
+    const blocks = parseRexFile('/tmp/empty.rex')
+    expect(blocks).toHaveLength(0)
+  })
+
+  it('block language is one of: typescript, bash, python, sh', () => {
+    const blocks = parseRexFile('/tmp/test.rex')
+    const valid = ['typescript', 'bash', 'python', 'sh']
+    for (const b of blocks) {
+      expect(valid).toContain(b.language)
+    }
+  })
+
+  it('executable is boolean', () => {
+    const blocks = parseRexFile('/tmp/test.rex')
+    for (const b of blocks) {
+      expect(typeof b.executable).toBe('boolean')
+    }
+  })
+
+  it('lineNumber is a non-negative integer', () => {
+    const blocks = parseRexFile('/tmp/test.rex')
+    for (const b of blocks) {
+      expect(Number.isInteger(b.lineNumber)).toBe(true)
+      expect(b.lineNumber).toBeGreaterThanOrEqual(0)
+    }
+  })
 })

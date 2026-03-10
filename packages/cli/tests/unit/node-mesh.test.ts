@@ -21,7 +21,7 @@ vi.mock('node:child_process', async (importOriginal) => {
   return { ...actual, execSync: vi.fn(() => ''), spawnSync: vi.fn(() => ({ status: 1, stdout: '' })) }
 })
 
-import { detectLocalThermal, detectLocalCapacity, getFleetStatus, type FleetNode } from '../../src/node-mesh.js'
+import { detectLocalThermal, detectLocalCapacity, detectLocalCapabilities, getFleetStatus, upsertFleetNode, type FleetNode } from '../../src/node-mesh.js'
 
 // ── detectLocalThermal ────────────────────────────────────────────────────────
 
@@ -166,5 +166,61 @@ describe('getFleetStatus', () => {
     expect(result.stale).toBe(1)
     expect(result.offline).toBe(1)
     expect(result.nodes).toHaveLength(3)
+  })
+})
+
+// ── upsertFleetNode ───────────────────────────────────────────────────────────
+
+describe('upsertFleetNode', () => {
+  it('returns a FleetNode with required fields', () => {
+    const map = new Map<string, FleetNode>()
+    const node = upsertFleetNode(map, { hostname: 'test-host', platform: 'darwin', ip: '192.168.1.1' })
+    expect(node).toHaveProperty('id')
+    expect(node).toHaveProperty('hostname', 'test-host')
+    expect(node).toHaveProperty('ip', '192.168.1.1')
+    expect(node).toHaveProperty('lastSeen')
+    expect(node).toHaveProperty('registeredAt')
+  })
+
+  it('inserts node into map', () => {
+    const map = new Map<string, FleetNode>()
+    const node = upsertFleetNode(map, { hostname: 'host-a', platform: 'linux', ip: '10.0.0.1' })
+    expect(map.has(node.id)).toBe(true)
+  })
+
+  it('updates existing node when same id provided', () => {
+    const map = new Map<string, FleetNode>()
+    const first = upsertFleetNode(map, { hostname: 'host-b', platform: 'linux', ip: '10.0.0.2' })
+    const second = upsertFleetNode(map, { id: first.id, hostname: 'host-b', platform: 'linux', ip: '10.0.0.2' })
+    // registeredAt should be preserved from first
+    expect(second.registeredAt).toBe(first.registeredAt)
+    expect(map.size).toBe(1)
+  })
+
+  it('does not throw', () => {
+    const map = new Map<string, FleetNode>()
+    expect(() => upsertFleetNode(map, { hostname: 'h', platform: 'darwin', ip: '1.2.3.4' })).not.toThrow()
+  })
+})
+
+// ── detectLocalCapabilities ───────────────────────────────────────────────────
+
+describe('detectLocalCapabilities', () => {
+  it('returns an object', () => {
+    const caps = detectLocalCapabilities()
+    expect(typeof caps).toBe('object')
+    expect(caps).not.toBeNull()
+  })
+
+  it('has boolean-like capability fields', () => {
+    const caps = detectLocalCapabilities()
+    // All values should be boolean
+    for (const v of Object.values(caps)) {
+      expect(typeof v).toBe('boolean')
+    }
+  })
+
+  it('does not throw', () => {
+    expect(() => detectLocalCapabilities()).not.toThrow()
   })
 })

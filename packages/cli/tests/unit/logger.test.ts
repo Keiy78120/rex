@@ -24,7 +24,7 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-import { createLogger, configureLogger, type LogLevel } from '../../src/logger.js'
+import { createLogger, configureLogger, rotateLog, type LogLevel } from '../../src/logger.js'
 
 // ── createLogger — interface ───────────────────────────────────────────────────
 
@@ -94,5 +94,32 @@ describe('configureLogger', () => {
 
   it('does not throw when disabling console output', () => {
     expect(() => configureLogger({ console: false })).not.toThrow()
+  })
+
+  it('accepts file=true without throwing', () => {
+    expect(() => configureLogger({ file: true })).not.toThrow()
+  })
+
+  it('accepts all levels: info, warn, error', () => {
+    const levels: LogLevel[] = ['info', 'warn', 'error']
+    for (const level of levels) {
+      expect(() => configureLogger({ level })).not.toThrow()
+    }
+  })
+})
+
+// ── rotateLog ─────────────────────────────────────────────────────────────────
+
+describe('rotateLog', () => {
+  it('does not throw', () => {
+    expect(() => rotateLog()).not.toThrow()
+  })
+
+  it('accepts custom maxBytes', () => {
+    expect(() => rotateLog(512 * 1024)).not.toThrow()
+  })
+
+  it('accepts custom maxBytes and keepBytes', () => {
+    expect(() => rotateLog(1024 * 1024, 256 * 1024)).not.toThrow()
   })
 })

@@ -33,9 +33,12 @@ vi.mock('node:fs', async (importOriginal) => {
 
 import {
   loadRegistry,
+  saveRegistry,
+  syncAvailability,
   enableTool,
   disableTool,
   getToolForCapability,
+  printRegistry,
 } from '../../src/tool-registry.js'
 
 // ── loadRegistry ──────────────────────────────────────────────────────────────
@@ -119,5 +122,67 @@ describe('getToolForCapability', () => {
       expect(tool).toHaveProperty('name')
       expect(tool).toHaveProperty('tier')
     }
+  })
+
+  it('returns null for unknown capability', () => {
+    // @ts-expect-error — testing invalid capability
+    const tool = getToolForCapability('totally-fake-capability')
+    expect(tool).toBeNull()
+  })
+})
+
+// ── saveRegistry ──────────────────────────────────────────────────────────────
+
+describe('saveRegistry', () => {
+  it('does not throw with empty array', () => {
+    expect(() => saveRegistry([])).not.toThrow()
+  })
+
+  it('does not throw with registry entries', () => {
+    const tools = loadRegistry()
+    expect(() => saveRegistry(tools)).not.toThrow()
+  })
+})
+
+// ── syncAvailability ──────────────────────────────────────────────────────────
+
+describe('syncAvailability', () => {
+  it('returns an array', () => {
+    expect(Array.isArray(syncAvailability())).toBe(true)
+  })
+
+  it('does not throw', () => {
+    expect(() => syncAvailability()).not.toThrow()
+  })
+
+  it('accepts subset of ids without throwing', () => {
+    const tools = loadRegistry()
+    const ids = tools.slice(0, 2).map(t => t.id)
+    expect(() => syncAvailability(ids)).not.toThrow()
+  })
+
+  it('returned tools have available field', () => {
+    const tools = syncAvailability()
+    for (const t of tools) {
+      expect(t).toHaveProperty('available')
+      expect(typeof t.available).toBe('boolean')
+    }
+  })
+})
+
+// ── printRegistry ─────────────────────────────────────────────────────────────
+
+describe('printRegistry', () => {
+  it('does not throw with no args', () => {
+    expect(() => printRegistry()).not.toThrow()
+  })
+
+  it('does not throw with empty array', () => {
+    expect(() => printRegistry([])).not.toThrow()
+  })
+
+  it('does not throw with loaded registry', () => {
+    const tools = loadRegistry()
+    expect(() => printRegistry(tools)).not.toThrow()
   })
 })

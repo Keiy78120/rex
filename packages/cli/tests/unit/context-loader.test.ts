@@ -18,6 +18,7 @@ vi.mock('node:fs', async (importOriginal) => {
 import {
   buildContextProfile,
   profileToPreloadLine,
+  printContextProfile,
   type ContextProfile,
 } from '../../src/context-loader.js'
 import type { IntentContext, ProjectIntent } from '../../src/project-intent.js'
@@ -155,5 +156,29 @@ describe('profileToPreloadLine', () => {
   it('starts with "Profile:"', () => {
     const line = profileToPreloadLine(makeProfile())
     expect(line.startsWith('Profile:')).toBe(true)
+  })
+})
+
+// ── printContextProfile ───────────────────────────────────────────────────────
+
+describe('printContextProfile', () => {
+  it('does not throw for a full profile', () => {
+    expect(() => printContextProfile(makeProfile())).not.toThrow()
+  })
+
+  it('does not throw with empty guards, mcps, skills', () => {
+    expect(() => printContextProfile(makeProfile({ guards: [], mcps: [], skills: [] }))).not.toThrow()
+  })
+
+  it('does not throw for every intent type', () => {
+    const intents = ['new-project', 'feature', 'bug-fix', 'refactor', 'infra', 'docs', 'explore'] as const
+    for (const intent of intents) {
+      const profile = makeProfile({ intent })
+      expect(() => printContextProfile(profile)).not.toThrow()
+    }
+  })
+
+  it('does not throw with note field', () => {
+    expect(() => printContextProfile(makeProfile({ note: 'Custom note here' }))).not.toThrow()
   })
 })
