@@ -66,6 +66,38 @@ class RexMainWindow extends StatefulWidget {
 class _RexMainWindowState extends State<RexMainWindow> {
   int _pageIndex = 0;
 
+  Widget _buildPage(int index) {
+    switch (index) {
+      case 0:  return const HealthPage();
+      case 1:  return const HubPage();
+      case 2:  return const NetworkPage();
+      case 3:  return const AgentsPage();
+      case 4:  return const McpPage();
+      case 5:  return const OptimizePage();
+      case 6:  return const MemoryPage();
+      case 7:  return const TokenPage();
+      case 8:  return const ObserverPage();
+      case 9:  return const CuriousPage();
+      case 10: return const WorkflowPage();
+      case 11: return const ProjectsPage();
+      case 12: return const ReviewPage();
+      case 13: return const GuardsPage();
+      case 14: return const SandboxPage();
+      case 15: return const ProvidersPage();
+      case 16: return const ResourceHubPage();
+      case 17: return const ClientsPage();
+      case 18: return const GatewayPage();
+      case 19: return const VoicePage();
+      case 20: return const AudioPage();
+      case 21: return const LogsPage();
+      case 22: return const SettingsPage();
+      case 23: return const FilesPage();
+      case 24: return const TrainingPage();
+      case 25: return const TerminalPage();
+      default: return const HealthPage();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -90,44 +122,7 @@ class _RexMainWindowState extends State<RexMainWindow> {
               onChanged: (i) => setState(() => _pageIndex = i),
             ),
             Expanded(
-              child: IndexedStack(
-                index: _pageIndex,
-                children: const [
-                  // COCKPIT (0-2)
-                  HealthPage(),
-                  HubPage(),
-                  NetworkPage(),
-                  // AGENTS (3-5)
-                  AgentsPage(),
-                  McpPage(),
-                  OptimizePage(),
-                  // KNOWLEDGE (6-9)
-                  MemoryPage(),
-                  TokenPage(),
-                  ObserverPage(),
-                  CuriousPage(),
-                  // WORKFLOW (10-14)
-                  WorkflowPage(),
-                  ProjectsPage(),
-                  ReviewPage(),
-                  GuardsPage(),
-                  SandboxPage(),
-                  // RESOURCES (15-17)
-                  ProvidersPage(),
-                  ResourceHubPage(),
-                  ClientsPage(),
-                  // COMMS (18-20)
-                  GatewayPage(),
-                  VoicePage(),
-                  AudioPage(),
-                  // ADMIN (21-25)
-                  LogsPage(),
-                  SettingsPage(),
-                  FilesPage(),
-                  TrainingPage(),
-                  TerminalPage(),
-                ],
-              ),
+              child: _buildPage(_pageIndex),
             ),
           ],
         ),

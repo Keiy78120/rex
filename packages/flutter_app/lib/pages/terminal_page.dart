@@ -18,11 +18,14 @@ class _TerminalPageState extends State<TerminalPage> {
   bool _connected = false;
   String? _error;
 
+  bool _everConnected = false;
+
   @override
   void initState() {
     super.initState();
     _terminal = Terminal(maxLines: 10000);
-    _startPty();
+    // PTY starts on demand (Connect button) — not auto-started to avoid heavy
+    // shell init on every page visit.
   }
 
   @override
@@ -84,6 +87,7 @@ class _TerminalPageState extends State<TerminalPage> {
 
       setState(() {
         _connected = true;
+        _everConnected = true;
         _error = null;
       });
     } catch (e) {
@@ -179,22 +183,71 @@ class _TerminalPageState extends State<TerminalPage> {
         Expanded(
           child: _error != null
               ? _buildError(context, c)
-              : Container(
-                  color: const Color(0xFF1C1C24),
-                  child: TerminalView(
-                    _terminal,
-                    theme: _darkTheme,
-                    autofocus: true,
-                    padding: const EdgeInsets.all(8),
-                    textStyle: const TerminalStyle(
-                      fontFamily: 'Menlo',
-                      fontSize: 13,
+              : !_everConnected
+                  ? _buildIdle(context, c)
+                  : Container(
+                      color: const Color(0xFF1C1C24),
+                      child: TerminalView(
+                        _terminal,
+                        theme: _darkTheme,
+                        autofocus: true,
+                        padding: const EdgeInsets.all(8),
+                        textStyle: const TerminalStyle(
+                          fontFamily: 'Menlo',
+                          fontSize: 13,
+                        ),
+                        keyboardType: TextInputType.multiline,
+                      ),
                     ),
-                    keyboardType: TextInputType.multiline,
-                  ),
-                ),
         ),
       ],
+    );
+  }
+
+  Widget _buildIdle(BuildContext context, RexColors c) {
+    return Container(
+      color: const Color(0xFF1C1C24),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(CupertinoIcons.chevron_right_square, size: 40, color: c.textTertiary),
+            const SizedBox(height: 16),
+            Text(
+              'Terminal',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: c.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Spawns a zsh shell — click to connect',
+              style: TextStyle(fontSize: 12, color: c.textTertiary),
+            ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: _startPty,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: c.accent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Connect',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.white,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
