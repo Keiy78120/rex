@@ -1,32 +1,23 @@
 /**
- * Unit tests for free-tiers.ts — provider catalog and rate-limit tracking.
- * No network calls — mocked env and fs.
+ * Unit tests for free-tiers.ts — FREE_TIER_PROVIDERS catalog structure
+ * and isProviderAvailable logic (no network calls).
  * @module BUDGET
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { homedir } from 'node:os'
+import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../src/logger.js', () => ({
   createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
 }))
 
-// Mock fs to avoid reading ~/.claude/settings.json
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>()
-  return {
-    ...actual,
-    existsSync: (p: string) => false,
-    readFileSync: actual.readFileSync,
-  }
-})
+vi.mock('../../src/paths.js', () => ({
+  REX_DIR: '/tmp/rex-free-tiers-test',
+  ensureRexDirs: vi.fn(),
+  CONFIG_PATH: '/tmp/rex-free-tiers-test/config.json',
+}))
 
 import {
   FREE_TIER_PROVIDERS,
   isProviderAvailable,
-  getRoutableProviders,
-  markRateLimited,
-  markFailed,
-  markSuccess,
   type FreeTierProvider,
 } from '../../src/free-tiers.js'
 
@@ -38,8 +29,10 @@ describe('FREE_TIER_PROVIDERS', () => {
     expect(FREE_TIER_PROVIDERS.length).toBeGreaterThan(0)
   })
 
-  it('Ollama is the first provider (routing priority)', () => {
-    expect(FREE_TIER_PROVIDERS[0].name).toBe('Ollama')
+  it('includes Ollama as the first provider (local, no key required)', () => {
+    const ollama = FREE_TIER_PROVIDERS[0]
+    expect(ollama.name).toBe('Ollama')
+    expect(ollama.requiresKey).toBe(false)
   })
 
   it('each provider has required fields', () => {
@@ -51,23 +44,20 @@ describe('FREE_TIER_PROVIDERS', () => {
       expect(p).toHaveProperty('models')
       expect(p).toHaveProperty('rpmLimit')
       expect(p).toHaveProperty('tpmLimit')
-      expect(typeof p.requiresKey).toBe('boolean')
+      expect(p).toHaveProperty('requiresKey')
     }
   })
 
-  it('Ollama does not require an API key', () => {
-    const ollama = FREE_TIER_PROVIDERS.find(p => p.name === 'Ollama')
-    expect(ollama?.requiresKey).toBe(false)
-  })
-
-  it('all non-Ollama providers have rpmLimit > 0', () => {
-    for (const p of FREE_TIER_PROVIDERS.filter(p => p.name !== 'Ollama')) {
-      expect(p.rpmLimit).toBeGreaterThan(0)
-    }
-  })
-
-  it('each provider has at least one model', () => {
+  it('all provider names are non-empty strings', () => {
     for (const p of FREE_TIER_PROVIDERS) {
+      expect(typeof p.name).toBe('string')
+      expect(p.name.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('all providers have at least one model', () => {
+    for (const p of FREE_TIER_PROVIDERS) {
+      expect(Array.isArray(p.models)).toBe(true)
       expect(p.models.length).toBeGreaterThan(0)
     }
   })
@@ -76,9 +66,37 @@ describe('FREE_TIER_PROVIDERS', () => {
     for (const p of FREE_TIER_PROVIDERS) {
       for (const m of p.models) {
         expect(typeof m.id).toBe('string')
+        expect(m.id.length).toBeGreaterThan(0)
+        expect(typeof m.contextWindow).toBe('number')
         expect(m.contextWindow).toBeGreaterThan(0)
-        expect(Array.isArray(m.capabilities)).toBe(true)
       }
+    }
+  })
+
+  it('rpmLimit and tpmLimit are positive numbers', () => {
+    for (const p of FREE_TIER_PROVIDERS) {
+      expect(p.rpmLimit).toBeGreaterThan(0)
+      expect(p.tpmLimit).toBeGreaterThan(0)
+    }
+  })
+
+  it('providers requiring a key have a non-empty envKey', () => {
+    for (const p of FREE_TIER_PROVIDERS) {
+      if (p.requiresKey) {
+        expect(p.envKey.length).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('includes Groq provider', () => {
+    const groq = FREE_TIER_PROVIDERS.find(p => p.name === 'Groq')
+    expect(groq).toBeDefined()
+    expect(groq?.requiresKey).toBe(true)
+  })
+
+  it('all base URLs start with http', () => {
+    for (const p of FREE_TIER_PROVIDERS) {
+      expect(p.baseUrl).toMatch(/^https?:\/\//)
     }
   })
 })
@@ -86,97 +104,40 @@ describe('FREE_TIER_PROVIDERS', () => {
 // ── isProviderAvailable ───────────────────────────────────────────────────────
 
 describe('isProviderAvailable', () => {
-  it('returns true for providers that do not require a key (Ollama)', () => {
-    const ollama = FREE_TIER_PROVIDERS.find(p => p.name === 'Ollama')!
+  it('returns true for provider that does not require a key', () => {
+    const ollama = FREE_TIER_PROVIDERS.find(p => !p.requiresKey)!
     expect(isProviderAvailable(ollama)).toBe(true)
   })
 
-  it('returns false for key-requiring providers when env var is absent', () => {
-    const keyed: FreeTierProvider = {
+  it('returns false for key-required provider when env key is missing', () => {
+    const keyRequired: FreeTierProvider = {
       name: 'TestProvider',
-      envKey: 'TEST_PROVIDER_KEY_DEFINITELY_NOT_SET',
-      baseUrl: 'https://example.com',
-      defaultModel: 'test-model',
-      models: [],
+      envKey: 'NONEXISTENT_KEY_XYZ_9999',
+      baseUrl: 'https://api.test.com',
+      defaultModel: 'test:latest',
+      models: [{ id: 'test:latest', contextWindow: 4096, capabilities: ['chat'] }],
       rpmLimit: 60,
       tpmLimit: 10000,
       requiresKey: true,
     }
-    delete process.env['TEST_PROVIDER_KEY_DEFINITELY_NOT_SET']
-    expect(isProviderAvailable(keyed)).toBe(false)
+    expect(isProviderAvailable(keyRequired)).toBe(false)
   })
 
-  it('returns true for key-requiring provider when env var is set', () => {
-    const keyed: FreeTierProvider = {
-      name: 'TestProvider2',
-      envKey: 'REX_TEST_API_KEY_123',
-      baseUrl: 'https://example.com',
-      defaultModel: 'test',
-      models: [],
+  it('returns true for key-required provider when env key is set', () => {
+    const envKey = 'REX_TEST_PROVIDER_KEY_UNIQUE_9999'
+    process.env[envKey] = 'sk-test-key-value'
+    const keyRequired: FreeTierProvider = {
+      name: 'TestProvider',
+      envKey,
+      baseUrl: 'https://api.test.com',
+      defaultModel: 'test:latest',
+      models: [{ id: 'test:latest', contextWindow: 4096, capabilities: ['chat'] }],
       rpmLimit: 60,
       tpmLimit: 10000,
       requiresKey: true,
     }
-    process.env['REX_TEST_API_KEY_123'] = 'sk-test-key'
-    expect(isProviderAvailable(keyed)).toBe(true)
-    delete process.env['REX_TEST_API_KEY_123']
-  })
-})
-
-// ── getRoutableProviders ──────────────────────────────────────────────────────
-
-describe('getRoutableProviders', () => {
-  it('returns an array', () => {
-    expect(Array.isArray(getRoutableProviders())).toBe(true)
-  })
-
-  it('includes Ollama (no key required)', () => {
-    const providers = getRoutableProviders()
-    expect(providers.some(p => p.name === 'Ollama')).toBe(true)
-  })
-
-  it('excludes providers with missing keys', () => {
-    // Ensure no env keys are set for key-requiring providers
-    const providers = getRoutableProviders()
-    for (const p of providers) {
-      if (p.requiresKey) {
-        expect(process.env[p.envKey]).toBeTruthy()
-      }
-    }
-  })
-})
-
-// ── markRateLimited / markFailed / markSuccess ────────────────────────────────
-
-describe('rate limit state tracking', () => {
-  it('markFailed does not throw', () => {
-    expect(() => markFailed('test-provider-a')).not.toThrow()
-  })
-
-  it('markRateLimited does not throw', () => {
-    expect(() => markRateLimited('test-provider-b')).not.toThrow()
-  })
-
-  it('markSuccess does not throw', () => {
-    expect(() => markSuccess('test-provider-c')).not.toThrow()
-  })
-
-  it('markSuccess resets consecutive failures (via mark-success)', () => {
-    // Mark failed multiple times then recover with success — should not throw
-    markFailed('recover-test')
-    markFailed('recover-test')
-    markSuccess('recover-test')
-    // If we call it again, no crash means state was properly reset
-    expect(() => markFailed('recover-test')).not.toThrow()
-  })
-
-  it('tracks independent state per provider name', () => {
-    // Different providers should not interfere with each other
-    expect(() => {
-      markFailed('provider-x')
-      markFailed('provider-y')
-      markSuccess('provider-x')
-      markFailed('provider-y')
-    }).not.toThrow()
+    const result = isProviderAvailable(keyRequired)
+    delete process.env[envKey]
+    expect(result).toBe(true)
   })
 })

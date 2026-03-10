@@ -1,7 +1,7 @@
 /**
- * Unit tests for providers.ts — ProviderRegistry class.
- * Tests select, listAll, getByName with in-memory providers.
- * @module BUDGET
+ * Unit tests for providers.ts — ProviderRegistry class (register, select, listAll, getByName).
+ * Tests the registry logic without network calls.
+ * @module CORE
  */
 import { describe, it, expect, vi } from 'vitest'
 
@@ -9,190 +9,196 @@ vi.mock('../../src/logger.js', () => ({
   createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
 }))
 
-vi.mock('../../src/free-tiers.js', () => ({
-  FREE_TIER_PROVIDERS: [],
-  getApiKey: vi.fn(() => null),
+vi.mock('../../src/paths.js', () => ({
+  REX_DIR: '/tmp/rex-providers-test',
+  ensureRexDirs: vi.fn(),
+  CONFIG_PATH: '/tmp/rex-providers-test/config.json',
 }))
 
-// Mock fs to avoid reading settings.json
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>()
+  return { ...actual, execSync: vi.fn(() => ''), spawnSync: vi.fn(() => ({ stdout: '' })) }
+})
+
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>()
   return { ...actual, existsSync: () => false, readFileSync: actual.readFileSync }
 })
 
-// Mock execSync to avoid running shell commands
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:child_process')>()
-  return { ...actual, execSync: vi.fn(() => '') }
-})
-
-import { ProviderRegistry } from '../../src/providers.js'
+import {
+  ProviderRegistry,
+  type Provider,
+} from '../../src/providers.js'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-function makeRegistry() {
-  const registry = new ProviderRegistry()
-
-  registry.register('ollama', {
-    name: 'Ollama',
-    type: 'llm',
-    costTier: 'free',
-    capabilities: ['chat', 'code'],
-    check: async () => true,
-  })
-
-  registry.register('groq', {
-    name: 'Groq',
-    type: 'llm',
-    costTier: 'free',
-    capabilities: ['chat', 'fast'],
-    check: async () => true,
-  })
-
-  registry.register('claude-sonnet', {
-    name: 'Claude Sonnet',
-    type: 'llm',
-    costTier: 'subscription',
-    capabilities: ['chat', 'code', 'reasoning'],
-    check: async () => true,
-  })
-
-  return registry
+function makeRegistry(): ProviderRegistry {
+  return new ProviderRegistry()
 }
 
-// ── ProviderRegistry — listAll ────────────────────────────────────────────────
+function registerProvider(
+  registry: ProviderRegistry,
+  name: string,
+  overrides: Partial<Omit<Provider, 'status'>> = {},
+  checkResult = true,
+): void {
+  registry.register(name, {
+    name,
+    type: 'llm',
+    costTier: 'free',
+    capabilities: ['chat'],
+    check: async () => checkResult,
+    ...overrides,
+  })
+}
 
-describe('ProviderRegistry — listAll', () => {
-  it('returns empty array when no providers registered', () => {
-    const r = new ProviderRegistry()
-    expect(r.listAll()).toEqual([])
+// ── ProviderRegistry — registration ───────────────────────────────────────────
+
+describe('ProviderRegistry.register + listAll', () => {
+  it('starts with empty list', () => {
+    const r = makeRegistry()
+    expect(r.listAll()).toHaveLength(0)
   })
 
-  it('returns all registered providers', () => {
+  it('listAll returns registered provider', () => {
     const r = makeRegistry()
-    expect(r.listAll().length).toBe(3)
+    registerProvider(r, 'ollama')
+    expect(r.listAll()).toHaveLength(1)
   })
 
-  it('returned items have Provider shape', () => {
+  it('listAll returns all registered providers', () => {
     const r = makeRegistry()
-    for (const p of r.listAll()) {
+    registerProvider(r, 'ollama')
+    registerProvider(r, 'groq')
+    registerProvider(r, 'claude')
+    expect(r.listAll()).toHaveLength(3)
+  })
+
+  it('each listed provider has required fields', () => {
+    const r = makeRegistry()
+    registerProvider(r, 'test-llm')
+    const providers = r.listAll()
+    for (const p of providers) {
       expect(p).toHaveProperty('name')
       expect(p).toHaveProperty('type')
       expect(p).toHaveProperty('costTier')
-      expect(p).toHaveProperty('status')
       expect(p).toHaveProperty('capabilities')
+      expect(p).toHaveProperty('status')
     }
   })
 
-  it('does not expose check function', () => {
+  it('newly registered provider has status unavailable', () => {
     const r = makeRegistry()
-    for (const p of r.listAll()) {
-      expect((p as Record<string, unknown>)['check']).toBeUndefined()
-    }
+    registerProvider(r, 'new-provider')
+    const [p] = r.listAll()
+    expect(p.status).toBe('unavailable')
   })
 
-  it('initial status is unavailable (no checkAll run)', () => {
+  it('overwriting a provider name replaces it', () => {
     const r = makeRegistry()
-    for (const p of r.listAll()) {
-      expect(p.status).toBe('unavailable')
-    }
+    registerProvider(r, 'ollama', { capabilities: ['chat'] })
+    registerProvider(r, 'ollama', { capabilities: ['embed'] })
+    expect(r.listAll()).toHaveLength(1)
+    expect(r.listAll()[0].capabilities).toContain('embed')
   })
 })
 
-// ── ProviderRegistry — getByName ──────────────────────────────────────────────
+// ── ProviderRegistry — getByName ───────────────────────────────────────────────
 
-describe('ProviderRegistry — getByName', () => {
-  it('returns provider by registered name', () => {
-    const r = makeRegistry()
-    const p = r.getByName('ollama')
-    expect(p).toBeDefined()
-    expect(p?.name).toBe('Ollama')
-  })
-
+describe('ProviderRegistry.getByName', () => {
   it('returns undefined for unknown name', () => {
     const r = makeRegistry()
     expect(r.getByName('nonexistent')).toBeUndefined()
   })
 
+  it('returns provider for known name', () => {
+    const r = makeRegistry()
+    registerProvider(r, 'ollama')
+    const p = r.getByName('ollama')
+    expect(p).toBeDefined()
+    expect(p?.name).toBe('ollama')
+  })
+
   it('returned provider does not expose check function', () => {
     const r = makeRegistry()
+    registerProvider(r, 'ollama')
     const p = r.getByName('ollama')
-    expect((p as Record<string, unknown> | undefined)?.['check']).toBeUndefined()
+    expect(p).not.toHaveProperty('check')
   })
 })
 
 // ── ProviderRegistry — select ─────────────────────────────────────────────────
 
-describe('ProviderRegistry — select', () => {
-  it('returns null when no providers match capability', async () => {
+describe('ProviderRegistry.select', () => {
+  it('returns null when no providers registered', async () => {
     const r = makeRegistry()
-    expect(await r.select('transcribe')).toBeNull()
-  })
-
-  it('returns null when all matching providers are unavailable', async () => {
-    const r = makeRegistry()
-    // No checkAll run → all unavailable
     expect(await r.select('chat')).toBeNull()
   })
 
-  it('returns available provider after checkAll', async () => {
+  it('returns null when no provider has the required capability', async () => {
     const r = makeRegistry()
+    registerProvider(r, 'ollama', { capabilities: ['chat'] })
+    expect(await r.select('embed')).toBeNull()
+  })
+
+  it('returns null when all providers are unavailable', async () => {
+    const r = makeRegistry()
+    registerProvider(r, 'ollama', { capabilities: ['chat'] })
+    // Status is 'unavailable' by default (not checked)
+    expect(await r.select('chat')).toBeNull()
+  })
+
+  it('returns provider after checkAll marks it available', async () => {
+    const r = makeRegistry()
+    registerProvider(r, 'ollama', { capabilities: ['chat'] }, true)
     await r.checkAll({ silent: true })
     const p = await r.select('chat')
     expect(p).not.toBeNull()
-    expect(p?.status).not.toBe('unavailable')
+    expect(p?.name).toBe('ollama')
   })
 
-  it('prefers free over subscription tier', async () => {
+  it('prefers free tier over subscription', async () => {
     const r = makeRegistry()
+    registerProvider(r, 'free-llm', { capabilities: ['chat'], costTier: 'free' }, true)
+    registerProvider(r, 'paid-llm', { capabilities: ['chat'], costTier: 'subscription' }, true)
     await r.checkAll({ silent: true })
-    const p = await r.select('code')
-    // Ollama (free) and Claude Sonnet (subscription) both have 'code'
-    // free should win
-    expect(p?.costTier).toBe('free')
-  })
-
-  it('returns provider with required capability', async () => {
-    const r = makeRegistry()
-    await r.checkAll({ silent: true })
-    const p = await r.select('reasoning')
-    // Only Claude Sonnet has 'reasoning'
-    expect(p?.name).toBe('Claude Sonnet')
+    const p = await r.select('chat')
+    expect(p?.name).toBe('free-llm')
   })
 })
 
-// ── ProviderRegistry — register ───────────────────────────────────────────────
+// ── ProviderRegistry — checkAll ────────────────────────────────────────────────
 
-describe('ProviderRegistry — register', () => {
-  it('registers and retrieves a custom provider', () => {
-    const r = new ProviderRegistry()
-    r.register('test', {
-      name: 'Test',
-      type: 'tool',
-      costTier: 'free',
-      capabilities: ['test'],
-      check: async () => true,
-    })
-    expect(r.getByName('test')?.name).toBe('Test')
+describe('ProviderRegistry.checkAll', () => {
+  it('does not throw with empty registry', async () => {
+    const r = makeRegistry()
+    await expect(r.checkAll({ silent: true })).resolves.not.toThrow()
   })
 
-  it('overrides existing provider with same name', () => {
-    const r = new ProviderRegistry()
-    r.register('myp', {
-      name: 'Original',
-      type: 'tool',
+  it('marks provider as available when check returns true', async () => {
+    const r = makeRegistry()
+    registerProvider(r, 'good-provider', {}, true)
+    await r.checkAll({ silent: true })
+    expect(r.getByName('good-provider')?.status).toBe('available')
+  })
+
+  it('marks provider as unavailable when check returns false', async () => {
+    const r = makeRegistry()
+    registerProvider(r, 'bad-provider', {}, false)
+    await r.checkAll({ silent: true })
+    expect(r.getByName('bad-provider')?.status).toBe('unavailable')
+  })
+
+  it('marks provider as unavailable when check throws', async () => {
+    const r = makeRegistry()
+    r.register('throwing-provider', {
+      name: 'throwing-provider',
+      type: 'llm',
       costTier: 'free',
-      capabilities: ['a'],
-      check: async () => true,
+      capabilities: ['chat'],
+      check: async () => { throw new Error('network error') },
     })
-    r.register('myp', {
-      name: 'Overridden',
-      type: 'service',
-      costTier: 'subscription',
-      capabilities: ['b'],
-      check: async () => false,
-    })
-    expect(r.getByName('myp')?.name).toBe('Overridden')
-    expect(r.listAll().length).toBe(1)
+    await r.checkAll({ silent: true })
+    expect(r.getByName('throwing-provider')?.status).toBe('unavailable')
   })
 })
