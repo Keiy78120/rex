@@ -12,6 +12,9 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "postinstall": "node dist/index.js init 2>/dev/null || true"
   },
   "keywords": [
@@ -63,7 +66,9 @@
     "@rex/core": "workspace:*",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.3.3",
+    "@vitest/coverage-v8": "^4.0.18",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }
