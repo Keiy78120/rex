@@ -618,6 +618,7 @@ export async function daemon(): Promise<void> {
   let lastDailySummaryDate = ''  // tracks 'YYYY-MM-DD' to send once per day
   let lastAlertDate = ''  // disk/backlog alerts — max once per day
   let lastCoachingDate = ''  // coaching suggestions — max once per week
+  let lastNightlyTestDate = ''  // nightly regression check — max once per day
   // Circuit breaker: track consecutive failures per cycle type
   const cbFailCounts: Record<string, number> = { ingest: 0, health: 0, reflect: 0 }
   const CB_MAX_FAILS = 3  // pause cycle after N consecutive failures
@@ -915,6 +916,30 @@ export async function daemon(): Promise<void> {
         log.debug(`Session guard skipped: ${e.message?.slice(0, 80)}`)
       }
       lastSessionGuard = now
+    }
+
+    // Nightly regression test at 02:00 — runs vitest, alerts Telegram on failure
+    if (currentHour === 2 && lastNightlyTestDate !== todayStr) {
+      lastNightlyTestDate = todayStr
+      try {
+        const { spawnSync } = await import('node:child_process')
+        const rexRoot = new URL('../..', import.meta.url).pathname
+        const vitestBin = `${rexRoot}/node_modules/.bin/vitest`
+        log.info('Nightly regression test starting…')
+        const res = spawnSync(
+          process.execPath, [vitestBin, 'run', '--reporter=verbose'],
+          { encoding: 'utf-8', cwd: rexRoot, timeout: 120_000 }
+        )
+        if (res.status !== 0) {
+          const tail = (res.stdout ?? '').split('\n').filter(Boolean).slice(-10).join('\n')
+          await sendTelegramNotify(`🚨 *REX Regression*\n\nTest suite failed at 02:00\n\`\`\`\n${tail.slice(0, 400)}\n\`\`\`\nRun \`rex test report\` for details.`)
+          log.warn('Nightly test FAILED — regression alert sent')
+        } else {
+          log.info('Nightly test passed ✓')
+        }
+      } catch (e: any) {
+        log.debug(`Nightly test skipped: ${e.message?.slice(0, 80)}`)
+      }
     }
 
     // Sleep 30 seconds (interrupt immediately if shutdown requested)
