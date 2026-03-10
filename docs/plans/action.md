@@ -2911,6 +2911,7 @@ tests/
     gateway-adapter.test.ts    ← ✅ DONE (9 tests)
     orchestration-policy.test.ts ← ✅ DONE (17 tests)
     rex-identity.test.ts       ← ✅ DONE (19 tests)
+    mini-modes.test.ts         ← ✅ DONE (29 tests — renderTemplate, classifySecurityLevel, matchMode, executeMode)
   integration/
     gateway.test.ts            ← 🔄 skipped (requires Telegram token)
     memory.test.ts             ← ✅ DONE (20 tests, schema + CRUD via better-sqlite3)
@@ -2929,7 +2930,7 @@ tests/
     test-kevin-context.ts      ← 🔄 skipped (low priority)
 ```
 
-**Total: 181 tests passing (11 test files)** — vitest run < 2s
+**Total: 210 tests passing (12 test files)** — vitest run < 2s
 
 ---
 

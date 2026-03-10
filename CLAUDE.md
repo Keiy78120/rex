@@ -74,7 +74,7 @@ packages/
 - ✅ gateway.ts REX Identity Layer + rex-identity.ts pipeline 5 étapes
 - ✅ relay-engine.ts (Ollama→Groq→Haiku→Sonnet→Opus, RxJS)
 - ✅ user-cycles.ts (XState AWAKE_ACTIVE/AWAKE_IDLE/SLEEPING/WAKING_UP)
-- ✅ 181 tests vitest — unit + integration — `pnpm test` < 2s
+- ✅ 210 tests vitest — unit + integration — `pnpm test` < 2s
 - ✅ CI GitHub Actions (unit + build + security audit)
 - 🔄 Prochaine étape : déploiement VPS (docs/vps-install.md)
 
