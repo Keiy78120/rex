@@ -3257,6 +3257,11 @@ async function main() {
         const dbPath = process.argv.find(a => a.startsWith('--db='))?.split('=').slice(1).join('=')
         const { seedTestDb } = await import('./test-seed.js')
         seedTestDb(dbPath)
+      } else if (sub === 'migrations' || sub === 'migrate-test') {
+        const { runMigrationTests } = await import('./test-migrations.js')
+        const dbPath = process.argv.find(a => a.startsWith('--db='))?.split('=').slice(1).join('=')
+        const res = await runMigrationTests(dbPath)
+        process.exit(res.failed > 0 ? 1 : 0)
       } else {
         console.log('Usage:')
         console.log('  rex test mock            Start mock LLM server (OpenAI + Ollama compatible)')
@@ -3267,6 +3272,7 @@ async function main() {
         console.log('  rex test load --rps=10 --duration=60 --url=http://...')
         console.log('  rex test coldstart       Benchmark REX cold start time (target < 5s)')
         console.log('  rex test seed            Seed test SQLite DB with Kevin-like fixtures')
+        console.log('  rex test migrations      Test v1→v5 migration compatibility (data integrity)')
       }
       break
     }

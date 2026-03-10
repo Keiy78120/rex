@@ -71,7 +71,9 @@ const MIGRATIONS: Migration[] = [
     sql: [
       // vector table created by ingest.ts via better-sqlite3 + sqlite-vec extension
       // this migration just ensures the metadata column exists
-      `ALTER TABLE memories ADD COLUMN IF NOT EXISTS vec_id INTEGER`,
+      // Note: SQLite does not support IF NOT EXISTS on ALTER TABLE — error handler below
+      // catches "duplicate column name" if migration is re-run on an already-upgraded DB
+      `ALTER TABLE memories ADD COLUMN vec_id INTEGER`,
       `CREATE INDEX IF NOT EXISTS idx_memories_vec_id ON memories(vec_id) WHERE vec_id IS NOT NULL`,
     ],
   },

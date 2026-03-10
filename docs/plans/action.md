@@ -2644,7 +2644,7 @@ OPTIMIZE → benchmarks, améliorations suggérées
 ### Environnement de test isolé
 - [x] `docker-compose.test.yml` — stack REX complète en mode test
 - [x] Variables d'env séparées : `.env.test` (jamais les vraies clés)
-- [ ] Base SQLite de test (données fictives Kevin-like)
+- [x] Base SQLite de test (données fictives Kevin-like) — `test-seed.ts` + `rex test seed`
 - [ ] Telegram bot de test séparé (pas le prod)
 - [x] Comptes LLM de test (ou mocks)
 
@@ -2826,7 +2826,7 @@ Expected:
 - [ ] **OpenTelemetry** — traces distribuées (chaque appel LLM, chaque script)
 - [ ] **Langfuse** — dashboard LLM : latences, coûts, qualité réponses
 - [x] `/health` endpoint — pour monitoring externe (hub.ts `/api/health` + `/api/v1/health`)
-- [ ] Alertes PagerDuty/Telegram si REX down > 5min
+- [x] Alertes Telegram si REX down > 5min — watchdog `trackDaemonDown()` with persistent state
 
 ### Migrations de données
 - [x] Schema SQLite versioned (`db-migrations.ts`, 5 migrations)
@@ -2853,9 +2853,9 @@ Expected:
 - [x] Secrets chiffrés au repos (`secrets.ts` AES-256-GCM vault)
 
 ### Cold start
-- [ ] Temps de démarrage REX from scratch → objectif < 5 secondes
-- [ ] Lazy loading des modules non-critiques
-- [ ] Benchmark cold start dans CI
+- [x] Temps de démarrage REX from scratch → objectif < 5 secondes
+- [x] Lazy loading des modules non-critiques — sync.js/sync-queue.js deferred (5min+ first use)
+- [x] Benchmark cold start dans CI — `rex test coldstart` (target: < 5000ms)
 
 ### Load testing
 - [x] `rex test load --rps 10 --duration 60` (`load-test.ts`)
@@ -2863,9 +2863,9 @@ Expected:
 - [ ] Memory leak test sur 24h de run continu
 
 ### Multi-timezone
-- [ ] Kevin = Paris. Client DG = autre timezone ?
-- [ ] Tous les timestamps en UTC en base, conversion à l'affichage
-- [ ] Crons avec timezone explicite (`cron.tz = "Europe/Paris"`)
+- [x] Kevin = Paris. Client DG = autre timezone — `daemon.timezone` config key (default: Europe/Paris)
+- [x] Tous les timestamps en UTC en base — SQLite `datetime('now')` = UTC, daemon uses toISOString()
+- [x] Crons avec timezone explicite — daily summary hour uses `toLocaleString(tz)` conversion
 
 ### Accessibilité API (fleet)
 - [ ] Versioning de l'API BRAIN ↔ FLEET : `/api/v1/`, `/api/v2/`
