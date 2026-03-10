@@ -65,4 +65,20 @@ describe('quickSetup', () => {
     const result = await quickSetup()
     expect(result).toBeUndefined()
   })
+
+  it('resolves on second call', async () => {
+    await expect(quickSetup()).resolves.not.toThrow()
+  })
+
+  it('is a function', () => {
+    expect(typeof quickSetup).toBe('function')
+  })
+
+  it('resolves quickly without network', async () => {
+    const start = Date.now()
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | string | null) => never)
+    await quickSetup()
+    exitSpy.mockRestore()
+    expect(Date.now() - start).toBeLessThan(10000)
+  })
 })

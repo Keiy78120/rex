@@ -76,7 +76,6 @@ import { install } from '../../src/install.js'
 
 describe('install', () => {
   it('does not throw with yes=true (non-interactive)', async () => {
-    // Inject --dry-run into argv so install() prints plan without executing
     process.argv.push('--dry-run')
     await expect(install({ yes: true })).resolves.not.toThrow()
     process.argv.pop()
@@ -87,4 +86,21 @@ describe('install', () => {
     await expect(install({ profile: 'local-dev', yes: true })).resolves.not.toThrow()
     process.argv.pop()
   }, 15000)
+
+  it('does not throw with server profile and yes=true', async () => {
+    process.argv.push('--dry-run')
+    await expect(install({ profile: 'server', yes: true })).resolves.not.toThrow()
+    process.argv.pop()
+  }, 15000)
+
+  it('resolves to undefined', async () => {
+    process.argv.push('--dry-run')
+    const result = await install({ yes: true })
+    process.argv.pop()
+    expect(result).toBeUndefined()
+  }, 15000)
+
+  it('is a function', () => {
+    expect(typeof install).toBe('function')
+  })
 })

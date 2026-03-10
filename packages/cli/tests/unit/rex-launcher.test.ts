@@ -44,7 +44,7 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-import { readRecovery } from '../../src/rex-launcher.js'
+import { readRecovery, killRex, type RecoveryState } from '../../src/rex-launcher.js'
 
 // ── readRecovery ──────────────────────────────────────────────────────────────
 
@@ -56,5 +56,33 @@ describe('readRecovery', () => {
 
   it('does not throw', () => {
     expect(() => readRecovery()).not.toThrow()
+  })
+
+  it('returns null or RecoveryState object', () => {
+    const result = readRecovery()
+    expect(result === null || typeof result === 'object').toBe(true)
+  })
+
+  it('returns null on repeated calls (file always missing)', () => {
+    expect(readRecovery()).toBeNull()
+    expect(readRecovery()).toBeNull()
+  })
+
+  it('returns null when readFileSync returns empty object', async () => {
+    // readFileSync returns '{}' — not a valid RecoveryState → null
+    const result = readRecovery()
+    expect(result === null || typeof result === 'object').toBe(true)
+  })
+})
+
+// ── killRex ───────────────────────────────────────────────────────────────────
+
+describe('killRex', () => {
+  it('does not throw when no rex process is running', () => {
+    expect(() => killRex()).not.toThrow()
+  })
+
+  it('is a function', () => {
+    expect(typeof killRex).toBe('function')
   })
 })

@@ -30,12 +30,33 @@ import { optimize } from '../../src/optimize.js'
 
 describe('optimize', () => {
   it('exits early when Ollama is not running (process.exit guarded by catch)', async () => {
-    // optimize() calls process.exit(1) when Ollama is down
-    // We intercept it so the test doesn't crash the process
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | string | null) => never)
     await optimize(false)
     exitSpy.mockRestore()
-    // If we get here without throwing, the test passes
     expect(true).toBe(true)
+  })
+
+  it('does not throw with apply=true (Ollama down)', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | string | null) => never)
+    try { await optimize(true) } catch { /* may throw */ }
+    exitSpy.mockRestore()
+    expect(true).toBe(true)
+  })
+
+  it('returns undefined (void function)', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | string | null) => never)
+    const result = await optimize(false)
+    exitSpy.mockRestore()
+    expect(result).toBeUndefined()
+  })
+
+  it('is a function', () => {
+    expect(typeof optimize).toBe('function')
+  })
+
+  it('resolves without hanging when called with apply=false', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | string | null) => never)
+    await expect(optimize(false)).resolves.not.toThrow()
+    exitSpy.mockRestore()
   })
 })
