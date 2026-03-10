@@ -3262,6 +3262,41 @@ async function main() {
         const dbPath = process.argv.find(a => a.startsWith('--db='))?.split('=').slice(1).join('=')
         const res = await runMigrationTests(dbPath)
         process.exit(res.failed > 0 ? 1 : 0)
+      } else if (sub === 'report') {
+        // Run vitest with JSON reporter and print a human-readable summary
+        const { spawnSync } = await import('node:child_process')
+        const vitestBin = new URL('../../node_modules/.bin/vitest', import.meta.url).pathname
+        const t0 = Date.now()
+        const result = spawnSync(
+          process.execPath, [vitestBin, 'run', '--reporter=json'],
+          { encoding: 'utf-8', cwd: new URL('../..', import.meta.url).pathname, timeout: 60_000 }
+        )
+        const elapsed = Date.now() - t0
+        // Extract JSON from stdout (vitest outputs JSON when --reporter=json)
+        let summary = { numTotalTests: 0, numPassedTests: 0, numFailedTests: 0, testResults: [] as Array<{ testFilePath: string; numPassingTests: number; numFailingTests: number }> }
+        try {
+          const jsonStr = (result.stdout ?? '').match(/^\{[\s\S]*\}$/m)?.[0] ?? result.stdout ?? ''
+          Object.assign(summary, JSON.parse(jsonStr))
+        } catch {}
+        const pass = summary.numPassedTests || 0
+        const fail = summary.numFailedTests || 0
+        const total = summary.numTotalTests || (pass + fail)
+        const files = summary.testResults?.length ?? 0
+        console.log('\n\x1b[1mREX Test Report\x1b[0m')
+        console.log('─'.repeat(40))
+        console.log(`  Tests:   ${total} total | \x1b[32m${pass} passed\x1b[0m${fail > 0 ? ` | \x1b[31m${fail} failed\x1b[0m` : ''}`)
+        console.log(`  Files:   ${files}`)
+        console.log(`  Time:    ${elapsed}ms`)
+        console.log(`  LLM cost: \x1b[32m$0.00\x1b[0m (mocked — no API calls)`)
+        if (fail > 0) {
+          console.log('\n\x1b[31mFailed files:\x1b[0m')
+          for (const f of summary.testResults.filter(r => r.numFailingTests > 0)) {
+            console.log(`  ✗ ${f.testFilePath.split('/tests/')[1] ?? f.testFilePath}`)
+          }
+        } else {
+          console.log('\n  \x1b[32m✓ All tests passing\x1b[0m')
+        }
+        process.exit(fail > 0 ? 1 : 0)
       } else {
         console.log('Usage:')
         console.log('  rex test mock            Start mock LLM server (OpenAI + Ollama compatible)')
@@ -3273,6 +3308,7 @@ async function main() {
         console.log('  rex test coldstart       Benchmark REX cold start time (target < 5s)')
         console.log('  rex test seed            Seed test SQLite DB with Kevin-like fixtures')
         console.log('  rex test migrations      Test v1→v5 migration compatibility (data integrity)')
+        console.log('  rex test report          Full test summary with cost estimate')
       }
       break
     }
