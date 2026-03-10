@@ -28,7 +28,7 @@ vi.mock('better-sqlite3', () => {
   return { default: MockDB }
 })
 
-import { appendEvent, getUnacked, getJournalStats, replayUnacked } from '../../src/event-journal.js'
+import { appendEvent, getUnacked, getJournalStats, replayUnacked, ackEvent, purgeOldJournalEvents } from '../../src/event-journal.js'
 
 // ── appendEvent ───────────────────────────────────────────────────────────────
 
@@ -86,5 +86,33 @@ describe('replayUnacked', () => {
 
   it('does not throw', () => {
     expect(() => replayUnacked()).not.toThrow()
+  })
+})
+
+// ── ackEvent ──────────────────────────────────────────────────────────────────
+
+describe('ackEvent', () => {
+  it('returns a boolean', () => {
+    expect(typeof ackEvent(1)).toBe('boolean')
+  })
+
+  it('does not throw for any id', () => {
+    expect(() => ackEvent(9999)).not.toThrow()
+  })
+})
+
+// ── purgeOldJournalEvents ─────────────────────────────────────────────────────
+
+describe('purgeOldJournalEvents', () => {
+  it('returns a number', () => {
+    expect(typeof purgeOldJournalEvents()).toBe('number')
+  })
+
+  it('accepts custom days param', () => {
+    expect(() => purgeOldJournalEvents(7)).not.toThrow()
+  })
+
+  it('does not throw', () => {
+    expect(() => purgeOldJournalEvents()).not.toThrow()
   })
 })

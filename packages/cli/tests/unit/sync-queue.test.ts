@@ -28,7 +28,7 @@ vi.mock('better-sqlite3', () => {
   return { default: MockDB }
 })
 
-import { appendEvent, getUnacked, getQueueStats, getQueueHealth } from '../../src/sync-queue.js'
+import { appendEvent, getUnacked, getQueueStats, getQueueHealth, ackEvent, getEventLog, purgeOldEvents, pruneOldEvents } from '../../src/sync-queue.js'
 
 // ── appendEvent ───────────────────────────────────────────────────────────────
 
@@ -97,5 +97,57 @@ describe('getQueueHealth', () => {
 
   it('does not throw', () => {
     expect(() => getQueueHealth()).not.toThrow()
+  })
+})
+
+// ── ackEvent ──────────────────────────────────────────────────────────────────
+
+describe('ackEvent', () => {
+  it('returns a boolean', () => {
+    expect(typeof ackEvent(1)).toBe('boolean')
+  })
+
+  it('does not throw for any id', () => {
+    expect(() => ackEvent(999)).not.toThrow()
+  })
+})
+
+// ── getEventLog ───────────────────────────────────────────────────────────────
+
+describe('getEventLog', () => {
+  it('returns an array', () => {
+    expect(Array.isArray(getEventLog())).toBe(true)
+  })
+
+  it('accepts limit and offset without throwing', () => {
+    expect(() => getEventLog(10, 0)).not.toThrow()
+  })
+
+  it('does not throw', () => {
+    expect(() => getEventLog()).not.toThrow()
+  })
+})
+
+// ── purgeOldEvents ────────────────────────────────────────────────────────────
+
+describe('purgeOldEvents', () => {
+  it('returns a number', () => {
+    expect(typeof purgeOldEvents()).toBe('number')
+  })
+
+  it('accepts custom days param', () => {
+    expect(() => purgeOldEvents(7)).not.toThrow()
+  })
+})
+
+// ── pruneOldEvents ────────────────────────────────────────────────────────────
+
+describe('pruneOldEvents', () => {
+  it('returns a number', () => {
+    expect(typeof pruneOldEvents()).toBe('number')
+  })
+
+  it('accepts custom days param', () => {
+    expect(() => pruneOldEvents(14)).not.toThrow()
   })
 })
