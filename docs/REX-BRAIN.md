@@ -1115,3 +1115,1221 @@ OPTIMIZE → benchmarks, améliorations suggérées
 - C'est normal et souhaitable — plus il a, plus il sait
 - Installation modulaire : core 2GB, ajouter les modules selon besoins
 - `rex install --module ollama` / `rex install --module activitywatch`
+
+---
+
+# REX — PATTERNS D'ORCHESTRATION (09/03/2026)
+
+> Chaque intent → une orchestration prévisible.
+> Le LLM est la dernière pièce, jamais la première.
+> Plus REX a de contexte, plus les patterns sont précis, moins il a besoin de LLM.
+
+---
+
+## PRINCIPE FONDAMENTAL — Dynamic Script Templates
+
+Plutôt que demander au LLM "comment faire X", REX a des templates pré-construits.
+Le LLM remplit juste les `{{variables}}`.
+
+```typescript
+interface ScriptTemplate {
+  id: string
+  intent: string
+  steps: ScriptStep[]        // orchestration définie à l'avance
+  llm_fields?: string[]      // UNIQUEMENT ces champs vont au LLM
+  security: SecurityLevel    // SAFE | MEDIUM | HIGH | CRITICAL
+  rollback?: ScriptStep[]    // si quelque chose se passe mal
+}
+
+// Exemple : LLM ne voit que "{{query}}" et génère "{{summary}}"
+// Tout le reste : scripts, fetch, parse, format → 0 LLM
+```
+
+---
+
+## NIVEAUX DE SÉCURITÉ
+
+```typescript
+type SecurityLevel =
+  | 'SAFE'      // read-only, créer un fichier, chercher → pas de confirmation
+  | 'MEDIUM'    // modifier un fichier, envoyer un message → log + confirmation légère
+  | 'HIGH'      // achat, publication, API write → confirmation explicite + snapshot
+  | 'CRITICAL'  // supprimer, déployer en prod, accès vault → double confirmation + audit trail
+
+// La sécurité s'adapte au contexte :
+// delete("old_test.md") → MEDIUM
+// delete("database.sqlite") → CRITICAL
+// REX évalue le contexte, pas juste l'action
+```
+
+---
+
+## PATTERN 1 — Recherche dans la mémoire / knowledge
+
+**Intent détecté :** `cherch | trouv | search | quoi | qui | où | quand`
+**Security :** SAFE
+**LLM calls :** ~0 (sauf reformulation finale)
+
+```
+Input: "où en est Maires et Citoyens ?"
+
+STEP 1 — Intent detect (regex 0ms)
+  → intent: SEARCH_PROJECT, entity: "maires et citoyens"
+
+STEP 2 — Memory search script
+  → sqlite-vec: embed(query) → cosine similarity → top 5 résultats
+  → BM25 fallback si vec KO
+
+STEP 3 — Script context assembler
+  → Récupère last seen date, statut, fichiers associés
+  → Format: { project, status, last_update, open_loops }
+
+STEP 4 — Script project enrichment
+  → Si project dans Monday → script fetch monday API → statut tickets
+  → Si project dans GitHub → gh pr list / issue list → compact JSON
+
+STEP 5 — if résultat complet → formatter + répondre (0 LLM)
+         if résultat insuffisant → REX ROUTER:
+           Ollama: "résume ces données: {{compact_json}}" (50 tokens max)
+
+STEP 6 — Répondre
+  Output: "M&C : 8 bugs ouverts, PR #3 en attente, dernier commit il y a 2j"
+
+TOKENS LLM : 0 si memory hit / 50 si reformulation nécessaire
+```
+
+---
+
+## PATTERN 2 — Coder / Créer un projet avec REX
+
+**Intent détecté :** `crée | projet | app | développe | code | build`
+**Security :** SAFE → MEDIUM (selon fichiers modifiés)
+**LLM calls :** tiered (Ollama → free → Relay → Opus si mega projet)
+
+```
+Input: "je veux créer une app de project management"
+
+STEP 1 — Intent detect → CREATE_PROJECT
+  → entity: "project management app"
+
+STEP 2 — Script context discovery (0 LLM)
+  → web_search.sh "project management app best practices 2025"
+  → fetch context7 / github: frameworks populaires (Linear, Jira alternatives)
+  → scraper: top repos github "project management" → README + tech stack
+  → Output: { frameworks[], libraries[], boilerplates[], docs_urls[] }
+
+STEP 3 — Script download resources
+  → Télécharge boilerplates pertinents
+  → Fetch docs prioritaires (React Query, Tanstack, etc.)
+  → Stocke dans fleet temp storage
+
+STEP 4 — REX ROUTER → Ollama local (0€)
+  → "Voici le contexte: {{compact_context}}. Mini-objectifs pour ce projet?"
+  → Output: liste structurée d'objectifs (50-100 tokens)
+
+STEP 5 — Free API provider (si Ollama insuffisant)
+  → Groq 70B: "Valide et améliore ces objectifs: {{objectives}}"
+
+STEP 6 — REX RELAY (si projet complexe)
+  → Ollama: architecture proposée
+  → Groq: validation + tech stack
+  → Sonnet: plan détaillé + structure fichiers
+
+STEP 7 — Opus (si MEGA projet, confirmation user)
+  → "Orchestre l'équipe d'agents pour implémenter: {{plan}}"
+  → Décompose en sous-tâches → délègue Codex / agents spécialisés
+
+STEP 8 — Switch → Claude Sonnet + Codex en monitoring
+  → Codex: coding worker
+  → Sonnet: review, debug, amélioration, sécurité
+
+STEP 9 — REX HUB
+  → Inject skills pertinents: ui-craft, api-design, security-scan
+  → MCPs: context7, filesystem, github
+  → Scripts: lint, test, build auto
+  → Boilerplates: réutiliser ce qui existe
+
+STEP 10 — Local LLM fine-tuné par orchestrateur
+  → Si projet similaire déjà fait → local model spécialisé disponible
+  → 0 token API pour le même type de tâche la prochaine fois
+```
+
+---
+
+## PATTERN 3 — Sauvegarder / Documenter une idée
+
+**Intent détecté :** `save | note | mémorise | documente | enregistre | idée`
+**Security :** SAFE
+**LLM calls :** ~10 tokens (title generation seulement)
+
+```
+Input: "note cette idée : REX IS ALIVE marketing campaign"
+
+STEP 1 — Intent detect → SAVE_IDEA
+  → entity: "REX IS ALIVE marketing campaign"
+
+STEP 2 — Script create md (0 LLM)
+  → Timestamp + catégorisation automatique (MARKETING, REX, IDEAS)
+  → Template pré-rempli: # Title\n## Contexte\n## Détails\n## Actions
+
+STEP 3 — Dynamic context enrichment
+  → memory_search("REX marketing") → contexte existant ajouté automatiquement
+  → Si URLs dans le message → fetch + résumé ajouté
+
+STEP 4 — Ollama: title + tags (10 tokens max)
+  → "Génère 3 tags pour: {{text}}" → ["marketing", "rex", "viral"]
+
+STEP 5 — Script save
+  → VPS: memory/ideas/YYYY-MM-DD-{{slug}}.md
+  → Index sqlite mis à jour (BM25 + vector)
+  → Event journal: { type: "IDEA_SAVED", title, tags, path }
+
+STEP 6 — Répondre
+  → "💡 Idée sauvegardée → memory/ideas/2026-03-09-rex-is-alive.md"
+
+TOKENS LLM : ~10 (tags seulement)
+```
+
+---
+
+## PATTERN 4 — Acheter quelque chose
+
+**Intent détecté :** `achète | commande | buy | order`
+**Security :** HIGH (confirmation explicite + vault check)
+**LLM calls :** 0 (scripts + Playwright)
+
+```
+Input: "achète du café sur Amazon"
+
+STEP 1 — Intent detect → PURCHASE
+  → entity: "café Amazon"
+  → Security: HIGH → demander confirmation d'abord
+
+STEP 2 — Memory pattern check (script)
+  → "A-t-on déjà acheté café Amazon ?" → memory_search
+  → Si oui → récupère: produit exact, prix payé, fréquence
+  → Output: { product_url, last_price, last_date, preference }
+
+STEP 3 — Confirmation user
+  → "Tu as acheté [produit X] à [prix] le [date]. Même chose ? [Oui/Non/Choisir autre]"
+  → Attendre confirmation avant toute action
+
+STEP 4 — Vault check (script bw CLI)
+  → bw get item "amazon" → credentials
+  → 0 LLM, 0 token
+
+STEP 5 — Playwright fleet (VPS headless ou Mac)
+  → Script playwright pré-écrit: amazon_buy.ts({{url}}, {{qty}})
+  → Bypass détection bot si nécessaire (fingerprint, delays)
+  → Screenshot de confirmation
+
+STEP 6 — if error → REX ROUTER
+  → Screenshot → Ollama vision: "que dit l'erreur ?"
+  → Script fix ou notify Kevin
+
+STEP 7 — Log + notify
+  → "✅ Commandé : [produit] - [prix] - Livraison: [date]"
+  → Event journal: PURCHASE_COMPLETED
+
+TOKENS LLM : 0 si script complet / vision si erreur
+```
+
+---
+
+## PATTERN 5 — Supprimer quelque chose
+
+**Intent détecté :** `supprime | delete | efface | remove`
+**Security :** MEDIUM → CRITICAL (selon contexte)
+**LLM calls :** 0
+
+```
+Input: "supprime le fichier test.md"
+
+STEP 1 — Intent detect → DELETE
+  → entity: "test.md"
+
+STEP 2 — Context evaluation (script)
+  → Taille fichier, date création, dernière modification
+  → Contenu important ? (keywords: database, prod, backup, key...)
+  → Si fichier > 1MB ou keywords critiques → upgrade CRITICAL
+
+STEP 3 — Snapshot (script)
+  → cp test.md ~/.rex/trash/{{timestamp}}-test.md (toujours)
+
+STEP 4 — Security check
+  → MEDIUM: "Supprimer test.md (12KB, créé hier) ? [Oui/Non]"
+  → CRITICAL: "⚠️ Fichier critique détecté. Confirmation + raison ?"
+
+STEP 5 — Execute si confirmé
+  → rm test.md
+  → Log: DELETE event dans event journal
+
+STEP 6 — Rollback disponible 30 jours
+  → "Annuler → rex restore test.md"
+
+TOKENS LLM : 0
+```
+
+---
+
+## PATTERN 6 — Surveillance / Status d'un service
+
+**Intent détecté :** `status | état | vérifie | health | tourne | marche`
+**Security :** SAFE
+**LLM calls :** 0
+
+```
+Input: "est-ce que REX tourne sur le VPS ?"
+
+STEP 1 → Script: ssh vps "pm2 status rex"
+STEP 2 → Script: parse JSON output → { status, uptime, memory, restarts }
+STEP 3 → if status == online → "✅ REX tourne depuis {{uptime}}, {{memory}} RAM"
+         if status == stopped → restart auto + notify
+         if restarts > 5 → alerte + log pattern
+
+TOKENS LLM : 0
+```
+
+---
+
+## PATTERN 7 — Recherche web + résumé
+
+**Intent détecté :** `cherche sur le web | actualité | news | dernières infos`
+**Security :** SAFE
+**LLM calls :** minimal (résumé seulement)
+
+```
+Input: "quoi de neuf sur Claude Code aujourd'hui ?"
+
+STEP 1 → web_search.sh "Claude Code updates {{date}}" → JSON résultats
+STEP 2 → Script filter: titre + snippet + url (pas le HTML brut)
+STEP 3 → Script dedup + rank par pertinence (BM25 score)
+STEP 4 → Ollama: "résume en 3 points: {{compact_results}}" (max 100 tokens input)
+STEP 5 → Répondre
+
+TOKENS LLM : ~150 total
+```
+
+---
+
+## PATTERN 8 — Coding en arrière-plan (REX Terminal)
+
+**Modes :** `rex terminal` (interactif) | `cc` (Claude Code yolo) | `cx` (Codex yolo)
+**Security :** MEDIUM (bypass permissions activé)
+**LLM calls :** tiered selon complexité
+
+```
+REX tourne TOUJOURS en arrière-plan.
+Même si tu codes dans VS Code → REX surveille:
+  - Erreurs de build → suggestion auto
+  - Pattern bug détecté → solution proposée
+  - npm audit → rapport overnight
+  - Tests qui cassent → REX FIX en background
+
+Mode YOLO (cc/cx) :
+  → bypass confirmations pour les actions non-critiques
+  → Snapshot automatique avant chaque changement majeur
+  → Rollback disponible si résultat insatisfaisant
+```
+
+---
+
+## PATTERN 9 — Fleet dynamic routing
+
+```
+Chaque tâche → REX évalue la fleet disponible :
+
+FLEET_STATE = {
+  vps: { online: true, cpu: 15%, ram: 40%, models: ["nomic-embed"] },
+  mac: { online: true, cpu: 8%, ram: 60%, models: ["qwen2.5:7b", "qwen2.5:1.5b"] },
+  pc_rtx: { online: false },  // endormi
+  iphone: { online: true, mode: "sensor" }
+}
+
+Tâche légère → VPS (toujours dispo)
+Tâche LLM locale → Mac (Ollama actif)
+Tâche GPU → PC RTX → Wake on LAN si nécessaire
+Capteur → iPhone
+```
+
+---
+
+## COMPOSANTS PRÉ-CONSTRUITS À AVOIR DANS REX
+
+### Scripts essentiels (0 LLM)
+```
+scripts/
+  web_search.sh         ← Brave API → JSON compact
+  fetch_page.sh         ← curl + readability extract
+  memory_search.sh      ← sqlite-vec query
+  github_fetch.sh       ← gh CLI → résultats
+  monday_status.sh      ← Monday API → tickets
+  vault_get.sh          ← bw CLI → credentials
+  fleet_status.sh       ← ping + pm2 + ollama list
+  file_create.sh        ← create MD avec template
+  file_snapshot.sh      ← backup avant modification
+  playwright_run.sh     ← lancer script playwright
+  npm_audit.sh          ← audit + format résultat
+```
+
+### Dynamic Script Templates (LLM remplit les {{variables}})
+```typescript
+const TEMPLATES = {
+  web_research: "Fetch: {{urls}}\nContext: {{existing_memory}}\nQuestion: {{query}}",
+  code_task: "Stack: {{tech}}\nObjectif: {{goal}}\nFichiers existants: {{file_list}}",
+  email_draft: "Destinataire: {{to}}\nContexte: {{context}}\nTon: {{style}}",
+  api_call: "Endpoint: {{url}}\nParams: {{params}}\nAuth: [VAULT:{{service}}]",
+  purchase: "Produit: {{item}}\nSite: {{site}}\nHistorique: {{past_purchases}}"
+}
+// LLM reçoit UNIQUEMENT le template rempli → complète les champs manquants
+// Pas de "comment faire" → juste "quoi remplir"
+```
+
+### Pre-loaded dans REX (dès l'install)
+```
+MCPs       : github, filesystem, playwright, context7, n8n
+CLIs       : gh, gog, bw, rex, claude, codex
+Skills     : ui-craft, api-design, security-scan, pr-review, doc-updater
+APIs       : Brave search, Groq, Gemini free, OpenAI (vault)
+Scrapers   : readability, playwright, curl+jq pipelines
+Boilerplates: Next.js, Flutter, Express, FastAPI, CLI Node
+Docs cache : React, Flutter, TypeScript, Python, Rust (via context7)
+```
+
+### Fleet registry (auto-découverte)
+```typescript
+interface FleetNode {
+  id: string
+  hostname: string
+  platform: 'linux' | 'darwin' | 'win32'
+  models: string[]           // Ollama models disponibles
+  gpu?: { vram: number, model: string }
+  subscriptions: string[]    // ["claude-max", "groq-free"]
+  free_api_credits: Record<string, number>
+  capabilities: string[]     // ["playwright", "whisper", "camera", "gps"]
+}
+// REX auto-découvre et maintient ce registre à jour
+// Routing = choisir le meilleur node pour chaque tâche
+```
+
+---
+
+## RÈGLE ULTIME — Mâcher le travail pour le LLM
+
+```
+1. Scripts collectent → données brutes
+2. Scripts filtrent → données pertinentes
+3. Scripts formatent → JSON compact
+4. Scripts remplissent le template → LLM voit un formulaire à compléter
+5. LLM complète → 50 tokens max
+6. Scripts formatent la réponse finale → user reçoit le résultat
+
+Si on peut réduire à 0 token → on le fait.
+Si on peut convertir en binaire, morse, hash pour réduire → on le fait.
+L'objectif : LLM = dernière ligne de traitement, pas la première.
+```
+
+---
+
+## REX — SOURCES SCRIPTS + MINI-MODES SYSTEM (09/03/2026)
+
+---
+
+### REPOS GITHUB SOURCES (à intégrer dans REX HUB)
+
+#### Scripts & Automation
+| Repo | Stars | Contenu | Usage REX |
+|------|-------|---------|-----------|
+| `avinashkranjan/Amazing-Python-Scripts` | 4.5k | 800+ scripts Python automation | Base de patterns |
+| `hastagAB/Awesome-Python-Scripts` | 11k | Scripts automatisation tâches | Référence |
+| `lorien/awesome-web-scraping` | 9k | Librairies scraping toutes langues | Scraper selection |
+| `luminati-io/Awesome-Web-Scraping` | 3k | HTTP + parsing + proxy + CAPTCHA | Stack scraping |
+| `alirezamika/autoscraper` | 5k | Scraper auto-apprenant Python | Smart scraping |
+| `awesome-selfhosted/awesome-selfhosted` | 220k | Apps self-hostables toutes catégories | Services à integrer |
+| `steel-dev/awesome-web-agents` | 2k | Tools browser automation AI | Agent browser |
+| `angrykoala/awesome-browser-automation` | 4k | Playwright/Puppeteer/CDP tools | Browser fleet |
+
+#### Workflow & Integration
+| Repo | Usage REX |
+|------|-----------|
+| `n8n` (self-hosted) | Workflows visuels → scripts → déjà installé chez Kevin |
+| `Huginn` | IFTTT-like self-hosted, agents qui surveillent et agissent |
+| `activepieces` | n8n alternatif OSS, 200+ intégrations |
+| `windmill` | Scripts Python/TS avec UI auto-générée |
+| `trigger.dev` | Background jobs TypeScript natif |
+
+#### Scraping tools à avoir dans REX
+```bash
+# Python (pour scripts complexes)
+pip install playwright beautifulsoup4 httpx autoscraper scrapy
+
+# Node/TS (pour intégration directe)
+npm install playwright cheerio got node-fetch readability
+
+# CLI tools
+brew install curl jq lynx w3m  # parsing HTML sans browser
+```
+
+---
+
+### CONCEPT MINI-MODES — Système de modes dynamiques
+
+> L'idée : chaque type de tâche = un mini environnement pré-configuré.
+> Le LLM entre dans un "mode" qui a déjà tout préparé.
+> Il ne fait que remplir les cases vides.
+
+**Principe :**
+```
+Mode = {
+  tools disponibles,
+  contexte pré-chargé,
+  template de réponse attendu,
+  variables dynamiques à remplir
+}
+
+L'orchestrateur charge le bon mode → inject le contexte → appelle LLM avec 0 friction
+```
+
+**Analogie :** Comme les env variables dans Docker, mais pour l'intelligence.
+
+---
+
+### IMPLÉMENTATION — mini-modes en TypeScript
+
+```typescript
+// packages/cli/src/mini-modes/
+
+interface MiniMode {
+  id: string
+  triggers: RegExp[]           // intents qui activent ce mode
+  context_loaders: Loader[]    // scripts qui chargent le contexte
+  template: string             // template avec {{variables}}
+  llm_fields: string[]         // UNIQUEMENT ces champs vont au LLM
+  output_formatter: Formatter  // comment formatter la réponse
+  security: SecurityLevel
+  estimated_tokens: number     // estimation pour le budget
+}
+
+// Exemple mode SEARCH_PROJECT
+const SEARCH_PROJECT_MODE: MiniMode = {
+  id: "search_project",
+  triggers: [/où en est|statut|avance.*projet|comment va.*projet/i],
+  context_loaders: [
+    loadMemorySearch,       // sqlite-vec
+    loadMondayStatus,       // monday API script
+    loadGitHubActivity,     // gh CLI script
+    loadEventJournal        // derniers événements
+  ],
+  template: `
+    Projet: {{project_name}}
+    Mémoire: {{memory_snippets}}
+    Monday: {{monday_status}}
+    GitHub: {{github_activity}}
+    Derniers événements: {{recent_events}}
+    ---
+    Résumé en 2-3 phrases maximum:
+  `,
+  llm_fields: ["summary"],    // LLM génère uniquement le résumé final
+  output_formatter: formatProjectStatus,
+  security: "SAFE",
+  estimated_tokens: 200       // 150 input + 50 output max
+}
+```
+
+---
+
+### CATALOGUE DE MINI-MODES (à implémenter)
+
+```
+modes/
+  search/
+    search-memory.mode.ts        ← recherche dans knowledge base
+    search-web.mode.ts           ← web search + résumé
+    search-project.mode.ts       ← statut projet (Monday + GitHub + memory)
+    search-person.mode.ts        ← infos sur un contact (WhatsApp + iMessage + Obsidian)
+
+  create/
+    create-file.mode.ts          ← créer MD/fichier avec contexte dynamique
+    create-email.mode.ts         ← rédiger email avec contexte
+    create-code.mode.ts          ← nouveau fichier code (boilerplate + docs)
+    create-report.mode.ts        ← rapport automatique
+
+  action/
+    buy.mode.ts                  ← achat via Playwright + vault (SECURITY: HIGH)
+    send-message.mode.ts         ← envoyer message (WhatsApp, Telegram, email)
+    schedule.mode.ts             ← créer rappel/event calendrier
+    deploy.mode.ts               ← déployer (SECURITY: HIGH)
+
+  dev/
+    code-review.mode.ts          ← review code avec context
+    debug.mode.ts                ← debug avec logs + stack trace
+    refactor.mode.ts             ← refactor avec règles projet
+    test-generate.mode.ts        ← générer tests depuis code
+
+  monitor/
+    check-service.mode.ts        ← statut service (VPS, app, API)
+    check-budget.mode.ts         ← coûts LLM du jour/mois
+    check-fleet.mode.ts          ← état fleet
+    check-security.mode.ts       ← audit sécurité rapide
+
+  save/
+    save-idea.mode.ts            ← sauvegarder idée + enrichir
+    save-meeting.mode.ts         ← note de réunion + actions
+    save-link.mode.ts            ← bookmark avec résumé auto
+
+  delete/                        ← SECURITY: MEDIUM → CRITICAL
+    delete-file.mode.ts          ← avec snapshot obligatoire
+    delete-container.mode.ts     ← CRITICAL: double confirmation
+```
+
+---
+
+### DYNAMIC CONTEXT INJECTION — Comme des env variables
+
+```typescript
+// Chaque mode reçoit un contexte dynamique au runtime
+// Comme des variables d'environnement mais pour le LLM
+
+interface ModeContext {
+  // Auto-injectés par REX
+  user: { name: string, timezone: string, preferences: UserPrefs }
+  fleet: { available_nodes: FleetNode[], active_models: string[] }
+  budget: { remaining_daily: number, free_calls: FreeCalls }
+  memory: { recent_relevant: MemorySnippet[] }
+
+  // Chargés par les loaders du mode
+  [key: string]: any  // données spécifiques au mode
+}
+
+// Rendre un template dynamique
+function renderTemplate(template: string, context: ModeContext): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+    JSON.stringify(context[key] ?? '') // stringify compact, pas de whitespace
+  )
+}
+
+// Résultat : LLM reçoit un prompt de 100-300 tokens max
+// au lieu de 2000+ tokens de contexte brut
+```
+
+---
+
+### SCRIPT STORE — Référentiel de scripts pré-construits
+
+```
+rex/scripts/
+  fetch/
+    web-search.sh          BRAVE_API_KEY={{key}} query={{q}} → JSON
+    fetch-page.sh          url={{url}} → markdown text
+    fetch-github.sh        repo={{repo}} action={{action}} → JSON
+    fetch-monday.sh        board={{id}} filter={{status}} → JSON compact
+    fetch-weather.sh       city={{city}} → JSON
+    fetch-calendar.sh      days={{n}} → events JSON
+    fetch-prices.sh        item={{item}} site={{site}} → price + url
+
+  memory/
+    search-semantic.sh     query={{q}} limit={{n}} → top results
+    save-to-memory.sh      content={{c}} tags={{t}} → saved path
+    update-memory.sh       id={{id}} content={{c}} → updated
+
+  actions/
+    send-telegram.sh       chat={{id}} msg={{text}} → sent
+    send-email.sh          to={{to}} subj={{s}} body={{b}} → sent
+    create-event.sh        title={{t}} date={{d}} → event id
+    set-reminder.sh        msg={{m}} at={{time}} → cron id
+
+  system/
+    fleet-status.sh        → JSON fleet state
+    pm2-status.sh          service={{name}} → status
+    disk-usage.sh          path={{p}} → usage JSON
+    docker-list.sh         → containers JSON
+    ollama-list.sh         → available models
+
+  security/
+    snapshot.sh            path={{p}} → snapshot id (BEFORE any write)
+    rollback.sh            snapshot_id={{id}} → restored
+    vault-get.sh           service={{s}} field={{f}} → value (no logs)
+    audit-npm.sh           path={{p}} → vulnerabilities JSON
+```
+
+---
+
+### N8N COMME COUCHE GLUE (déjà installé chez Kevin)
+
+n8n = orchestrateur visuel parfait pour les mini-modes complexes :
+- Workflows visuels → scriptés en JSON (versionnable)
+- 400+ intégrations natives (Google, Slack, GitHub, Notion...)
+- Exécutable via API REST : `POST /api/v1/workflows/{id}/execute`
+- REX peut déclencher les workflows n8n comme des scripts
+
+```typescript
+// Dans rex : déclencher un workflow n8n
+async function runN8nWorkflow(workflowId: string, context: ModeContext) {
+  return fetch(`http://172.17.0.1:5678/api/v1/workflows/${workflowId}/execute`, {
+    method: 'POST',
+    headers: { 'X-N8N-API-KEY': process.env.N8N_API_TOKEN },
+    body: JSON.stringify({ data: context })
+  })
+}
+```
+
+---
+
+### RÈGLE FINALE — Lancer le LLM comme une lancette
+
+```
+1. Mode détecté (regex, 0ms)
+2. Context loaders parallèles (scripts, 50-200ms)
+3. Template rendu (dynamic inject, 0ms)
+4. LLM reçoit: template rempli + champs vides à compléter
+   → Input: 50-300 tokens (pas 2000)
+   → Output: 20-100 tokens (juste ce qui manque)
+5. Scripts formatent la réponse finale
+6. User reçoit quelque chose de propre
+
+Total LLM: 70-400 tokens maximum pour 99% des tâches
+```
+
+**Quand utiliser le LLM comme une lancette :**
+→ Compléter une phrase, un résumé, un titre
+→ Choisir entre 3 options claires
+→ Reformuler en style humain
+
+**Quand NE PAS utiliser le LLM :**
+→ Chercher → script
+→ Calculer → script
+→ Formater → script
+→ Fetch → script
+→ Compare → script
+
+---
+
+## REX — MINI-MODELS (09/03/2026)
+
+> Concept : un petit modèle local entraîné / prompté pour UNE seule tâche.
+> Ultra cheap, ultra rapide, ultra précis sur son domaine.
+> Combinés avec les mini-modes → 0 token API pour 95% des tâches.
+
+---
+
+### Principe
+
+```
+Modèle général (Claude Sonnet) = généraliste → coûteux, lent, over-qualified
+Mini-model (Qwen 1.5B fine-tuné) = spécialiste → 0.8GB RAM, <100ms, parfait pour 1 tâche
+
+Analogie : tu n'appelles pas un chirurgien pour mesurer ta tension.
+L'infirmière (mini-model) fait ça parfaitement en 10 secondes.
+```
+
+---
+
+### Catalogue de mini-models REX
+
+| Mini-model | Tâche unique | Base model | RAM | Latence |
+|-----------|-------------|-----------|-----|---------|
+| `rex-intent` | Classifier l'intent (SEARCH/CREATE/FIX...) | Qwen 1.5B | 0.8GB | 20ms |
+| `rex-tagger` | Générer 3-5 tags depuis un texte | Qwen 1.5B | 0.8GB | 30ms |
+| `rex-summarizer` | Résumer un texte en 2-3 phrases | Qwen 1.5B | 0.8GB | 50ms |
+| `rex-formatter` | Formater JSON en réponse lisible | Qwen 1.5B | 0.8GB | 20ms |
+| `rex-sentiment` | Détecter urgence / ton d'un message | Qwen 1.5B | 0.8GB | 15ms |
+| `rex-extractor` | Extraire entités (noms, dates, URLs) | Qwen 1.5B | 0.8GB | 25ms |
+| `rex-code-title` | Générer un titre de commit/PR | Qwen 1.5B | 0.8GB | 20ms |
+| `rex-email-tone` | Ajuster le ton d'un email | Qwen 3B | 1.5GB | 60ms |
+| `rex-security` | Détecter si action est risquée | Qwen 1.5B | 0.8GB | 20ms |
+
+**Total pour tous les mini-models : ~6GB RAM max (jamais tous en même temps)**
+
+---
+
+### Implémentation dans Ollama
+
+```bash
+# Créer un mini-model Ollama = Modelfile avec system prompt ultra ciblé
+
+# Exemple : rex-intent
+cat > Modelfile.intent << 'EOF'
+FROM qwen2.5:1.5b
+SYSTEM """
+Tu es un classificateur d'intent. Tu réponds UNIQUEMENT avec un JSON.
+Intents possibles: SEARCH | CREATE | FIX | STATUS | SCHEDULE | BUDGET | DEPLOY | SAVE | DELETE | FLEET
+Format: {"intent": "SEARCH", "confidence": 0.95, "entity": "maires et citoyens"}
+Rien d'autre. Pas d'explication. Juste le JSON.
+"""
+PARAMETER temperature 0.1
+PARAMETER num_predict 50
+EOF
+ollama create rex-intent -f Modelfile.intent
+
+# Exemple : rex-tagger
+cat > Modelfile.tagger << 'EOF'
+FROM qwen2.5:1.5b
+SYSTEM """
+Tu génères des tags. Réponds UNIQUEMENT avec un tableau JSON de 3-5 tags courts.
+Format: ["tag1", "tag2", "tag3"]
+Rien d'autre.
+"""
+PARAMETER temperature 0.1
+PARAMETER num_predict 30
+EOF
+ollama create rex-tagger -f Modelfile.tagger
+```
+
+---
+
+### Usage dans REX
+
+```typescript
+// Au lieu d'appeler Claude pour classifier l'intent :
+// ❌ Avant : intent = await claude.complete("Quel est l'intent de: " + message)
+// ✅ Après :
+const intent = await ollama.chat({
+  model: 'rex-intent',
+  messages: [{ role: 'user', content: message }]
+})
+// → {"intent": "SEARCH", "confidence": 0.95, "entity": "maires et citoyens"}
+// → 20ms, 0€, 0 token API
+
+// Idem pour tagger une idée sauvegardée :
+const tags = await ollama.chat({ model: 'rex-tagger', messages: [{ role: 'user', content: idea }] })
+// → ["rex", "marketing", "viral"] en 30ms
+```
+
+---
+
+### Fine-tuning futur (quand REX accumule assez de data)
+
+```
+Après 1000+ interactions :
+  → Exporter les paires (message → intent) validées
+  → Fine-tuner rex-intent sur ces données réelles de Kevin
+  → Précision 95% → 99%
+  → Modèle personnalisé qui connaît le vocabulaire de Kevin
+
+Outils :
+  - Ollama custom models (déjà supporté)
+  - Unsloth (fine-tuning rapide, open source)
+  - LLaMA-Factory (multi-backend fine-tuning)
+  - Dataset : event_journal → pairs (input, intent)
+```
+
+---
+
+### Mini-models + Mini-modes = stack complète
+
+```
+Message entrant
+  → rex-intent (mini-model, 20ms) → intent: SEARCH_PROJECT
+  → search-project.mode (mini-mode) → charge contexte
+  → rex-summarizer (mini-model, 50ms) → résume le résultat
+  → Réponse
+
+Total : 70ms, 0 token API, 0€
+```
+
+---
+
+## SOURCES REPOS — Audit à faire (TODO)
+
+> Ces repos contiennent des scripts/tools utiles à intégrer dans REX.
+> À auditer : utile, inutile, doublon avec ce qu'on a déjà.
+
+### Priorité HAUTE (fort signal, à intégrer)
+
+| Repo | URL | Pourquoi utile | Doublon ? |
+|------|-----|---------------|-----------|
+| Amazing-Python-Scripts | github.com/avinashkranjan/Amazing-Python-Scripts | 800+ scripts automatisation | Partiellement |
+| awesome-web-scraping | github.com/lorien/awesome-web-scraping | Stack scraping complète | Non |
+| autoscraper | github.com/alirezamika/autoscraper | Scraper auto-apprenant | Non |
+| awesome-selfhosted | github.com/awesome-selfhosted/awesome-selfhosted | Bible apps self-host | Non |
+| awesome-web-agents | github.com/steel-dev/awesome-web-agents | Browser AI agents | Partiellement (playwright) |
+
+### Priorité MOYENNE
+
+| Repo | URL | Pourquoi utile |
+|------|-----|---------------|
+| Huginn | github.com/huginn/huginn | IFTTT self-hosted, agents événements |
+| Windmill | github.com/windmill-labs/windmill | Scripts avec UI auto + API |
+| trigger.dev | github.com/triggerdotdev/trigger.dev | Background jobs TS natif |
+| activepieces | github.com/activepieces/activepieces | n8n alternatif, 200+ intégrations |
+
+### À évaluer (peut-être doublon)
+
+| Repo | Potentiel doublon avec |
+|------|----------------------|
+| awesome-browser-automation | Playwright déjà dans REX |
+| Awesome-Python-Scripts (hastagAB) | Amazing-Python-Scripts |
+| grv231/automation-bash-scripts | Nos scripts bash custom |
+
+### Processus d'audit (à faire avec CURIOUS + Claude Code)
+
+```
+Pour chaque repo :
+1. Script fetch README + categories
+2. Compare avec rex/scripts/ existants (doublon ?)
+3. Note les gaps (ce qu'on n'a pas)
+4. Liste les candidats à porter en TypeScript ou à wrapper
+5. Priorité : web, email, files, APIs tierces, monitoring
+```
+
+### Intégration dans REX HUB
+
+```typescript
+// resource-hub.ts → ajouter une section "community scripts"
+interface CommunityScript {
+  source_repo: string
+  original_language: 'python' | 'bash' | 'node'
+  rex_wrapper: string        // chemin du wrapper TypeScript
+  tested: boolean
+  rex_version_added: string
+}
+```
+
+---
+
+# REX — GAPS & INCOHÉRENCES (09/03/2026)
+> Ce qu'on n'a pas vu, les contradictions, les trous dans l'architecture.
+> À résoudre avant la mise en prod.
+
+---
+
+## INCOHÉRENCES DÉTECTÉES
+
+### 1. gateway.ts vs rex-identity.ts — Duplication ?
+**Problème :** `gateway.ts` existe + `rex-identity.ts` existe (375 lignes).
+Lequel est le vrai entry point ? Sont-ils câblés ensemble ?
+**Fix :** Vérifier que `gateway.ts` appelle `rex-identity.ts`.
+Si deux logiques séparées → merger ou documenter la séparation.
+
+### 2. relay-engine.ts — câblé dans quoi ?
+**Problème :** `relay-engine.ts` existe mais est-ce qu'il est appelé depuis `gateway.ts` ou `orchestrator.ts` ?
+**Fix :** Vérifier l'import dans orchestrator.ts + gateway.ts.
+
+### 3. user-cycles.ts vs user-state.ts — Doublon ?
+**Problème :** Deux fichiers pour la gestion d'état utilisateur.
+**Fix :** Fusionner ou clarifier : user-state = primitive, user-cycles = XState machine.
+
+### 4. activitywatch-bridge.ts — Jamais appelé ?
+**Problème :** Le fichier existe mais rien ne l'appelle dans les logs commits.
+**Fix :** Brancher dans user-cycles.ts pour le sleepScore.
+
+### 5. agent-templates vs client-factory.ts — Overlap ?
+**Problème :** `agent-templates/` (personas DG/DRH) + `client-factory.ts` semblent faire la même chose.
+**Fix :** client-factory crée les containers Docker, agent-templates définit les personas → OK si séparés. Vérifier.
+
+### 6. CLAUDE_TASK.md — Tâches déjà faites non cochées
+**Problème :** relay-engine.ts, watchdog.ts, sandbox/ sont déjà implémentés mais le TODO.md dit non.
+**Fix :** Claude Code doit mettre à jour TODO.md + CLAUDE_TASK.md avec l'état réel.
+
+### 7. scripts/ directory — Absent du repo
+**Problème :** On a documenté un script store complet mais le répertoire `scripts/` n'existe que comme `build-binary.sh` etc.
+**Fix :** Créer `rex/scripts/` avec les shell scripts opérationnels.
+
+### 8. mini-modes/ — Documenté mais pas créé
+**Problème :** `packages/cli/src/mini-modes/` n'existe pas encore.
+**Fix :** Claude Code doit créer ce répertoire avec les premiers modes (search, save, status).
+
+---
+
+## TROUS DANS L'ARCHITECTURE (choses non pensées)
+
+### A. Comment REX reçoit les messages Telegram en production ?
+**Gap :** On a gateway.ts mais comment est-ce que le bot Telegram est configuré pour pointer vers REX ?
+Actuellement REX utilise OpenClaw comme gateway. Quand REX tourne en standalone, il faut son propre bot Telegram.
+**Fix :** Documenter dans UX.md : "rex setup" configure le bot Telegram.
+Fichier à créer : `telegram-gateway.ts` standalone (sans OpenClaw).
+
+### B. Authentification entre BRAIN et FLEET nodes
+**Gap :** Comment un FLEET node prouve son identité au BRAIN ?
+**Fix :** JWT token généré au `rex fleet:join`, stocké dans `~/.rex/fleet-token`.
+Renouvellement automatique toutes les 24h.
+
+### C. Que se passe-t-il si le BRAIN VPS est down ?
+**Gap :** Pas de fallback documenté. L'user ne peut plus rien faire.
+**Fix :** Mode dégradé local : FLEET node (Mac) peut répondre aux intents simples en offline.
+Documenter dans `REX-LOGIC.md` section "offline mode".
+
+### D. Versioning du format de mémoire
+**Gap :** Si on change le schema SQLite en v2, les vieilles données sont perdues.
+**Fix :** `db-migrations.ts` existe déjà (vu dans les commits) → vérifier qu'il est branché au démarrage.
+
+### E. Rate limiting des scripts web
+**Gap :** Si CURIOUS scanne trop vite les sources OSS → IP ban.
+**Fix :** Ajouter délais entre requêtes dans `curious.ts`. Respecter `robots.txt`. Cacher les résultats 24h minimum.
+
+### F. Secrets chiffrés — mais la clé de chiffrement est où ?
+**Gap :** `secrets.ts` avec AES-256-GCM existe, mais la master key est stockée comment ?
+**Fix :** Dériver depuis un password maître (argon2) + stockée dans le keychain OS (Keychain Mac / libsecret Linux).
+
+### G. Multi-langue — REX parle français mais l'user peut switcher
+**Gap :** Si l'utilisateur écrit en anglais, REX répond en quoi ?
+**Fix :** Détecter la langue du message entrant (mini-model ou simple regex). Répondre dans la même langue.
+
+### H. Limite de taille des messages Telegram
+**Gap :** Telegram = max 4096 chars. Si REX génère une longue réponse → erreur silencieuse.
+**Fix :** Dans `gateway-adapter.ts` → splitter automatiquement les réponses > 4000 chars.
+OpenClaw le fait déjà (textChunkLimit: 4000) mais REX standalone non.
+
+### I. Gestion des pièces jointes Telegram
+**Gap :** Si l'user envoie une image ou un audio → REX ne sait pas quoi faire.
+**Fix :** Audio → pipe vers `audio-logger.ts` (Whisper). Image → Ollama vision si disponible, sinon notify "image reçue, traitement non disponible".
+
+### J. Cold start VPS (premier démarrage)
+**Gap :** Sur un VPS vierge, quelle est la séquence exacte d'installation ?
+**Fix :** `install-linux.sh` existe → vérifier qu'il installe : Node 22, pnpm, Ollama, nomic-embed, PM2, rex npm package.
+
+### K. Monitoring des coûts en temps réel
+**Gap :** Le budget tracker existe mais est-ce qu'il y a une alerte quand on approche du daily_limit ?
+**Fix :** `budget.ts` → ajouter alerte à 80% du daily_limit via Telegram.
+
+### L. REX CURIOUS — sources RSS pas encore fetchées
+**Gap :** On a documenté les sources (Simon Willison, HuggingFace, r/LocalLLaMA) mais aucun cron ne les fetch.
+**Fix :** Cron nocturne dans `daemon.ts` → `curious-scanner.ts` (à créer ou vérifier s'il existe).
+
+---
+
+## ACTIONS POUR CLAUDE CODE (priorité correctrice)
+
+```
+1. Vérifier câblage gateway.ts → rex-identity.ts → orchestrator → relay-engine
+2. Fusionner user-cycles.ts + user-state.ts si doublon
+3. Brancher activitywatch-bridge.ts dans user-cycles.ts (sleepScore)
+4. Créer scripts/ directory avec les shell scripts (copier depuis /tmp/rex_scripts_store.sh)
+5. Créer packages/cli/src/mini-modes/ avec 3 premiers modes (search-memory, save-idea, status)
+6. Mettre à jour TODO.md avec l'état réel (cocher ce qui est fait)
+7. Créer curious-scanner.ts si pas encore là (cron nocturne sources RSS/OSS)
+8. Vérifier db-migrations.ts branché au boot
+9. Ajouter split 4000 chars dans gateway-adapter.ts
+10. Ajouter alerte 80% daily_limit dans budget.ts
+```
+
+---
+
+## QUESTIONS À TRANCHER (décisions Kevin)
+
+1. **Telegram standalone** : quand REX sera indépendant d'OpenClaw, il faut son propre bot → créer maintenant ou attendre ?
+2. **Fleet auth JWT** : implémenter maintenant ou attendre le split BRAIN/FLEET ?
+3. **Offline mode** : fallback Mac si VPS down → dans scope v1 ou v2 ?
+4. **Multi-langue** : détecter et répondre dans la langue de l'user → v1 ou v2 ?
+
+---
+
+# REX — AUDIT GLOBAL DE LOGIQUE (09/03/2026)
+> Basé sur lecture directe des fichiers TypeScript du repo.
+> Vérité : ce qui est réellement câblé, pas ce qui est documenté.
+
+---
+
+## FLOW RÉEL D'UN MESSAGE (état actuel)
+
+```
+Telegram message
+       │
+       ▼
+gateway.ts — webhook handler
+       │
+       ├─ /commande → handler direct (0 LLM)
+       │
+       ├─ free text + state.mode === "qwen"
+       │       │
+       │       ▼
+       │   rexIdentityPipeline (rex-identity.ts)
+       │   ① memory search (semantic)
+       │   ② event journal (last 5 events)
+       │   ③ intent scripts (SCRIPT_RULES regex → CLI direct)
+       │   ④ script-first answer si possible (0 LLM)
+       │   ⑤ orchestrator si LLM nécessaire
+       │       │
+       │       ▼
+       │   orchestrator.ts → relayRace()
+       │   [Ollama → free-tiers → Claude API]
+       │
+       └─ free text + autre mode (défaut)
+               │
+               ▼
+           /chat → rex agents run orchestrator
+               │
+               └─ fallback: claudeSession() ou askClaude()
+```
+
+---
+
+## PROBLÈME #1 — DEUX RELAY IMPLEMENTATIONS EN PARALLÈLE ⚠️
+
+**État :** Deux "relay" coexistent, logiques différentes, non intégrées.
+
+| | `orchestrator.ts relayRace()` | `relay-engine.ts runRelay()` |
+|-|------------------------------|------------------------------|
+| **Appelé par** | rex-identity.ts → orchestrator | index.ts CLI `rex relay <task>` UNIQUEMENT |
+| **Pattern** | Fallback séquentiel : si A échoue → B | Vrai relay document : chaque modèle lit les contributions précédentes |
+| **Doc partagée** | Non | Oui (RelayDocument avec contributions[]) |
+| **Confidence** | Non | Oui (auto-reported 0-1) |
+| **Mentor** | Non | Oui (Opus si confidence < 0.6) |
+
+**Problème :** Le vrai relay (relay-engine.ts) n'est JAMAIS utilisé dans le pipeline principal.
+`relayRace()` dans orchestrator.ts est un simple fallback déguisé en relay.
+
+**Fix :**
+```typescript
+// Dans rex-identity.ts step 5, remplacer :
+const result = await orchestrate(prompt)
+
+// Par :
+const { runRelay } = await import('./relay-engine.js')
+const doc = await runRelay(prompt, context, { mentorEnabled: false })
+```
+
+---
+
+## PROBLÈME #2 — MODE "QWEN" EST LE SEUL À UTILISER REX IDENTITY LAYER ⚠️
+
+**État :** `rexIdentityPipeline` n'est appelée que si `state.mode === "qwen"`.
+Le mode par défaut passe par `/chat → agents run orchestrator → claudeSession()`.
+→ **90% du trafic ne passe pas par le pipeline REX.**
+
+**Fix :** Faire de `rexIdentityPipeline` le handler par défaut pour TOUS les messages.
+Le mode "qwen" ne devrait pas être un flag — c'est la logique principale de REX.
+
+```typescript
+// gateway.ts — remplacer le bloc free text par :
+if (text.length > 2) {
+  const { rexIdentityPipeline } = await import('./rex-identity.js')
+  const result = await rexIdentityPipeline(text, { onChunk })
+  response = result.response
+}
+// Supprimer la distinction mode === "qwen"
+```
+
+---
+
+## PROBLÈME #3 — DB-MIGRATIONS NON APPELÉ AU BOOT ⚠️
+
+**État :** `applyMigrations()` est appelé UNIQUEMENT depuis `index.ts` via commande CLI `rex migrate`.
+→ Si l'user ne fait pas `rex migrate` manuellement → schema potentiellement désynchronisé.
+
+**Fix :** Appeler `applyMigrations()` dans `daemon.ts` au démarrage :
+```typescript
+// daemon.ts — dans la fonction boot principale
+const { applyMigrations } = await import('./db-migrations.js')
+const migrations = await applyMigrations()
+if (migrations.applied.length > 0) {
+  log.info(`Applied ${migrations.applied.length} DB migrations: v${migrations.applied.join(', v')}`)
+}
+```
+
+---
+
+## PROBLÈME #4 — BUDGET ALERT N'ENVOIE PAS TELEGRAM ⚠️
+
+**État :** `checkBudgetAlert()` (budget.ts ligne 235) détecte bien les 80%+ mais `console.log` seulement.
+→ En production (daemon headless), personne ne voit le warning.
+
+**Fix :** Dans `daemon.ts`, connecter l'alerte à la notification Telegram :
+```typescript
+// Dans daemon.ts, tick check toutes les heures :
+const alert = checkBudgetAlert()
+if (alert.level !== 'ok') {
+  await notifyTelegram(`⚠️ Budget REX : ${alert.message}`)
+}
+```
+
+---
+
+## CE QUI EST OK (pas de problème)
+
+| Composant | État réel |
+|-----------|-----------|
+| `user-state.ts` vs `user-cycles.ts` | Complémentaires : user-state = primitives AW + calcul score ; user-cycles = XState machine qui consomme user-state. Pas de doublon. |
+| `activitywatch-bridge.ts` | Correctement appelé depuis user-state, user-cycles, pattern-detector, monitor-daemon. OK. |
+| `budget.ts` alerte 80% | Logique de détection OK. Problème = seulement console.log (voir #4). |
+| `gateway.ts` PID lock | Single instance guard OK. |
+| `daemon.ts` AW check | `detectUserCycle()` branché dans daemon.ts ligne 848. OK. |
+| `relay-engine.ts` logic | Logique propre, bien documentée. Juste pas câblée au pipeline. |
+| `agent-templates/` + `client-factory.ts` | Séparation claire : templates = personas, factory = containers Docker. OK. |
+| `secrets.ts` AES-256-GCM | Implémenté. Question master key reste ouverte (voir GAPS.md). |
+
+---
+
+## AUDIT DES MINI-MODELS (état actuel)
+
+**État :** Aucun mini-model Ollama spécialisé n'existe encore.
+Le pipeline utilise Qwen 2.5 généraliste pour tout.
+
+**Gap :** `rex-intent`, `rex-tagger`, `rex-summarizer` ne sont pas créés.
+Script de création : `scripts/mini-models/create-all.sh` (créé dans cette session).
+
+**Fix :** Claude Code doit exécuter `scripts/mini-models/create-all.sh` après avoir vérifié qu'Ollama tourne.
+
+---
+
+## AUDIT DU SCRIPT STORE (état actuel)
+
+**État :** 
+- `scripts/build-binary.sh`, `install-linux.sh`, `install-macos.sh` existaient
+- `scripts/fetch/`, `scripts/memory/`, `scripts/system/`, `scripts/security/` → créés cette session (15 scripts)
+- Syntaxe error dans create-all.sh (EOF heredoc) → à corriger
+
+---
+
+## ACTIONS CLAUDE CODE — PRIORISÉES
+
+### 🔴 CRITIQUE (logique cassée)
+
+1. **Câbler relay-engine.ts dans rexIdentityPipeline** (step 5)
+   - Remplacer `orchestrate()` par `runRelay()` avec `mentorEnabled: false`
+   - Conserver orchestrate() comme fallback si relay-engine échoue
+
+2. **Supprimer la dépendance mode === "qwen"**
+   - `rexIdentityPipeline` doit être le handler par défaut de TOUS les messages free text
+   - Tester : envoyer un message sans activer le mode qwen → doit passer par le pipeline
+
+### 🟠 IMPORTANT (fiabilité prod)
+
+3. **Appeler applyMigrations() dans daemon.ts au boot**
+   - Avant toute opération SQLite
+   - Logger les migrations appliquées
+
+4. **Brancher budget alert → notification Telegram**
+   - Dans daemon.ts, tick horaire → checkBudgetAlert() → notifyTelegram si level != ok
+
+### 🟡 AMÉLIORATION (qualité)
+
+5. **Corriger syntax error dans scripts/mini-models/create-all.sh**
+   - EOF heredoc mal fermé (ligne 252)
+   
+6. **Créer les 4 mini-models Ollama** (si Ollama disponible sur Mac)
+   - `rex-intent`, `rex-tagger`, `rex-summarizer`, `rex-security-check`
+   
+7. **Créer packages/cli/src/mini-modes/** avec 3 modes initiaux
+   - `search-memory.mode.ts`
+   - `save-idea.mode.ts`
+   - `status.mode.ts`
+
+8. **Mettre à jour TODO.md** — cocher : relay-engine ✅, user-cycles ✅, activitywatch ✅, watchdog ✅, sandbox ✅, secrets ✅
+
+---
+
+## SCHÉMA CIBLE (après fix)
+
+```
+Telegram message
+       │
+       ▼
+gateway.ts — webhook handler (TOUS les messages free text)
+       │
+       ▼
+rexIdentityPipeline (rex-identity.ts) — TOUJOURS
+① memory search → snippets de contexte
+② event journal → 5 derniers events
+③ SCRIPT_RULES regex → réponse directe si match (0 LLM)
+④ mini-model rex-intent (Ollama, 20ms) → intent + confidence
+⑤ mini-mode chargé → contexte enrichi via scripts
+⑥ LLM si nécessaire :
+   └─ runRelay (relay-engine.ts) — vrai relay document
+       [Ollama → Groq → Haiku → Sonnet → Opus mentor]
+       Chaque modèle lit les contributions précédentes
+       S'arrête quand confidence >= 0.8
+       │
+       ▼
+      Réponse Telegram (splittée si > 4000 chars)
+```
