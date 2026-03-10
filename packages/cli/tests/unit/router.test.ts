@@ -84,3 +84,42 @@ describe('pickModel — REX_LLM_MODEL env override', () => {
     expect(model.length).toBeGreaterThan(0)
   })
 })
+
+// ── getRouterSnapshot ─────────────────────────────────────────────────────────
+
+describe('getRouterSnapshot', () => {
+  it('returns an object', async () => {
+    const { getRouterSnapshot } = await import('../../src/router.js')
+    const snap = await getRouterSnapshot()
+    expect(typeof snap).toBe('object')
+    expect(snap).not.toBeNull()
+  })
+
+  it('has all 7 task keys', async () => {
+    const { getRouterSnapshot } = await import('../../src/router.js')
+    const snap = await getRouterSnapshot()
+    const expected = ['background', 'categorize', 'consolidate', 'gateway', 'optimize', 'reason', 'code']
+    for (const k of expected) {
+      expect(snap).toHaveProperty(k)
+    }
+  })
+
+  it('all values are non-empty strings', async () => {
+    const { getRouterSnapshot } = await import('../../src/router.js')
+    const snap = await getRouterSnapshot()
+    for (const [, v] of Object.entries(snap)) {
+      expect(typeof v).toBe('string')
+      expect(v.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('uses REX_LLM_MODEL env override when set', async () => {
+    process.env.REX_LLM_MODEL = 'override-model:test'
+    const { getRouterSnapshot } = await import('../../src/router.js')
+    const snap = await getRouterSnapshot()
+    for (const [, v] of Object.entries(snap)) {
+      expect(v).toBe('override-model:test')
+    }
+    delete process.env.REX_LLM_MODEL
+  })
+})

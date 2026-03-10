@@ -27,6 +27,7 @@ vi.mock('node:fs', async (importOriginal) => {
 
 import {
   ProviderRegistry,
+  loadCodexToken,
   type Provider,
 } from '../../src/providers.js'
 
@@ -200,5 +201,23 @@ describe('ProviderRegistry.checkAll', () => {
     })
     await r.checkAll({ silent: true })
     expect(r.getByName('throwing-provider')?.status).toBe('unavailable')
+  })
+})
+
+// ── loadCodexToken ────────────────────────────────────────────────────────────
+
+describe('loadCodexToken', () => {
+  it('returns null when credentials file does not exist', () => {
+    // existsSync is mocked to return false
+    expect(loadCodexToken()).toBeNull()
+  })
+
+  it('does not throw', () => {
+    expect(() => loadCodexToken()).not.toThrow()
+  })
+
+  it('returns null or string', () => {
+    const result = loadCodexToken()
+    expect(result === null || typeof result === 'string').toBe(true)
   })
 })

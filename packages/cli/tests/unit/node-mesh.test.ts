@@ -21,7 +21,7 @@ vi.mock('node:child_process', async (importOriginal) => {
   return { ...actual, execSync: vi.fn(() => ''), spawnSync: vi.fn(() => ({ status: 1, stdout: '' })) }
 })
 
-import { detectLocalThermal, detectLocalCapacity } from '../../src/node-mesh.js'
+import { detectLocalThermal, detectLocalCapacity, getFleetStatus, type FleetNode } from '../../src/node-mesh.js'
 
 // ── detectLocalThermal ────────────────────────────────────────────────────────
 
@@ -84,5 +84,87 @@ describe('detectLocalCapacity', () => {
 
   it('ollamaModels is an array', () => {
     expect(Array.isArray(detectLocalCapacity().ollamaModels)).toBe(true)
+  })
+})
+
+// ── getFleetStatus ────────────────────────────────────────────────────────────
+
+function makeNode(id: string, lastSeen: string | null, overrides: Partial<FleetNode> = {}): FleetNode {
+  return {
+    id,
+    hostname: `host-${id}`,
+    ip: '127.0.0.1',
+    role: 'worker',
+    status: 'healthy',
+    lastSeen,
+    capabilities: { hasOllama: false, ollamaModels: [], hasGpu: false, hasCuda: false, hasDocker: false, hasSeatbelt: false, claudeCode: true, codex: false },
+    capacity: { cpuCores: 4, ramGb: 8, ollamaModels: [] },
+    thermal: { cpuLoadPercent: 20, ramUsedPercent: 50, healthy: true },
+    ...overrides,
+  }
+}
+
+describe('getFleetStatus', () => {
+  it('returns object with nodes, healthy, stale, offline', () => {
+    const result = getFleetStatus(new Map())
+    expect(result).toHaveProperty('nodes')
+    expect(result).toHaveProperty('healthy')
+    expect(result).toHaveProperty('stale')
+    expect(result).toHaveProperty('offline')
+  })
+
+  it('returns empty nodes for empty map', () => {
+    const result = getFleetStatus(new Map())
+    expect(result.nodes).toHaveLength(0)
+    expect(result.healthy).toBe(0)
+    expect(result.stale).toBe(0)
+    expect(result.offline).toBe(0)
+  })
+
+  it('marks recently-seen node as healthy', () => {
+    const recentDate = new Date(Date.now() - 60_000).toISOString() // 1 min ago
+    const map = new Map([['n1', makeNode('n1', recentDate)]])
+    const result = getFleetStatus(map)
+    expect(result.healthy).toBe(1)
+    expect(result.stale).toBe(0)
+    expect(result.offline).toBe(0)
+  })
+
+  it('marks node with no lastSeen as offline', () => {
+    const map = new Map([['n1', makeNode('n1', null)]])
+    const result = getFleetStatus(map)
+    expect(result.offline).toBe(1)
+    expect(result.healthy).toBe(0)
+  })
+
+  it('marks node seen >30min ago as offline', () => {
+    const oldDate = new Date(Date.now() - 31 * 60_000).toISOString()
+    const map = new Map([['n1', makeNode('n1', oldDate)]])
+    const result = getFleetStatus(map)
+    expect(result.offline).toBe(1)
+  })
+
+  it('marks node seen 10min ago as stale', () => {
+    const staleDate = new Date(Date.now() - 10 * 60_000).toISOString()
+    const map = new Map([['n1', makeNode('n1', staleDate)]])
+    const result = getFleetStatus(map)
+    expect(result.stale).toBe(1)
+    expect(result.healthy).toBe(0)
+    expect(result.offline).toBe(0)
+  })
+
+  it('counts correctly with mixed nodes', () => {
+    const recent = new Date(Date.now() - 60_000).toISOString()
+    const stale = new Date(Date.now() - 10 * 60_000).toISOString()
+    const map = new Map([
+      ['n1', makeNode('n1', recent)],
+      ['n2', makeNode('n2', stale)],
+      ['n3', makeNode('n3', null)],
+    ])
+    const result = getFleetStatus(map)
+    expect(result.healthy).toBe(1)
+    expect(result.stale).toBe(1)
+    expect(result.offline).toBe(1)
+    expect(result.nodes).toHaveLength(3)
   })
 })
