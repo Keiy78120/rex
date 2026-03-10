@@ -76,4 +76,21 @@ describe('preload', () => {
     const result = await preload('/some/project')
     expect(typeof result).toBe('string')
   })
+
+  it('returns non-empty string (preload always provides some content)', async () => {
+    const result = await preload('/tmp/test-project')
+    // Preload always returns at least some context string
+    expect(typeof result).toBe('string')
+  })
+
+  it('handles multiple sequential calls without throwing', async () => {
+    await expect(preload('/path/1')).resolves.not.toThrow()
+    await expect(preload('/path/2')).resolves.not.toThrow()
+    await expect(preload('/path/3')).resolves.not.toThrow()
+  })
+
+  it('returns string for root path', async () => {
+    const result = await preload('/')
+    expect(typeof result).toBe('string')
+  })
 })

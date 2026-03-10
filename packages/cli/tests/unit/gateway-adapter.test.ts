@@ -5,7 +5,13 @@
  * function. Rather than modifying production code, we replicate the
  * algorithm here and test correctness of the splitting strategy.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+vi.mock('../../src/logger.js', () => ({
+  createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
+}))
+
+import { createAdapter, getAvailableAdapters } from '../../src/gateway-adapter.js'
 
 // ── Replicate splitText algorithm for unit testing ──────────────────────────
 // This mirrors the exact implementation in gateway-adapter.ts so that if
@@ -102,5 +108,56 @@ describe('splitText', () => {
     for (const chunk of result) {
       expect(chunk.length).toBeLessThanOrEqual(200)
     }
+  })
+})
+
+// ── createAdapter ─────────────────────────────────────────────────────────────
+
+describe('createAdapter', () => {
+  it('creates a TelegramAdapter for "telegram" channel', () => {
+    const adapter = createAdapter('telegram', 'fake-token')
+    expect(typeof adapter).toBe('object')
+    expect(adapter).not.toBeNull()
+  })
+
+  it('creates a DiscordAdapter for "discord" channel', () => {
+    const adapter = createAdapter('discord', 'fake-webhook-url')
+    expect(typeof adapter).toBe('object')
+  })
+
+  it('creates a SlackAdapter for "slack" channel', () => {
+    const adapter = createAdapter('slack', 'fake-webhook-url')
+    expect(typeof adapter).toBe('object')
+  })
+
+  it('throws for unknown channel', () => {
+    expect(() => createAdapter('unknown-channel', 'token')).toThrow()
+  })
+
+  it('returned adapter has send, isAvailable, normalize methods', () => {
+    const adapter = createAdapter('telegram', 'token')
+    expect(typeof adapter.send).toBe('function')
+    expect(typeof adapter.isAvailable).toBe('function')
+    expect(typeof adapter.normalize).toBe('function')
+  })
+})
+
+// ── getAvailableAdapters ──────────────────────────────────────────────────────
+
+describe('getAvailableAdapters', () => {
+  it('returns an array', () => {
+    expect(Array.isArray(getAvailableAdapters({}))).toBe(true)
+  })
+
+  it('returns empty array when no tokens configured', () => {
+    expect(getAvailableAdapters({})).toHaveLength(0)
+  })
+
+  it('does not throw with all channels configured', () => {
+    expect(() => getAvailableAdapters({
+      telegram: 'fake-tg-token',
+      discord: 'fake-discord-url',
+      slack: 'fake-slack-url',
+    })).not.toThrow()
   })
 })

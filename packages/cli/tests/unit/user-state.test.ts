@@ -27,6 +27,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 
 import {
   getModelTierForState,
+  updateStateHistory,
   type UserCycleState,
 } from '../../src/user-state.js'
 
@@ -66,5 +67,32 @@ describe('getModelTierForState', () => {
 
   it('AWAKE_ACTIVE and WAKING_UP both return "auto"', () => {
     expect(getModelTierForState('AWAKE_ACTIVE')).toBe(getModelTierForState('WAKING_UP'))
+  })
+})
+
+// ── updateStateHistory ────────────────────────────────────────────────────────
+
+describe('updateStateHistory', () => {
+  it('does not throw for AWAKE_ACTIVE', () => {
+    expect(() => updateStateHistory('AWAKE_ACTIVE')).not.toThrow()
+  })
+
+  it('does not throw for SLEEPING', () => {
+    expect(() => updateStateHistory('SLEEPING')).not.toThrow()
+  })
+
+  it('does not throw for WAKING_UP', () => {
+    expect(() => updateStateHistory('WAKING_UP')).not.toThrow()
+  })
+
+  it('does not throw for AWAKE_IDLE', () => {
+    expect(() => updateStateHistory('AWAKE_IDLE')).not.toThrow()
+  })
+
+  it('does not throw when called multiple times', () => {
+    const states: UserCycleState[] = ['AWAKE_ACTIVE', 'SLEEPING', 'WAKING_UP', 'AWAKE_IDLE']
+    for (const s of states) {
+      expect(() => updateStateHistory(s)).not.toThrow()
+    }
   })
 })

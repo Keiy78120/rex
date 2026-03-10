@@ -44,7 +44,7 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-import { getRelevantSignals } from '../../src/curious.js'
+import { getRelevantSignals, printDiscoveries, type CuriousResult, type Discovery } from '../../src/curious.js'
 
 // ── getRelevantSignals ────────────────────────────────────────────────────────
 
@@ -73,5 +73,60 @@ describe('getRelevantSignals', () => {
   it('returns empty array when message has only short words', () => {
     const result = getRelevantSignals('fix bug now try go run')
     expect(result).toHaveLength(0)
+  })
+})
+
+// ── printDiscoveries ──────────────────────────────────────────────────────────
+
+function makeResult(discoveries: Discovery[] = []): CuriousResult {
+  return {
+    discoveries,
+    newCount: discoveries.length,
+    checkedAt: new Date().toISOString(),
+  }
+}
+
+function makeDiscovery(overrides: Partial<Discovery> = {}): Discovery {
+  return {
+    type: 'news',
+    title: 'Test discovery',
+    detail: 'Some detail',
+    ...overrides,
+  }
+}
+
+describe('printDiscoveries', () => {
+  it('does not throw with empty discoveries', () => {
+    expect(() => printDiscoveries(makeResult())).not.toThrow()
+  })
+
+  it('does not throw with a news discovery', () => {
+    expect(() => printDiscoveries(makeResult([makeDiscovery()]))).not.toThrow()
+  })
+
+  it('does not throw with model discovery', () => {
+    expect(() => printDiscoveries(makeResult([makeDiscovery({ type: 'model' })]))).not.toThrow()
+  })
+
+  it('does not throw with mcp discovery', () => {
+    expect(() => printDiscoveries(makeResult([makeDiscovery({ type: 'mcp' })]))).not.toThrow()
+  })
+
+  it('does not throw with repo discovery', () => {
+    expect(() => printDiscoveries(makeResult([makeDiscovery({ type: 'repo', url: 'https://github.com/test/repo' })]))).not.toThrow()
+  })
+
+  it('does not throw with open_loop discovery', () => {
+    expect(() => printDiscoveries(makeResult([makeDiscovery({ type: 'open_loop' })]))).not.toThrow()
+  })
+
+  it('does not throw with multiple discovery types', () => {
+    const discoveries: Discovery[] = [
+      makeDiscovery({ type: 'model' }),
+      makeDiscovery({ type: 'mcp' }),
+      makeDiscovery({ type: 'news' }),
+      makeDiscovery({ type: 'repo' }),
+    ]
+    expect(() => printDiscoveries(makeResult(discoveries))).not.toThrow()
   })
 })
