@@ -7,30 +7,49 @@ on:
     branches: [main, master]
 
 jobs:
-  # ── Fast unit tests — always runs, < 30s ───────────────────────────────────
-  unit:
-    name: Unit Tests
+  # ── Type check — zero TS errors ────────────────────────────────────────────
+  typecheck:
+    name: TypeScript
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/cli
     steps:
       - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-        working-directory: .
 
-      - name: Run unit tests
-        run: pnpm test
+      - name: TypeScript type check
+        run: pnpm --filter rex-claude exec tsc --noEmit
+
+  # ── Unit + integration tests — always runs, < 30s ──────────────────────────
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests with coverage
+        run: pnpm --filter rex-claude test:coverage
 
       - name: Upload coverage
         if: success()
@@ -40,20 +59,21 @@ jobs:
           path: packages/cli/coverage/
           retention-days: 7
 
-  # ── Build check — ensure TypeScript compiles ───────────────────────────────
+  # ── Build check — ensure tsup compiles ─────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -61,7 +81,7 @@ jobs:
       - name: Build CLI
         run: pnpm --filter rex-claude build
 
-      - name: Check dist output
+      - name: Verify dist output
         run: test -f packages/cli/dist/index.js && echo "✓ dist/index.js exists"
 
   # ── Security audit ─────────────────────────────────────────────────────────
@@ -71,12 +91,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -86,9 +108,9 @@ jobs:
 
       - name: Check for secrets in diff
         run: |
-          # Simple grep for common secret patterns in changed files
-          if git diff --name-only HEAD~1 HEAD 2>/dev/null | xargs grep -l 'sk-[a-zA-Z0-9]\{48\}\|ghp_[a-zA-Z0-9]\{36\}\|AKIA[0-9A-Z]\{16\}' 2>/dev/null; then
-            echo "⚠️  Possible secrets detected in diff — review before merging"
+          if git diff --name-only HEAD~1 HEAD 2>/dev/null \
+            | xargs grep -l 'sk-[a-zA-Z0-9]\{48\}\|ghp_[a-zA-Z0-9]\{36\}\|AKIA[0-9A-Z]\{16\}' 2>/dev/null; then
+            echo "⚠️  Possible secrets detected — review before merging"
             exit 1
           fi
           echo "✓ No secrets detected"
