@@ -59,23 +59,24 @@ packages/
     agent-runtime.ts
     resource-hub.ts
     setup-wizard.ts   ← wizard onboarding
-    watchdog.ts       ← (à créer)
-    relay-engine.ts   ← (à créer)
-    user-cycles.ts    ← (à créer)
-    agent-templates/  ← (à créer)
+    watchdog.ts       ← ✅ implémenté
+    relay-engine.ts   ← ✅ implémenté (RxJS pipeline)
+    user-cycles.ts    ← ✅ implémenté (XState)
+    agent-templates/  ← ✅ implémenté (5 personas: dg/drh/ceo/coo/freelance)
   memory/src/
     index.ts, bm25.ts, vector.ts
   flutter_app/        ← app macOS/iOS
 ```
 
-## État actuel (09/03/2026)
-- ✅ ~80 fichiers TypeScript implémentés
-- ✅ Fleet thermal, CURIOUS signals, Ink TUI, Qwen provider
-- ✅ Pre-push gate, security scanner, resource-hub
-- 🔄 TODO: voir CLAUDE_TASK.md (12 tâches prioritaires)
-- ❌ gateway.ts REX Identity Layer (priorité 1)
-- ❌ relay-engine.ts (priorité 2)
-- ❌ user-cycles.ts XState (priorité 3)
+## État actuel (15/03/2026) — PHASES 1-4 COMPLÈTES ✅
+- ✅ 117+ fichiers TypeScript implémentés
+- ✅ CLAUDE_TASK.md — 12/12 tâches complètes
+- ✅ gateway.ts REX Identity Layer + rex-identity.ts pipeline 5 étapes
+- ✅ relay-engine.ts (Ollama→Groq→Haiku→Sonnet→Opus, RxJS)
+- ✅ user-cycles.ts (XState AWAKE_ACTIVE/AWAKE_IDLE/SLEEPING/WAKING_UP)
+- ✅ 184 tests vitest — unit + integration — `pnpm test` < 2s
+- ✅ CI GitHub Actions (unit + build + security audit)
+- 🔄 Prochaine étape : déploiement VPS (docs/vps-install.md)
 
 ## Commandes utiles
 ```bash

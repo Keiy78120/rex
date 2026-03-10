@@ -109,7 +109,7 @@ Tu ne le sauras même pas — jusqu'à ce qu'il te montre le résultat.
 
 ### État actuel — 15/03/2026
 
-**80+ fichiers TypeScript implémentés.** Phases 1-4 complètes.
+**117+ fichiers TypeScript implémentés.** Phases 1-4 complètes. 184 tests vitest.
 
 Opérationnel :
 - Gateway Telegram (KeepAlive, streaming Qwen, guard Stop)
@@ -117,10 +117,11 @@ Opérationnel :
 - Fleet multi-nodes (BRAIN/FLEET, versioning API, Dijkstra routing)
 - Memory hybride (BM25 + sqlite-vec, 768 dim, FTS5)
 - 5 agent templates (DG/DRH/CEO/COO/Freelance)
-- Mini-modes (intent detection 0 LLM)
+- Mini-modes (intent detection 0 LLM, 6 niveaux routing)
 - Flutter app macOS (26 pages)
 - Resource Hub (20+ ressources, catalog MCP/guards/skills)
 - Secrets vault (AES-256-GCM)
-- Test infra (mock LLM, mock AW, seed data, migration tests, load tests)
+- Suite de tests vitest (184 tests, 11 fichiers, < 2s — unit + integration)
+- CI GitHub Actions (unit + build + security audit)
 
 Prochaine étape : déploiement VPS + migration Garry → `docs/garry-migration.md`
