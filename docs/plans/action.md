@@ -2831,7 +2831,7 @@ Expected:
 ### Migrations de données
 - [x] Schema SQLite versioned (`db-migrations.ts`, 5 migrations)
 - [x] `rex upgrade` → migre la DB automatiquement sans perte
-- [ ] Test : vieille mémoire v1 fonctionne après upgrade v2
+- [x] Test : vieille mémoire v1 fonctionne après upgrade v2 — `test-migrations.ts` 23/23 assertions, `rex test migrations`
 
 ### Backup & Recovery
 - [x] Backup automatique SQLite vers local (`backup.ts`)
@@ -2868,9 +2868,9 @@ Expected:
 - [x] Crons avec timezone explicite — daily summary hour uses `toLocaleString(tz)` conversion
 
 ### Accessibilité API (fleet)
-- [ ] Versioning de l'API BRAIN ↔ FLEET : `/api/v1/`, `/api/v2/`
-- [ ] Breaking changes annoncés → migration guidée
-- [ ] Fleet node old version → BRAIN backwards compatible ?
+- [x] Versioning de l'API BRAIN ↔ FLEET : `/api/v1/` — hub.ts `API_VERSION='v1'`, `/api/v1/version` endpoint
+- [x] Breaking changes annoncés → `MIN_COMPATIBLE_VERSION` + X-Rex-Version header in every response
+- [x] Fleet node old version → BRAIN backwards compatible — node-mesh.ts checks semver before registration
 
 ---
 
