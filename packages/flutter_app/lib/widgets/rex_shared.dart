@@ -159,8 +159,10 @@ class RexSection extends StatelessWidget {
               color: context.rex.textSecondary,
             ),
           ),
-          const Spacer(),
-          if (action != null) action!,
+          if (action != null) ...[
+            const Spacer(),
+            action!,
+          ],
         ],
       ),
     );
