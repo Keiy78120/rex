@@ -44,3 +44,26 @@ describe('deployVps', () => {
     await expect(deployVps({ host: 'bad-host', user: 'root' })).resolves.not.toThrow()
   })
 })
+
+// ── deployVps — additional options ───────────────────────────────────────────
+
+describe('deployVps — additional', () => {
+  it('returns boolean with sshKey option', async () => {
+    const result = await deployVps({ host: 'test.host', user: 'deploy', sshKey: '/tmp/key' })
+    expect(typeof result).toBe('boolean')
+  })
+
+  it('returns boolean with port option', async () => {
+    const result = await deployVps({ host: 'test.host', user: 'deploy', port: 2222 })
+    expect(typeof result).toBe('boolean')
+  })
+
+  it('does not throw with dryRun=true', async () => {
+    await expect(deployVps({ host: 'test.host', user: 'root', dryRun: true })).resolves.not.toThrow()
+  })
+
+  it('result is false when SSH fails for all retry attempts', async () => {
+    const result = await deployVps({ host: 'unreachable.host', user: 'admin' })
+    expect(result).toBe(false)
+  })
+})

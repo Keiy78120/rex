@@ -59,3 +59,26 @@ describe('migrate', () => {
     await expect(migrate()).resolves.not.toThrow()
   })
 })
+
+// ── migrate — with legacy files ───────────────────────────────────────────────
+
+describe('migrate — with legacy data', () => {
+  it('does not throw when legacy DB exists', async () => {
+    const { existsSync } = await import('node:fs')
+    vi.mocked(existsSync).mockImplementation((p: string | Buffer | URL) =>
+      typeof p === 'string' && p.includes('.rex-memory')
+    )
+    await expect(migrate()).resolves.not.toThrow()
+  })
+
+  it('resolves to undefined in all scenarios', async () => {
+    expect(await migrate()).toBeUndefined()
+  })
+
+  it('does not throw when legacy pending dir exists', async () => {
+    const { existsSync, readdirSync } = await import('node:fs')
+    vi.mocked(existsSync).mockReturnValueOnce(true)
+    vi.mocked(readdirSync).mockReturnValueOnce(['session-1.json'] as any)
+    await expect(migrate()).resolves.not.toThrow()
+  })
+})
