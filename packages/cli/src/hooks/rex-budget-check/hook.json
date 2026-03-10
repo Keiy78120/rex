@@ -1,0 +1,11 @@
+{
+  "id": "rex-budget-check",
+  "name": "REX Budget Check",
+  "description": "Vérifie le budget REX avant chaque run. Alerte à 80% du daily limit via Telegram.",
+  "version": "1.0.0",
+  "events": ["agent:bootstrap"],
+  "export": "default",
+  "requires": {
+    "config": ["workspace.dir"]
+  }
+}
