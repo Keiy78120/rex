@@ -28,7 +28,7 @@ vi.mock('better-sqlite3', () => {
   return { default: MockDB }
 })
 
-import { hashPrompt, cacheGet, cacheStats } from '../../src/semantic-cache.js'
+import { hashPrompt, cacheGet, cacheSet, cacheStats, cacheClean } from '../../src/semantic-cache.js'
 
 // ── hashPrompt ────────────────────────────────────────────────────────────────
 
@@ -78,5 +78,41 @@ describe('cacheStats', () => {
 
   it('does not throw', () => {
     expect(() => cacheStats()).not.toThrow()
+  })
+
+  it('returns object with hitRate field', () => {
+    expect(cacheStats()).toHaveProperty('hitRate')
+  })
+
+  it('returns object with totalTokensSaved field', () => {
+    expect(cacheStats()).toHaveProperty('totalTokensSaved')
+  })
+})
+
+// ── cacheSet ──────────────────────────────────────────────────────────────────
+
+describe('cacheSet', () => {
+  it('does not throw', () => {
+    expect(() => cacheSet('hash-abc', 'some-response', 'ollama', 'test-prompt', 100, 50)).not.toThrow()
+  })
+
+  it('accepts minimal args', () => {
+    expect(() => cacheSet(hashPrompt('hello'), 'response', 'claude', 'hello', 10, 5)).not.toThrow()
+  })
+})
+
+// ── cacheClean ────────────────────────────────────────────────────────────────
+
+describe('cacheClean', () => {
+  it('returns a number', () => {
+    expect(typeof cacheClean()).toBe('number')
+  })
+
+  it('does not throw', () => {
+    expect(() => cacheClean()).not.toThrow()
+  })
+
+  it('accepts custom maxAge days param', () => {
+    expect(() => cacheClean(7)).not.toThrow()
   })
 })

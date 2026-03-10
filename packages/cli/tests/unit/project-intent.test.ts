@@ -23,6 +23,8 @@ vi.mock('node:child_process', async (importOriginal) => {
 
 import {
   intentToPreloadLine,
+  printIntent,
+  detectIntent,
   type IntentContext,
   type ProjectIntent,
 } from '../../src/project-intent.js'
@@ -116,5 +118,71 @@ describe('intentToPreloadLine', () => {
       const line = intentToPreloadLine(makeCtx(intent))
       expect(line.length).toBeGreaterThan(0)
     }
+  })
+})
+
+// ── printIntent ───────────────────────────────────────────────────────────────
+
+describe('printIntent', () => {
+  it('does not throw for a basic context', () => {
+    expect(() => printIntent(makeCtx())).not.toThrow()
+  })
+
+  it('does not throw with debug=true', () => {
+    const ctx = makeCtx('bug-fix', { signals: ['has-tests', 'dirty-git'] })
+    expect(() => printIntent(ctx, true)).not.toThrow()
+  })
+
+  it('does not throw with missing setup items', () => {
+    const ctx = makeCtx('new-project', { missing: { ci: true, tests: true, lint: true } })
+    expect(() => printIntent(ctx)).not.toThrow()
+  })
+
+  it('does not throw with actions list', () => {
+    const ctx = makeCtx('feature', { actions: ['/debug-assist', '/api-design'] })
+    expect(() => printIntent(ctx)).not.toThrow()
+  })
+
+  it('does not throw for all intent types', () => {
+    const intents: ProjectIntent[] = ['new-project', 'feature', 'bug-fix', 'refactor', 'infra', 'docs', 'explore']
+    for (const intent of intents) {
+      expect(() => printIntent(makeCtx(intent))).not.toThrow()
+    }
+  })
+})
+
+// ── detectIntent ──────────────────────────────────────────────────────────────
+
+describe('detectIntent', () => {
+  it('returns an IntentContext with required fields', () => {
+    const ctx = detectIntent('/tmp/no-project')
+    expect(ctx).toHaveProperty('intent')
+    expect(ctx).toHaveProperty('confidence')
+    expect(ctx).toHaveProperty('missing')
+    expect(ctx).toHaveProperty('actions')
+    expect(ctx).toHaveProperty('signals')
+  })
+
+  it('intent is one of the valid ProjectIntent values', () => {
+    const VALID = ['new-project', 'feature', 'bug-fix', 'refactor', 'infra', 'docs', 'explore']
+    const ctx = detectIntent('/tmp/no-project')
+    expect(VALID).toContain(ctx.intent)
+  })
+
+  it('confidence is one of: high, medium, low', () => {
+    const ctx = detectIntent('/tmp/no-project')
+    expect(['high', 'medium', 'low']).toContain(ctx.confidence)
+  })
+
+  it('actions is an array of strings', () => {
+    const ctx = detectIntent('/tmp/no-project')
+    expect(Array.isArray(ctx.actions)).toBe(true)
+    for (const a of ctx.actions) {
+      expect(typeof a).toBe('string')
+    }
+  })
+
+  it('does not throw', () => {
+    expect(() => detectIntent('/tmp/empty-dir')).not.toThrow()
   })
 })
