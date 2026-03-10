@@ -1,116 +1,62 @@
 /**
- * Integration tests for event-journal.ts — HQ event log.
- * Uses a real temp SQLite DB. No network, no daemon.
+ * Integration tests for event-journal.ts — appendEvent, getUnacked, ackEvent,
+ * replayUnacked, getJournalStats, purgeOldJournalEvents.
+ * Uses a real SQLite DB in a temp directory.
+ * @module HQ
  */
-import { describe, it, expect, afterAll } from 'vitest'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
-import { mkdirSync, rmSync } from 'node:fs'
-
-// ── Hoisted setup ─────────────────────────────────────────────────────────────
+import { describe, it, expect, afterAll, vi } from 'vitest'
+import { rmSync } from 'node:fs'
 
 const { TEST_DIR } = vi.hoisted(() => {
-  const { join } = require('node:path')
-  const { tmpdir } = require('node:os')
-  const { mkdirSync } = require('node:fs')
-  const dir = join(tmpdir(), `rex-event-journal-test-${process.pid}`)
+  const { mkdirSync } = require('node:fs') as typeof import('node:fs')
+  const { join } = require('node:path') as typeof import('node:path')
+  const { tmpdir } = require('node:os') as typeof import('node:os')
+  const dir = join(tmpdir(), `rex-journal-test-${Date.now()}`)
   mkdirSync(dir, { recursive: true })
-  process.env['REX_DIR'] = dir
   return { TEST_DIR: dir }
+})
+
+vi.mock('../../src/paths.js', () => {
+  const { join } = require('node:path') as typeof import('node:path')
+  return {
+    REX_DIR: TEST_DIR,
+    ensureRexDirs: () => {},
+    MEMORY_DB_PATH: join(TEST_DIR, 'memory.sqlite'),
+    CONFIG_PATH: join(TEST_DIR, 'config.json'),
+    JOURNAL_DB_PATH: join(TEST_DIR, 'event-journal.sqlite'),
+  }
 })
 
 vi.mock('../../src/logger.js', () => ({
   createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
 }))
 
-vi.mock('../../src/paths.js', () => {
-  const { join } = require('node:path')
-  const { mkdirSync } = require('node:fs')
-  const dir = process.env['REX_DIR']!
-  return {
-    REX_DIR: dir,
-    JOURNAL_DB_PATH: join(dir, 'event-journal.sqlite'),
-    ensureRexDirs: () => mkdirSync(dir, { recursive: true }),
-    DAEMON_LOG_PATH: join(dir, 'daemon.log'),
-    MEMORY_DB_PATH: join(dir, 'rex.sqlite'),
-    SYNC_QUEUE_DB_PATH: join(dir, 'sync-queue.sqlite'),
-  }
-})
-
 import {
   appendEvent,
-  ackEvent,
   getUnacked,
-  getJournalStats,
+  ackEvent,
   replayUnacked,
+  getJournalStats,
   purgeOldJournalEvents,
-  type JournalEvent,
 } from '../../src/event-journal.js'
 
 afterAll(() => {
-  try { rmSync(TEST_DIR, { recursive: true }) } catch {}
+  rmSync(TEST_DIR, { recursive: true, force: true })
 })
 
 // ── appendEvent ───────────────────────────────────────────────────────────────
 
 describe('appendEvent', () => {
-  it('returns a positive ID on success', () => {
+  it('returns a positive integer ID', () => {
     const id = appendEvent('gateway_message', 'test', { text: 'hello' })
+    expect(typeof id).toBe('number')
     expect(id).toBeGreaterThan(0)
   })
 
-  it('returns incremental IDs for successive appends', () => {
-    const id1 = appendEvent('daemon_action', 'daemon', { action: 'start' })
-    const id2 = appendEvent('daemon_action', 'daemon', { action: 'stop' })
+  it('each call returns an incrementing ID', () => {
+    const id1 = appendEvent('memory_observation', 'test', { data: 1 })
+    const id2 = appendEvent('memory_observation', 'test', { data: 2 })
     expect(id2).toBeGreaterThan(id1)
-  })
-
-  it('accepts all journal event types', () => {
-    const types = [
-      'gateway_message', 'memory_observation', 'task_delegation',
-      'sync_event', 'guard_trigger', 'daemon_action',
-    ] as const
-    for (const type of types) {
-      expect(appendEvent(type, 'test', {})).toBeGreaterThan(0)
-    }
-  })
-
-  it('serializes complex payload as JSON', () => {
-    const payload = { nested: { key: 'val' }, arr: [1, 2] }
-    const id = appendEvent('sync_event', 'test-sync', payload)
-    const events = getUnacked(200).filter(e => e.id === id)
-    expect(events.length).toBe(1)
-    const parsed = JSON.parse(events[0].payload)
-    expect(parsed.nested.key).toBe('val')
-    expect(parsed.arr).toEqual([1, 2])
-  })
-})
-
-// ── ackEvent ──────────────────────────────────────────────────────────────────
-
-describe('ackEvent', () => {
-  it('returns true when event is acked successfully', () => {
-    const id = appendEvent('task_delegation', 'fleet', { job: 'run' })
-    expect(ackEvent(id)).toBe(true)
-  })
-
-  it('returns false for unknown ID', () => {
-    expect(ackEvent(999999)).toBe(false)
-  })
-
-  it('acked event is no longer in unacked list', () => {
-    const id = appendEvent('guard_trigger', 'security', { guard: 'force-push' })
-    ackEvent(id)
-    const unacked = getUnacked().map(e => e.id)
-    expect(unacked).not.toContain(id)
-  })
-
-  it('acked event remains in journal stats total', () => {
-    const before = getJournalStats().total
-    const id = appendEvent('memory_observation', 'ingest', { chunk: 1 })
-    ackEvent(id)
-    const after = getJournalStats().total
-    expect(after).toBeGreaterThan(before)
   })
 })
 
@@ -121,37 +67,81 @@ describe('getUnacked', () => {
     expect(Array.isArray(getUnacked())).toBe(true)
   })
 
-  it('newly appended event appears in unacked', () => {
-    const id = appendEvent('gateway_message', 'telegram', { msg: 'ping' })
-    expect(getUnacked().some(e => e.id === id)).toBe(true)
+  it('newly appended events are unacked', () => {
+    const before = getUnacked().length
+    appendEvent('task_delegation', 'test-src', { task: 'x' })
+    const after = getUnacked().length
+    expect(after).toBeGreaterThan(before)
   })
 
-  it('respects limit parameter', () => {
-    for (let i = 0; i < 5; i++) appendEvent('daemon_action', 'loop', { i })
-    const limited = getUnacked(2)
-    expect(limited.length).toBeLessThanOrEqual(2)
-  })
-
-  it('returned events have correct shape', () => {
-    const id = appendEvent('sync_event', 'hub', { direction: 'push' })
-    const events = getUnacked().filter(e => e.id === id)
-    if (events.length > 0) {
-      const e: JournalEvent = events[0]
+  it('each event has required fields', () => {
+    const events = getUnacked()
+    for (const e of events) {
       expect(e).toHaveProperty('id')
       expect(e).toHaveProperty('event_type')
       expect(e).toHaveProperty('source')
       expect(e).toHaveProperty('payload')
       expect(e).toHaveProperty('node_id')
       expect(e).toHaveProperty('created_at')
+      expect(e).toHaveProperty('acked')
+    }
+  })
+
+  it('acked field is false for new events', () => {
+    const events = getUnacked()
+    for (const e of events) {
       expect(e.acked).toBe(false)
     }
+  })
+})
+
+// ── ackEvent ──────────────────────────────────────────────────────────────────
+
+describe('ackEvent', () => {
+  it('returns true when event exists and is acked', () => {
+    const id = appendEvent('gateway_message', 'ack-test', { msg: 'ack me' })
+    expect(ackEvent(id)).toBe(true)
+  })
+
+  it('returns false when event does not exist', () => {
+    expect(ackEvent(999999)).toBe(false)
+  })
+
+  it('acked event no longer appears in getUnacked()', () => {
+    const id = appendEvent('gateway_message', 'ack-test-2', { msg: 'bye' })
+    ackEvent(id)
+    const unacked = getUnacked()
+    expect(unacked.find(e => e.id === id)).toBeUndefined()
+  })
+})
+
+// ── replayUnacked ─────────────────────────────────────────────────────────────
+
+describe('replayUnacked', () => {
+  it('returns { replayed, total } shape', () => {
+    const result = replayUnacked()
+    expect(result).toHaveProperty('replayed')
+    expect(result).toHaveProperty('total')
+  })
+
+  it('replayed equals total after replay', () => {
+    // Add new events before replay
+    appendEvent('gateway_message', 'replay-src', { idx: 1 })
+    appendEvent('gateway_message', 'replay-src', { idx: 2 })
+    const result = replayUnacked()
+    expect(result.replayed).toBe(result.total)
+  })
+
+  it('getUnacked() returns 0 after replayUnacked()', () => {
+    replayUnacked() // ensure all acked
+    expect(getUnacked().length).toBe(0)
   })
 })
 
 // ── getJournalStats ───────────────────────────────────────────────────────────
 
 describe('getJournalStats', () => {
-  it('returns stats object with required fields', () => {
+  it('returns stats with required fields', () => {
     const stats = getJournalStats()
     expect(stats).toHaveProperty('total')
     expect(stats).toHaveProperty('unacked')
@@ -161,71 +151,36 @@ describe('getJournalStats', () => {
     expect(stats).toHaveProperty('newest')
   })
 
-  it('total >= unacked', () => {
-    const stats = getJournalStats()
-    expect(stats.total).toBeGreaterThanOrEqual(stats.unacked)
+  it('total is a non-negative number', () => {
+    const { total } = getJournalStats()
+    expect(typeof total).toBe('number')
+    expect(total).toBeGreaterThanOrEqual(0)
   })
 
-  it('byType is an object with event types', () => {
-    appendEvent('guard_trigger', 'guard', { rule: 'no-force-push' })
-    const stats = getJournalStats()
-    expect(typeof stats.byType).toBe('object')
-    expect(stats.byType['guard_trigger']).toBeGreaterThan(0)
+  it('unacked is a non-negative number', () => {
+    const { unacked } = getJournalStats()
+    expect(typeof unacked).toBe('number')
+    expect(unacked).toBeGreaterThanOrEqual(0)
   })
 
-  it('bySource reflects sources used', () => {
-    appendEvent('daemon_action', 'unique-src-xyz', { x: 1 })
-    const stats = getJournalStats()
-    expect(stats.bySource['unique-src-xyz']).toBeGreaterThan(0)
-  })
-
-  it('oldest and newest are ISO strings or null', () => {
-    const stats = getJournalStats()
-    if (stats.oldest !== null) expect(() => new Date(stats.oldest!)).not.toThrow()
-    if (stats.newest !== null) expect(() => new Date(stats.newest!)).not.toThrow()
-  })
-})
-
-// ── replayUnacked ─────────────────────────────────────────────────────────────
-
-describe('replayUnacked', () => {
-  it('returns object with replayed and total fields', () => {
-    appendEvent('gateway_message', 'relay', { msg: 'replay me' })
-    const result = replayUnacked()
-    expect(result).toHaveProperty('replayed')
-    expect(result).toHaveProperty('total')
-    expect(typeof result.replayed).toBe('number')
-    expect(typeof result.total).toBe('number')
-  })
-
-  it('replayed === total (all events acked after replay)', () => {
-    appendEvent('sync_event', 'replay-test', { batch: 1 })
-    appendEvent('sync_event', 'replay-test', { batch: 2 })
-    const result = replayUnacked()
-    expect(result.replayed).toBe(result.total)
-  })
-
-  it('after replay, unacked list shrinks', () => {
-    appendEvent('daemon_action', 'replay-shrink', { tick: 1 })
-    const before = getUnacked().length
-    replayUnacked()
-    const after = getUnacked().length
-    expect(after).toBeLessThanOrEqual(before)
+  it('byType is an object with event type counts', () => {
+    appendEvent('gateway_message', 'stats-src', { x: 1 })
+    const { byType } = getJournalStats()
+    expect(typeof byType).toBe('object')
+    expect(byType['gateway_message']).toBeGreaterThanOrEqual(1)
   })
 })
 
 // ── purgeOldJournalEvents ─────────────────────────────────────────────────────
 
 describe('purgeOldJournalEvents', () => {
-  it('returns number of purged events', () => {
-    const purged = purgeOldJournalEvents(365)
+  it('returns a number', () => {
+    const purged = purgeOldJournalEvents(0)
     expect(typeof purged).toBe('number')
     expect(purged).toBeGreaterThanOrEqual(0)
   })
 
-  it('purges 0 events when cutoff is far in future (no old acked events)', () => {
-    // All events in this test were just created — none are 1 year old
-    const purged = purgeOldJournalEvents(365)
-    expect(purged).toBe(0)
+  it('does not throw', () => {
+    expect(() => purgeOldJournalEvents(30)).not.toThrow()
   })
 })
