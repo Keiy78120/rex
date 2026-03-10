@@ -23,7 +23,7 @@ vi.mock('../../src/logger.js', () => ({
 }))
 
 vi.mock('../../src/config.js', () => ({
-  loadConfig: vi.fn(() => ({})),
+  loadConfig: vi.fn(() => ({ selfImprovement: { enabled: false } })),
 }))
 
 vi.mock('../../src/llm.js', () => ({
@@ -56,7 +56,7 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-import { listLessons } from '../../src/self-improve.js'
+import { listLessons, selfReview } from '../../src/self-improve.js'
 
 // ── listLessons ───────────────────────────────────────────────────────────────
 
@@ -79,5 +79,31 @@ describe('listLessons', () => {
       expect(typeof l).toBe('object')
       expect(l).not.toBeNull()
     }
+  })
+})
+
+// ── selfReview ────────────────────────────────────────────────────────────────
+
+describe('selfReview', () => {
+  it('returns { newLessons, ruleCandidates } when disabled', async () => {
+    const result = await selfReview()
+    expect(result).toHaveProperty('newLessons')
+    expect(result).toHaveProperty('ruleCandidates')
+  })
+
+  it('returns numbers for both fields', async () => {
+    const result = await selfReview()
+    expect(typeof result.newLessons).toBe('number')
+    expect(typeof result.ruleCandidates).toBe('number')
+  })
+
+  it('returns zero counts when disabled', async () => {
+    const result = await selfReview()
+    expect(result.newLessons).toBe(0)
+    expect(result.ruleCandidates).toBe(0)
+  })
+
+  it('does not throw', async () => {
+    await expect(selfReview()).resolves.not.toThrow()
   })
 })

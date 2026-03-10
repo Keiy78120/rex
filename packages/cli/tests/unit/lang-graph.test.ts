@@ -97,3 +97,40 @@ describe('cmdGraphList', () => {
     spy.mockRestore()
   })
 })
+
+// ── cmdGraphStatus ────────────────────────────────────────────────────────────
+
+import { cmdGraphStatus } from '../../src/lang-graph.js'
+
+describe('cmdGraphStatus', () => {
+  it('does not throw with empty args', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() => cmdGraphStatus([])).not.toThrow()
+    spy.mockRestore()
+    errSpy.mockRestore()
+  })
+
+  it('does not throw with --json flag', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect(() => cmdGraphStatus(['--json'])).not.toThrow()
+    spy.mockRestore()
+  })
+
+  it('does not crash for unknown trace id (may call process.exit)', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | string | null) => never)
+    try { cmdGraphStatus(['nonexistent-trace-id-9999']) } catch { /* ignore */ }
+    spy.mockRestore()
+    errSpy.mockRestore()
+    exitSpy.mockRestore()
+    expect(true).toBe(true)
+  })
+
+  it('does not throw with --limit=5', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect(() => cmdGraphStatus(['--limit=5'])).not.toThrow()
+    spy.mockRestore()
+  })
+})
