@@ -54,6 +54,7 @@ export interface FleetNode {
   ip: string
   capabilities: string[]   // keys of NodeCapabilities that are true
   score: number            // weighted score — higher = preferred
+  version?: string         // rex-claude semver, used for BRAIN ↔ FLEET compat checks
   capacity?: NodeCapacity  // hardware capacity (set by buildLocalFleetNode)
   thermalStatus?: ThermalStatus  // live CPU/RAM (local node only)
   lastSeen: string
@@ -270,6 +271,13 @@ export function buildLocalFleetNode(): FleetNode {
 
   const thermalStatus = detectLocalThermal()
 
+  let rexVersion: string | undefined
+  try {
+    const pkgPath = new URL('../../package.json', import.meta.url)
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version?: string }
+    rexVersion = pkg.version
+  } catch {}
+
   return {
     id:           getNodeId(),
     hostname:     hostname(),
@@ -277,6 +285,7 @@ export function buildLocalFleetNode(): FleetNode {
     ip:           getLocalIp(),
     capabilities: active,
     score:        computeScore(active, capacity),
+    version:      rexVersion,
     capacity,
     thermalStatus,
     lastSeen:     new Date().toISOString(),

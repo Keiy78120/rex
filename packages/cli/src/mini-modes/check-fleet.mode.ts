@@ -26,7 +26,7 @@ async function loadFleetStatus(ctx: ModeContext): Promise<Record<string, unknown
     // Fallback: try rex doctor
     try {
       const raw = execSync('rex doctor --quiet 2>&1 | head -20', {
-        encoding: 'utf-8', timeout: 6000, shell: true,
+        encoding: 'utf-8' as BufferEncoding, timeout: 6000, shell: '/bin/sh',
       })
       return { fleet_raw: raw.trim(), fleet_status: null }
     } catch { return { fleet_status: null, fleet_raw: null } }

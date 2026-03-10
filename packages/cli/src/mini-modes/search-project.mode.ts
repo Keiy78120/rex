@@ -34,7 +34,7 @@ async function loadGitActivity(ctx: ModeContext): Promise<Record<string, unknown
     // Recent commits across all git repos in ~/Documents/Developer
     const raw = execSync(
       'git log --oneline --since="7 days ago" --all --no-walk --format="%h %s (%ar)" 2>/dev/null | head -5',
-      { encoding: 'utf-8', timeout: 4000, shell: true, cwd: process.env.HOME }
+      { encoding: 'utf-8' as BufferEncoding, timeout: 4000, shell: '/bin/sh', cwd: process.env.HOME ?? process.cwd() }
     )
     return { git_recent: raw.trim() || null }
   } catch { return { git_recent: null } }
@@ -43,7 +43,7 @@ async function loadGitActivity(ctx: ModeContext): Promise<Record<string, unknown
 async function loadOpenLoops(ctx: ModeContext): Promise<Record<string, unknown>> {
   try {
     const raw = execSync('rex context --json 2>/dev/null | head -c 2000', {
-      encoding: 'utf-8', timeout: 5000, shell: true,
+      encoding: 'utf-8' as BufferEncoding, timeout: 5000, shell: '/bin/sh',
     })
     const match = raw.match(/\{[\s\S]*\}/)
     if (!match) return { open_loops: null }
