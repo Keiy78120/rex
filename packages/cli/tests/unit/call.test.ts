@@ -45,4 +45,26 @@ describe('call', () => {
   it('does not throw with unknown subcommand', async () => {
     await expect(call(['unknown'])).resolves.not.toThrow()
   })
+
+  it('does not throw with "stop" subcommand', async () => {
+    await expect(call(['stop'])).resolves.not.toThrow()
+  })
+
+  it('does not throw with "start" subcommand', async () => {
+    await expect(call(['start'])).resolves.not.toThrow()
+  })
+
+  it('does not throw with "list" subcommand', async () => {
+    await expect(call(['list'])).resolves.not.toThrow()
+  })
+
+  it('does not throw with extra unknown flags', async () => {
+    await expect(call(['--dry-run', '--verbose'])).resolves.not.toThrow()
+  })
+
+  it('resolves for multiple subcommands in sequence', async () => {
+    await expect(call(['status'])).resolves.not.toThrow()
+    await expect(call(['list'])).resolves.not.toThrow()
+    await expect(call([])  ).resolves.not.toThrow()
+  })
 })

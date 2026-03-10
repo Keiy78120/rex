@@ -31,7 +31,30 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-import { listClients, getClient } from '../../src/client-factory.js'
+import {
+  listClients, getClient, printClients, printClientDetail,
+  pauseClient, resumeClient, removeClient, getClientLogs, stopClient,
+  type ClientConfig,
+} from '../../src/client-factory.js'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function makeClient(overrides: Partial<ClientConfig> = {}): ClientConfig {
+  return {
+    id: 'test-client-001',
+    name: 'Test Client',
+    trade: 'plumbing',
+    plan: 'starter',
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ports: { dify: 3000, n8n: 3001, twenty: 3002 },
+    litellm: { monthlyBudgetUsd: 10, model: 'qwen2.5:7b' },
+    docker: { composeFile: '/tmp/compose.yml', networkName: 'rex-test', dataDir: '/tmp/data' },
+    metrics: { totalTokens: 0, totalCostUsd: 0, sessionsCount: 0 },
+    ...overrides,
+  }
+}
 
 // ── listClients ───────────────────────────────────────────────────────────────
 
@@ -59,5 +82,106 @@ describe('getClient', () => {
 
   it('does not throw', () => {
     expect(() => getClient('any-id')).not.toThrow()
+  })
+})
+
+// ── printClients ──────────────────────────────────────────────────────────────
+
+describe('printClients', () => {
+  it('does not throw with empty array', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect(() => printClients([])).not.toThrow()
+    spy.mockRestore()
+  })
+
+  it('does not throw with one client', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect(() => printClients([makeClient()])).not.toThrow()
+    spy.mockRestore()
+  })
+
+  it('does not throw with multiple clients of different plans', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const clients = [
+      makeClient({ id: 'c1', plan: 'starter' }),
+      makeClient({ id: 'c2', plan: 'pro' }),
+      makeClient({ id: 'c3', plan: 'enterprise', status: 'paused' }),
+    ]
+    expect(() => printClients(clients)).not.toThrow()
+    spy.mockRestore()
+  })
+})
+
+// ── printClientDetail ─────────────────────────────────────────────────────────
+
+describe('printClientDetail', () => {
+  it('does not throw with minimal client', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect(() => printClientDetail(makeClient())).not.toThrow()
+    spy.mockRestore()
+  })
+
+  it('does not throw with paused client', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect(() => printClientDetail(makeClient({ status: 'paused' }))).not.toThrow()
+    spy.mockRestore()
+  })
+
+  it('does not throw with error status client', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect(() => printClientDetail(makeClient({ status: 'error' }))).not.toThrow()
+    spy.mockRestore()
+  })
+})
+
+// ── pauseClient ───────────────────────────────────────────────────────────────
+
+describe('pauseClient', () => {
+  it('rejects with error for non-existent client', async () => {
+    await expect(pauseClient('nonexistent-id')).rejects.toThrow()
+  })
+
+  it('rejects with a message containing the id', async () => {
+    await expect(pauseClient('nonexistent-id')).rejects.toThrow('nonexistent-id')
+  })
+})
+
+// ── resumeClient ──────────────────────────────────────────────────────────────
+
+describe('resumeClient', () => {
+  it('rejects with error for non-existent client', async () => {
+    await expect(resumeClient('nonexistent-id')).rejects.toThrow()
+  })
+})
+
+// ── removeClient ──────────────────────────────────────────────────────────────
+
+describe('removeClient', () => {
+  it('rejects with error for non-existent client (no purge)', async () => {
+    await expect(removeClient('nonexistent-id')).rejects.toThrow()
+  })
+
+  it('rejects with error for non-existent client (with purge)', async () => {
+    await expect(removeClient('nonexistent-id', { purge: true })).rejects.toThrow()
+  })
+})
+
+// ── getClientLogs ─────────────────────────────────────────────────────────────
+
+describe('getClientLogs', () => {
+  it('rejects for non-existent client', async () => {
+    await expect(getClientLogs('nonexistent-id')).rejects.toThrow()
+  })
+
+  it('rejects with id in message', async () => {
+    await expect(getClientLogs('nonexistent-id', 50)).rejects.toThrow('nonexistent-id')
+  })
+})
+
+// ── stopClient ────────────────────────────────────────────────────────────────
+
+describe('stopClient', () => {
+  it('rejects with error for non-existent client', async () => {
+    await expect(stopClient('nonexistent-id')).rejects.toThrow()
   })
 })

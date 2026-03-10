@@ -46,4 +46,27 @@ describe('voice', () => {
   it('does not throw with unknown subcommand', async () => {
     await expect(voice(['unknown'])).resolves.not.toThrow()
   })
+
+  it('does not throw with "enable" subcommand', async () => {
+    await expect(voice(['enable'])).resolves.not.toThrow()
+  })
+
+  it('does not throw with "disable" subcommand', async () => {
+    await expect(voice(['disable'])).resolves.not.toThrow()
+  })
+
+  it('does not throw with "status --json"', async () => {
+    await expect(voice(['status', '--json'])).resolves.not.toThrow()
+  })
+
+  it('does not throw with "config" subcommand', async () => {
+    await expect(voice(['config'])).resolves.not.toThrow()
+  })
+
+  it('resolves (does not hang) for all tested subcommands', async () => {
+    const cmds = [[], ['status'], ['list'], ['unknown-xyz']]
+    for (const cmd of cmds) {
+      await expect(voice(cmd)).resolves.not.toThrow()
+    }
+  })
 })

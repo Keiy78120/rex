@@ -51,4 +51,25 @@ describe('audio', () => {
   it('does not throw with unknown subcommand', async () => {
     await expect(audio(['unknown'])).resolves.not.toThrow()
   })
+
+  it('does not throw with "stop" subcommand', async () => {
+    await expect(audio(['stop'])).resolves.not.toThrow()
+  })
+
+  it('does not throw with "status --json"', async () => {
+    await expect(audio(['status', '--json'])).resolves.not.toThrow()
+  })
+
+  it('does not throw with "config" subcommand', async () => {
+    await expect(audio(['config'])).resolves.not.toThrow()
+  })
+
+  it('does not throw with "enable" subcommand', async () => {
+    await expect(audio(['enable'])).resolves.not.toThrow()
+  })
+
+  it('resolves for sequential calls', async () => {
+    await expect(audio(['status'])).resolves.not.toThrow()
+    await expect(audio(['list'])).resolves.not.toThrow()
+  })
 })

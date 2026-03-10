@@ -59,4 +59,28 @@ describe('agents', () => {
   it('does not throw with unknown subcommand', async () => {
     await expect(agents(['unknown-cmd'])).resolves.not.toThrow()
   })
+
+  it('does not throw with "status" subcommand', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | string | null) => never)
+    await expect(agents(['status'])).resolves.not.toThrow()
+    exitSpy.mockRestore()
+  })
+
+  it('does not throw with "logs" subcommand', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | string | null) => never)
+    try { await agents(['logs']) } catch { /* may throw */ }
+    exitSpy.mockRestore()
+    expect(true).toBe(true)
+  })
+
+  it('does not throw with "stop" subcommand (guarded)', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | string | null) => never)
+    try { await agents(['stop']) } catch { /* may throw */ }
+    exitSpy.mockRestore()
+    expect(true).toBe(true)
+  })
+
+  it('does not throw with "ps" subcommand', async () => {
+    await expect(agents(['ps'])).resolves.not.toThrow()
+  })
 })

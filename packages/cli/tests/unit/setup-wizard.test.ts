@@ -54,4 +54,18 @@ describe('isFirstRun', () => {
   it('returns a boolean', () => {
     expect(typeof isFirstRun()).toBe('boolean')
   })
+
+  it('does not throw when called repeatedly', () => {
+    expect(() => {
+      isFirstRun()
+      isFirstRun()
+      isFirstRun()
+    }).not.toThrow()
+  })
+
+  it('returns true by default (file missing)', () => {
+    // existsSync default mock is () => false
+    const result = isFirstRun()
+    expect(result).toBe(true)
+  })
 })

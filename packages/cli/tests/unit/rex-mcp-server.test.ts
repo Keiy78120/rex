@@ -63,4 +63,34 @@ describe('getMcpServerConfig', () => {
   it('does not throw', () => {
     expect(() => getMcpServerConfig()).not.toThrow()
   })
+
+  it('rex.type is a string', () => {
+    const config = getMcpServerConfig()
+    const rex = config.rex as Record<string, unknown>
+    expect(typeof rex.type).toBe('string')
+  })
+
+  it('rex.command is a string', () => {
+    const config = getMcpServerConfig()
+    const rex = config.rex as Record<string, unknown>
+    expect(typeof rex.command).toBe('string')
+  })
+
+  it('returns consistent result on repeated calls', () => {
+    const c1 = getMcpServerConfig()
+    const c2 = getMcpServerConfig()
+    expect(JSON.stringify(c1)).toBe(JSON.stringify(c2))
+  })
+
+  it('rex entry has args property', () => {
+    const config = getMcpServerConfig()
+    const rex = config.rex as Record<string, unknown>
+    expect(rex).toHaveProperty('args')
+  })
+
+  it('rex.args is an array', () => {
+    const config = getMcpServerConfig()
+    const rex = config.rex as Record<string, unknown>
+    expect(Array.isArray(rex.args)).toBe(true)
+  })
 })
