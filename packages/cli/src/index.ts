@@ -1253,8 +1253,20 @@ async function main() {
     }
 
     case 'providers': {
-      const { createDefaultRegistry, showProviders } = await import('./providers.js')
+      const sub = process.argv[3]
       const jsonFlag = process.argv.includes('--json')
+
+      if (sub === 'ai' || sub === 'ai-status') {
+        const { printAIProviderStatus, getAIProviderStatus } = await import('./ai-providers.js')
+        if (jsonFlag) {
+          console.log(JSON.stringify(getAIProviderStatus(), null, 2))
+        } else {
+          printAIProviderStatus()
+        }
+        break
+      }
+
+      const { createDefaultRegistry, showProviders } = await import('./providers.js')
       const registry = createDefaultRegistry()
       await registry.checkAll({ silent: jsonFlag })
       if (jsonFlag) {

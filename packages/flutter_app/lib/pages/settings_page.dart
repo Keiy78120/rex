@@ -30,7 +30,7 @@ class _SettingsPageState extends State<SettingsPage> {
   final _llmController = TextEditingController();
   final _pullController = TextEditingController();
 
-  static const _tabs = ['General', 'Claude', 'LLM', 'Files', 'Advanced'];
+  static const _tabs = ['General', 'Claude', 'OpenAI', 'LLM', 'Files', 'Advanced'];
 
   @override
   void initState() {
@@ -39,6 +39,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadSysInfo();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RexService>().loadClaudeSettings();
+      context.read<RexService>().loadAIProviderStatus();
     });
   }
 
@@ -171,6 +172,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             onShowOutput: _showOutput,
                           ),
                           _ClaudeTab(rex: rex, c: c),
+                          _OpenAITab(rex: rex, c: c),
                           _LlmTab(
                             rex: rex,
                             c: c,
@@ -428,6 +430,303 @@ class _GeneralTab extends StatelessWidget {
 
         const SizedBox(height: 40),
       ],
+    );
+  }
+}
+
+// ─── OPENAI TAB ─────────────────────────────────────────────────────────────
+
+class _OpenAITab extends StatefulWidget {
+  final RexService rex;
+  final RexColors c;
+  const _OpenAITab({required this.rex, required this.c});
+
+  @override
+  State<_OpenAITab> createState() => _OpenAITabState();
+}
+
+class _OpenAITabState extends State<_OpenAITab> {
+  RexService get rex => widget.rex;
+  RexColors get c => widget.c;
+
+  final _openAIKeyController = TextEditingController();
+  final _anthropicKeyController = TextEditingController();
+  bool _showOpenAIKey = false;
+  bool _showAnthropicKey = false;
+  bool _testingOpenAI = false;
+  String _testResult = '';
+
+  static const _gptModels = [
+    'gpt-4.1',
+    'gpt-4.1-mini',
+    'gpt-4.1-nano',
+    'gpt-4o',
+    'gpt-4o-mini',
+    'o3',
+    'o4-mini',
+  ];
+
+  static const _anthropicModels = [
+    'claude-opus-4-6',
+    'claude-sonnet-4-6',
+    'claude-haiku-4-5',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _openAIKeyController.text = rex.getProviderApiKey('OPENAI_API_KEY');
+    _anthropicKeyController.text = rex.getProviderApiKey('ANTHROPIC_API_KEY');
+  }
+
+  @override
+  void dispose() {
+    _openAIKeyController.dispose();
+    _anthropicKeyController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _testProviders() async {
+    setState(() { _testingOpenAI = true; _testResult = ''; });
+    await rex.loadAIProviderStatus();
+    final status = rex.aiProviderStatus;
+    final openai = (status['openai'] as Map?)??{};
+    final anthropic = (status['anthropic'] as Map?)??{};
+    final vercel = (status['vercel'] as Map?)??{};
+    setState(() {
+      _testingOpenAI = false;
+      _testResult = [
+        'OpenAI: ${openai['configured'] == true ? '✓ configured' : '✗ not set'} — ${openai['model'] ?? ''}',
+        'Agents SDK: ${openai['agentsReady'] == true ? '✓ ready' : '✗ needs key'}',
+        'Anthropic: ${anthropic['configured'] == true ? '✓ configured' : '✗ not set'} — ${anthropic['model'] ?? ''}',
+        'Vercel/OpenAI: ${vercel['openaiProvider'] == true ? '✓' : '✗'}',
+        'Vercel/Anthropic: ${vercel['anthropicProvider'] == true ? '✓' : '✗'}',
+      ].join('\n');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionLabel('OPENAI SDK', c: c),
+
+          // SDK Architecture info
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: c.codeBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: c.separator),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('3 SDKs distincts dans REX :', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.text)),
+                const SizedBox(height: 6),
+                Text('• openai SDK v6 — calls directs + tool-calling loop', style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                Text('• @openai/agents — agent loop structuré (personas clients)', style: TextStyle(fontSize: 11, color: c.textSecondary)),
+                Text('• Vercel AI SDK — streaming unifié (openai + anthropic)', style: TextStyle(fontSize: 11, color: c.textSecondary)),
+              ],
+            ),
+          ),
+
+          // OpenAI API Key
+          Text('OpenAI API Key', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.text)),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: CupertinoTextField(
+                  controller: _openAIKeyController,
+                  obscureText: !_showOpenAIKey,
+                  placeholder: 'sk-...',
+                  style: TextStyle(fontSize: 12, color: c.text),
+                  decoration: BoxDecoration(
+                    color: c.card,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: c.separator),
+                  ),
+                  onChanged: (v) => rex.setProviderApiKey('OPENAI_API_KEY', v),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => setState(() => _showOpenAIKey = !_showOpenAIKey),
+                child: Icon(
+                  _showOpenAIKey ? CupertinoIcons.eye_slash : CupertinoIcons.eye,
+                  size: 16,
+                  color: c.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text('Utilisé par openai SDK, @openai/agents, Vercel/OpenAI', style: TextStyle(fontSize: 10, color: c.textTertiary)),
+          const SizedBox(height: 16),
+
+          // GPT Model picker
+          Text('Modèle GPT par défaut', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.text)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: _gptModels.map((m) {
+              final selected = rex.openAIModel == m;
+              return GestureDetector(
+                onTap: () {
+                  rex.setOpenAIModel(m);
+                  setState(() {});
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: selected ? c.accent.withValues(alpha: 0.12) : c.card,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: selected ? c.accent : c.separator),
+                  ),
+                  child: Text(
+                    m,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                      color: selected ? c.accent : c.text,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 24),
+
+          _SectionLabel('ANTHROPIC SDK (DIRECT)', c: c),
+
+          // Anthropic API Key
+          Text('Anthropic API Key', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.text)),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: CupertinoTextField(
+                  controller: _anthropicKeyController,
+                  obscureText: !_showAnthropicKey,
+                  placeholder: 'sk-ant-...',
+                  style: TextStyle(fontSize: 12, color: c.text),
+                  decoration: BoxDecoration(
+                    color: c.card,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: c.separator),
+                  ),
+                  onChanged: (v) => rex.setProviderApiKey('ANTHROPIC_API_KEY', v),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => setState(() => _showAnthropicKey = !_showAnthropicKey),
+                child: Icon(
+                  _showAnthropicKey ? CupertinoIcons.eye_slash : CupertinoIcons.eye,
+                  size: 16,
+                  color: c.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text('Utilisé par Vercel/Anthropic SDK (séparé de Claude Code)', style: TextStyle(fontSize: 10, color: c.textTertiary)),
+          const SizedBox(height: 16),
+
+          // Anthropic model picker
+          Text('Modèle Anthropic par défaut', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.text)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: _anthropicModels.map((m) {
+              final selected = rex.anthropicModel == m;
+              return GestureDetector(
+                onTap: () {
+                  rex.setAnthropicModel(m);
+                  setState(() {});
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: selected ? c.accent.withValues(alpha: 0.12) : c.card,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: selected ? c.accent : c.separator),
+                  ),
+                  child: Text(
+                    m,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                      color: selected ? c.accent : c.text,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 24),
+
+          _SectionLabel('STATUS', c: c),
+
+          // Test button
+          Row(
+            children: [
+              GestureDetector(
+                onTap: _testingOpenAI ? null : _testProviders,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _testingOpenAI ? c.codeBg : c.accent,
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: Text(
+                    _testingOpenAI ? 'Testing...' : 'Test AI Providers',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: _testingOpenAI ? c.textSecondary : CupertinoColors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text('rex providers ai --json', style: TextStyle(fontSize: 10, color: c.textTertiary)),
+            ],
+          ),
+
+          if (_testResult.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: c.codeBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: c.separator),
+              ),
+              child: Text(
+                _testResult,
+                style: TextStyle(fontSize: 11, color: c.text, fontFamily: 'Menlo'),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 16),
+          Text(
+            'Note : Claude Code orchestre les modèles Claude via oauth session. '
+            'Ces clés sont pour accès direct API (Vercel SDK, fine-tuning, etc.).',
+            style: TextStyle(fontSize: 10, color: c.textTertiary),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
     );
   }
 }

@@ -1846,6 +1846,41 @@ $transcript
     }
   }
 
+  // --- OpenAI / Anthropic model settings ---
+
+  String get openAIModel =>
+      getProviderApiKey('REX_OPENAI_MODEL').isNotEmpty
+          ? getProviderApiKey('REX_OPENAI_MODEL')
+          : 'gpt-4o-mini';
+
+  void setOpenAIModel(String model) => _setEnvKey('REX_OPENAI_MODEL', model);
+
+  String get anthropicModel =>
+      getProviderApiKey('REX_ANTHROPIC_MODEL').isNotEmpty
+          ? getProviderApiKey('REX_ANTHROPIC_MODEL')
+          : 'claude-haiku-4-5';
+
+  void setAnthropicModel(String model) => _setEnvKey('REX_ANTHROPIC_MODEL', model);
+
+  Map<String, dynamic> _aiProviderStatus = {};
+  Map<String, dynamic> get aiProviderStatus => _aiProviderStatus;
+  bool _aiStatusLoading = false;
+  bool get aiStatusLoading => _aiStatusLoading;
+
+  Future<void> loadAIProviderStatus() async {
+    _aiStatusLoading = true;
+    notifyListeners();
+    try {
+      final out = await _runRexArgs(['providers', 'ai', '--json'], timeout: 8);
+      final j = jsonDecode(_extractJson(out));
+      if (j is Map<String, dynamic>) {
+        _aiProviderStatus = j;
+      }
+    } catch (_) {}
+    _aiStatusLoading = false;
+    notifyListeners();
+  }
+
   Future<void> refreshMarketplace() async {
     isLoading = true;
     notifyListeners();

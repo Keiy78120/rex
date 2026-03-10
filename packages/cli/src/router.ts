@@ -68,9 +68,17 @@ export async function pickModel(task: TaskType): Promise<string> {
     if (match) return match
   }
 
-  // Fallback: any non-embed model
-  const fallback = available.find(a => !a.includes('embed') && !a.includes('nomic'))
-  return fallback ?? 'qwen3.5:latest'
+  // Fallback: any non-embed Ollama model
+  const ollamaFallback = available.find(a => !a.includes('embed') && !a.includes('nomic'))
+  if (ollamaFallback) return ollamaFallback
+
+  // Ollama offline — try OpenAI GPT as cloud fallback
+  if (process.env.OPENAI_API_KEY) {
+    const gptModel = process.env.REX_OPENAI_MODEL ?? 'gpt-4o-mini'
+    return gptModel
+  }
+
+  return 'qwen3.5:latest'
 }
 
 /**

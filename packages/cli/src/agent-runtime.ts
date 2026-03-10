@@ -208,18 +208,27 @@ async function runWithClaude(message: string, config: AgentConfig): Promise<Agen
   }
 }
 
-// ─── OpenAI dispatch ──────────────────────────────────────────
+// ─── OpenAI dispatch (SDK + Agents SDK tool loop) ────────────
 
+/**
+ * Run via the plain `openai` SDK (v6) with a manual tool-calling loop.
+ * Tool definitions come from tool-adapter.ts (same tools as the Ollama loop).
+ *
+ * For structured agent pipelines with handoffs, use @openai/agents Runner
+ * directly in agent-templates/ personas — this function is for inline tasks.
+ */
 async function runWithOpenAI(
   messages: AgentMessage[],
   model: string,
   config: AgentConfig,
 ): Promise<AgentResult> {
   const start = Date.now()
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) {
+  const { getOpenAIClient } = await import('./ai-providers.js')
+  const client = getOpenAIClient()
+
+  if (!client) {
     return {
-      response: 'Error: OPENAI_API_KEY not configured',
+      response: 'Error: OPENAI_API_KEY not configured. Set it in Settings → OpenAI.',
       model,
       turns: 1,
       toolCalls: [],
@@ -227,37 +236,87 @@ async function runWithOpenAI(
     }
   }
 
+  const injectTools = config.injectTools !== false
+  const maxTurns = config.maxTurns ?? 8
+  const allToolCalls: AgentResult['toolCalls'] = []
+
+  // Build OpenAI-format messages
+  type OAIRole = 'system' | 'user' | 'assistant' | 'tool'
+  type OAIMessage = { role: OAIRole; content: string; tool_call_id?: string }
+  const oaiMessages: OAIMessage[] = messages.map((m) => ({
+    role: m.role as OAIRole,
+    content: m.content,
+    ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+  }))
+
+  // Convert REX tools → OpenAI function format
+  const rexTools = injectTools ? getRexTools() : []
+  const openaiTools = rexTools.map((t) => ({
+    type: 'function' as const,
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema,
+    },
+  }))
+
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
+    let turns = 0
+    while (turns < maxTurns) {
+      turns++
+      const completion = await client.chat.completions.create({
         model,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        messages: oaiMessages as Parameters<typeof client.chat.completions.create>[0]['messages'],
         temperature: config.temperature ?? 0.7,
-        max_tokens: 2048,
-      }),
-      signal: AbortSignal.timeout(60_000),
-    })
-    const data = await res.json() as {
-      choices?: Array<{ message?: { content?: string } }>
-      usage?: { total_tokens?: number }
+        max_tokens: 4096,
+        ...(openaiTools.length > 0 ? { tools: openaiTools, tool_choice: 'auto' } : {}),
+      })
+
+      const choice = completion.choices[0]
+      const msg = choice?.message
+      if (!msg) break
+
+      // No tool calls → final text response
+      if (!msg.tool_calls || msg.tool_calls.length === 0) {
+        return {
+          response: msg.content ?? '',
+          model,
+          turns,
+          toolCalls: allToolCalls,
+          tokens: completion.usage?.total_tokens,
+          durationMs: Date.now() - start,
+        }
+      }
+
+      // Append assistant turn with tool calls
+      oaiMessages.push({ role: 'assistant', content: msg.content ?? '' })
+
+      // Execute each tool and append results
+      for (const tc of msg.tool_calls) {
+        const fnName = tc.function.name
+        let fnArgs: Record<string, unknown> = {}
+        try { fnArgs = JSON.parse(tc.function.arguments) } catch { /* malformed JSON */ }
+
+        log.info(`agent-runtime/openai: tool → ${fnName}`)
+        const toolResult = await executeToolCall(fnName, fnArgs)
+        allToolCalls.push({ name: fnName, args: fnArgs, result: toolResult })
+
+        oaiMessages.push({ role: 'tool', content: toolResult, tool_call_id: tc.id })
+      }
     }
-    const text = data.choices?.[0]?.message?.content ?? ''
+
+    const last = oaiMessages.findLast((m) => m.role === 'assistant')
     return {
-      response: text,
+      response: last?.content ?? '(max turns reached)',
       model,
-      turns: 1,
-      toolCalls: [],
-      tokens: data.usage?.total_tokens,
+      turns,
+      toolCalls: allToolCalls,
       durationMs: Date.now() - start,
     }
+
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    log.warn(`agent-runtime: openai failed: ${msg.slice(0, 100)}`)
+    log.warn(`agent-runtime: openai SDK error: ${msg.slice(0, 120)}`)
     return {
       response: `Error: ${msg.slice(0, 300)}`,
       model,
@@ -265,6 +324,41 @@ async function runWithOpenAI(
       toolCalls: [],
       durationMs: Date.now() - start,
     }
+  }
+}
+
+// ─── Vercel AI SDK dispatch (unified streaming) ───────────────
+
+/**
+ * Provider-agnostic streaming via Vercel AI SDK.
+ * Works with @ai-sdk/openai and @ai-sdk/anthropic.
+ * Used in gateway/hub for streaming chat responses.
+ */
+export async function runWithVercel(
+  prompt: string,
+  provider: 'openai' | 'anthropic',
+  modelId?: string,
+  onChunk?: (chunk: string) => void,
+): Promise<string> {
+  const { getVercelModel } = await import('./ai-providers.js')
+  const model = getVercelModel(provider, modelId)
+  if (!model) {
+    throw new Error(`${provider} not configured — set API key in Settings → OpenAI`)
+  }
+
+  if (onChunk) {
+    const { streamText } = await import('ai')
+    const { textStream } = streamText({ model, prompt })
+    let full = ''
+    for await (const chunk of textStream) {
+      full += chunk
+      onChunk(chunk)
+    }
+    return full
+  } else {
+    const { generateText } = await import('ai')
+    const { text } = await generateText({ model, prompt })
+    return text
   }
 }
 
