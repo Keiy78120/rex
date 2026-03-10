@@ -12,8 +12,14 @@ vi.mock('../../src/logger.js', () => ({
 vi.mock('../../src/paths.js', () => ({
   REX_DIR: '/tmp/rex-backup-test',
   MEMORY_DB_PATH: '/tmp/rex-backup-test/memory.sqlite',
+  CONFIG_PATH: '/tmp/rex-backup-test/config.json',
   ensureRexDirs: vi.fn(),
 }))
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>()
+  return { ...actual, execSync: vi.fn(() => '') }
+})
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>()
@@ -28,7 +34,7 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-import { listBackups, lastBackupAge, rotateBackups } from '../../src/backup.js'
+import { listBackups, lastBackupAge, rotateBackups, backupNow, restoreBackup } from '../../src/backup.js'
 
 // ── listBackups ───────────────────────────────────────────────────────────────
 
@@ -67,5 +73,40 @@ describe('rotateBackups', () => {
 
   it('returns 0 when no backups to delete', () => {
     expect(rotateBackups()).toBe(0)
+  })
+})
+
+// ── backupNow ─────────────────────────────────────────────────────────────────
+
+describe('backupNow', () => {
+  it('returns null when no files to backup (existsSync = false)', () => {
+    // existsSync is mocked to false → no candidates found → returns null
+    expect(backupNow()).toBeNull()
+  })
+
+  it('does not throw', () => {
+    expect(() => backupNow()).not.toThrow()
+  })
+
+  it('returns string or null', () => {
+    const result = backupNow()
+    expect(result === null || typeof result === 'string').toBe(true)
+  })
+})
+
+// ── restoreBackup ─────────────────────────────────────────────────────────────
+
+describe('restoreBackup', () => {
+  it('returns false when backup file does not exist', () => {
+    // existsSync returns false → backup not found
+    expect(restoreBackup('/nonexistent/backup.tar.gz')).toBe(false)
+  })
+
+  it('returns false without confirm flag', () => {
+    expect(restoreBackup('/some/backup.tar.gz', false)).toBe(false)
+  })
+
+  it('does not throw', () => {
+    expect(() => restoreBackup('/bad/path.tar.gz')).not.toThrow()
   })
 })

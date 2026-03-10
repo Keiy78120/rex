@@ -16,7 +16,19 @@ vi.mock('../../src/paths.js', () => ({
   MEMORY_DB_PATH: '/tmp/rex-burn-rate-test/rex.sqlite',
 }))
 
-import { renderBar, formatDuration } from '../../src/burn-rate.js'
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...actual,
+    existsSync: vi.fn(() => false),
+    readFileSync: vi.fn(() => ''),
+    writeFileSync: vi.fn(),
+    readdirSync: vi.fn(() => []),
+    statSync: vi.fn(() => ({ isFile: () => false, size: 0, mtime: new Date() })),
+  }
+})
+
+import { renderBar, formatDuration, getBurnRateStats } from '../../src/burn-rate.js'
 
 // ── renderBar ─────────────────────────────────────────────────────────────────
 
@@ -135,5 +147,86 @@ describe('formatDuration', () => {
     expect(formatDuration(1_500)).toBe('2s')
     // 1400ms → 1s (rounds down)
     expect(formatDuration(1_400)).toBe('1s')
+  })
+})
+
+// ── getBurnRateStats ──────────────────────────────────────────────────────────
+
+describe('getBurnRateStats', () => {
+  it('returns an object without throwing', () => {
+    expect(() => getBurnRateStats()).not.toThrow()
+  })
+
+  it('returns all required BurnRateStats fields', () => {
+    const stats = getBurnRateStats(true)
+    expect(stats).toHaveProperty('sessionTokensIn')
+    expect(stats).toHaveProperty('sessionTokensOut')
+    expect(stats).toHaveProperty('sessionTotal')
+    expect(stats).toHaveProperty('sessionDurationMs')
+    expect(stats).toHaveProperty('burnRatePerMin')
+    expect(stats).toHaveProperty('burnRatePerHour')
+    expect(stats).toHaveProperty('contextUsed')
+    expect(stats).toHaveProperty('contextTotal')
+    expect(stats).toHaveProperty('contextPercent')
+    expect(stats).toHaveProperty('contextBar')
+    expect(stats).toHaveProperty('dailyTokensIn')
+    expect(stats).toHaveProperty('dailyTokensOut')
+    expect(stats).toHaveProperty('dailyTotal')
+    expect(stats).toHaveProperty('dailyLimit')
+    expect(stats).toHaveProperty('dailyPercent')
+    expect(stats).toHaveProperty('dailyBar')
+    expect(stats).toHaveProperty('estimatedMinutesLeft')
+    expect(stats).toHaveProperty('estimatedDepletionAt')
+  })
+
+  it('contextPercent is between 0 and 100', () => {
+    const { contextPercent } = getBurnRateStats(true)
+    expect(contextPercent).toBeGreaterThanOrEqual(0)
+    expect(contextPercent).toBeLessThanOrEqual(100)
+  })
+
+  it('dailyPercent is between 0 and 100', () => {
+    const { dailyPercent } = getBurnRateStats(true)
+    expect(dailyPercent).toBeGreaterThanOrEqual(0)
+    expect(dailyPercent).toBeLessThanOrEqual(100)
+  })
+
+  it('contextBar and dailyBar are non-empty strings', () => {
+    const stats = getBurnRateStats(true)
+    expect(typeof stats.contextBar).toBe('string')
+    expect(stats.contextBar.length).toBeGreaterThan(0)
+    expect(typeof stats.dailyBar).toBe('string')
+    expect(stats.dailyBar.length).toBeGreaterThan(0)
+  })
+
+  it('with no sessions, tokens are all 0', () => {
+    const stats = getBurnRateStats(true)
+    // readdirSync is mocked to return [] → no session files scanned
+    expect(stats.dailyTokensIn).toBe(0)
+    expect(stats.dailyTokensOut).toBe(0)
+    expect(stats.sessionTotal).toBe(0)
+  })
+
+  it('estimatedMinutesLeft is null when burnRate is 0', () => {
+    const stats = getBurnRateStats(true)
+    // No sessions → burnRate = 0 → no depletion estimate
+    expect(stats.estimatedMinutesLeft).toBeNull()
+    expect(stats.estimatedDepletionAt).toBeNull()
+  })
+
+  it('sessionDurationMs is at least 1000 (minimum clamp)', () => {
+    const { sessionDurationMs } = getBurnRateStats(true)
+    expect(sessionDurationMs).toBeGreaterThanOrEqual(1000)
+  })
+
+  it('dailyLimit is a positive number', () => {
+    const { dailyLimit } = getBurnRateStats(true)
+    expect(dailyLimit).toBeGreaterThan(0)
+  })
+
+  it('caching: second call without forceRefresh returns same object reference', () => {
+    const first = getBurnRateStats(true)
+    const second = getBurnRateStats(false) // uses cache
+    expect(second).toBe(first)
   })
 })

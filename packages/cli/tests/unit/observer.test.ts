@@ -32,10 +32,16 @@ import {
   saveRunbook,
   findRunbooks,
   listRunbooks,
+  markRunbookUsed,
+  deleteRunbook,
   addObservation,
+  getObservations,
   getObservationStats,
   recordHabit,
   getHabits,
+  addFact,
+  getFacts,
+  factStats,
 } from '../../src/observer.js'
 
 // ── saveRunbook ───────────────────────────────────────────────────────────────
@@ -125,5 +131,87 @@ describe('getHabits', () => {
 
   it('does not throw', () => {
     expect(() => getHabits()).not.toThrow()
+  })
+})
+
+// ── markRunbookUsed ───────────────────────────────────────────────────────────
+
+describe('markRunbookUsed', () => {
+  it('does not throw for valid id', () => {
+    expect(() => markRunbookUsed(42)).not.toThrow()
+  })
+
+  it('does not throw for unknown id', () => {
+    expect(() => markRunbookUsed(99999)).not.toThrow()
+  })
+})
+
+// ── deleteRunbook ─────────────────────────────────────────────────────────────
+
+describe('deleteRunbook', () => {
+  it('returns a boolean', () => {
+    expect(typeof deleteRunbook(42)).toBe('boolean')
+  })
+
+  it('does not throw', () => {
+    expect(() => deleteRunbook(1)).not.toThrow()
+  })
+})
+
+// ── getObservations ───────────────────────────────────────────────────────────
+
+describe('getObservations', () => {
+  it('returns an array', () => {
+    expect(Array.isArray(getObservations())).toBe(true)
+  })
+
+  it('accepts project filter without throwing', () => {
+    expect(() => getObservations({ project: 'my-project' })).not.toThrow()
+  })
+
+  it('accepts type filter without throwing', () => {
+    expect(() => getObservations({ type: 'decision' })).not.toThrow()
+  })
+
+  it('accepts limit filter without throwing', () => {
+    expect(() => getObservations({ limit: 10 })).not.toThrow()
+  })
+})
+
+// ── addFact / getFacts / factStats ────────────────────────────────────────────
+
+describe('addFact', () => {
+  it('returns a number', () => {
+    expect(typeof addFact('tools', 'pnpm is faster than npm')).toBe('number')
+  })
+
+  it('does not throw with source param', () => {
+    expect(() => addFact('tools', 'fact content', 'docs')).not.toThrow()
+  })
+})
+
+describe('getFacts', () => {
+  it('returns an array', () => {
+    expect(Array.isArray(getFacts())).toBe(true)
+  })
+
+  it('accepts category filter without throwing', () => {
+    expect(() => getFacts('tools')).not.toThrow()
+  })
+})
+
+describe('factStats', () => {
+  it('returns object with byCategory and total', () => {
+    const stats = factStats()
+    expect(stats).toHaveProperty('byCategory')
+    expect(stats).toHaveProperty('total')
+  })
+
+  it('total is a number', () => {
+    expect(typeof factStats().total).toBe('number')
+  })
+
+  it('byCategory is an object', () => {
+    expect(typeof factStats().byCategory).toBe('object')
   })
 })

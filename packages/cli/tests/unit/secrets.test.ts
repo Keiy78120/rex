@@ -26,7 +26,7 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-import { getSecret, listSecrets } from '../../src/secrets.js'
+import { getSecret, listSecrets, setSecret, deleteSecret, rotateSecrets, importFromSettings } from '../../src/secrets.js'
 
 // ── getSecret ─────────────────────────────────────────────────────────────────
 
@@ -59,5 +59,74 @@ describe('listSecrets', () => {
 
   it('does not throw', () => {
     expect(() => listSecrets()).not.toThrow()
+  })
+})
+
+// ── setSecret ─────────────────────────────────────────────────────────────────
+
+describe('setSecret', () => {
+  it('does not throw when vault is absent (creates new)', () => {
+    expect(() => setSecret('MY_KEY', 'my-value')).not.toThrow()
+  })
+})
+
+// ── deleteSecret ──────────────────────────────────────────────────────────────
+
+describe('deleteSecret', () => {
+  it('returns a boolean', () => {
+    expect(typeof deleteSecret('ANY_KEY')).toBe('boolean')
+  })
+
+  it('returns false when vault does not exist', () => {
+    // existsSync is mocked to return false
+    expect(deleteSecret('NONEXISTENT')).toBe(false)
+  })
+
+  it('does not throw', () => {
+    expect(() => deleteSecret('KEY')).not.toThrow()
+  })
+})
+
+// ── rotateSecrets ─────────────────────────────────────────────────────────────
+
+describe('rotateSecrets', () => {
+  it('returns object with rotated and newKeyPath', () => {
+    const result = rotateSecrets()
+    expect(result).toHaveProperty('rotated')
+    expect(result).toHaveProperty('newKeyPath')
+  })
+
+  it('rotated is a number', () => {
+    expect(typeof rotateSecrets().rotated).toBe('number')
+  })
+
+  it('newKeyPath is a string', () => {
+    expect(typeof rotateSecrets().newKeyPath).toBe('string')
+  })
+
+  it('does not throw', () => {
+    expect(() => rotateSecrets()).not.toThrow()
+  })
+})
+
+// ── importFromSettings ────────────────────────────────────────────────────────
+
+describe('importFromSettings', () => {
+  it('returns object with imported and skipped', () => {
+    const result = importFromSettings()
+    expect(result).toHaveProperty('imported')
+    expect(result).toHaveProperty('skipped')
+  })
+
+  it('imported is a number', () => {
+    expect(typeof importFromSettings().imported).toBe('number')
+  })
+
+  it('skipped is a number', () => {
+    expect(typeof importFromSettings().skipped).toBe('number')
+  })
+
+  it('does not throw', () => {
+    expect(() => importFromSettings()).not.toThrow()
   })
 })
