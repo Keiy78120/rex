@@ -34,7 +34,7 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-import { forgettingCurve } from '../../src/prune.js'
+import { forgettingCurve, prune } from '../../src/prune.js'
 
 // ── forgettingCurve ───────────────────────────────────────────────────────────
 
@@ -56,5 +56,34 @@ describe('forgettingCurve', () => {
 
   it('does not throw with json=true', async () => {
     await expect(forgettingCurve({ json: true })).resolves.not.toThrow()
+  })
+
+  it('does not throw with both dry and json options', async () => {
+    await expect(forgettingCurve({ dry: true, json: true })).resolves.not.toThrow()
+  })
+
+  it('returns null when called with no options and DB missing', async () => {
+    expect(await forgettingCurve({})).toBeNull()
+  })
+})
+
+// ── prune ─────────────────────────────────────────────────────────────────────
+
+describe('prune', () => {
+  it('does not throw with statsOnly=false', async () => {
+    await expect(prune(false)).resolves.not.toThrow()
+  })
+
+  it('does not throw with statsOnly=true', async () => {
+    await expect(prune(true)).resolves.not.toThrow()
+  })
+
+  it('does not throw with default arg', async () => {
+    await expect(prune()).resolves.not.toThrow()
+  })
+
+  it('resolves to undefined', async () => {
+    const result = await prune(true)
+    expect(result).toBeUndefined()
   })
 })

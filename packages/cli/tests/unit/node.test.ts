@@ -62,3 +62,35 @@ describe('getNodeId', () => {
     expect(() => getNodeId()).not.toThrow()
   })
 })
+
+// ── getNodeId — additional tests ──────────────────────────────────────────────
+
+describe('getNodeId — consistency', () => {
+  it('returns same id on repeated calls when file exists (idempotent)', async () => {
+    const { existsSync, readFileSync } = await import('node:fs')
+    const fakeId = '12345678-1234-1234-1234-123456789abc'
+    vi.mocked(existsSync).mockReturnValueOnce(true)
+    vi.mocked(readFileSync).mockReturnValueOnce(fakeId)
+    const id1 = getNodeId()
+    vi.mocked(existsSync).mockReturnValueOnce(true)
+    vi.mocked(readFileSync).mockReturnValueOnce(fakeId)
+    const id2 = getNodeId()
+    expect(id1).toBe(fakeId)
+    expect(id2).toBe(fakeId)
+  })
+
+  it('contains only valid UUID chars (hex + hyphens)', () => {
+    const id = getNodeId()
+    expect(id).toMatch(/^[0-9a-f-]+$/)
+  })
+
+  it('has 4 hyphens (UUID structure)', () => {
+    const id = getNodeId()
+    const hyphens = (id.match(/-/g) || []).length
+    expect(hyphens).toBe(4)
+  })
+
+  it('36 characters total (standard UUID length)', () => {
+    expect(getNodeId().length).toBe(36)
+  })
+})

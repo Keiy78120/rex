@@ -59,3 +59,28 @@ describe('audit', () => {
     await expect(audit({ quiet: true })).resolves.not.toThrow()
   })
 })
+
+// ── audit — additional option combinations ────────────────────────────────────
+
+describe('audit — option combinations', () => {
+  it('does not throw with all options combined', async () => {
+    await expect(audit({ json: true, fix: true, quiet: true })).resolves.not.toThrow()
+  })
+
+  it('resolves to undefined', async () => {
+    const result = await audit()
+    expect(result).toBeUndefined()
+  })
+
+  it('does not throw when spawnSync returns status=0', async () => {
+    const { spawnSync } = await import('node:child_process')
+    vi.mocked(spawnSync).mockReturnValueOnce({ status: 0, stdout: 'ok', stderr: '' } as any)
+    await expect(audit()).resolves.not.toThrow()
+  })
+
+  it('does not throw when spawnSync returns null status', async () => {
+    const { spawnSync } = await import('node:child_process')
+    vi.mocked(spawnSync).mockReturnValueOnce({ status: null, stdout: '', stderr: 'killed' } as any)
+    await expect(audit()).resolves.not.toThrow()
+  })
+})

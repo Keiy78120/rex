@@ -63,4 +63,21 @@ describe('recategorize', () => {
     const result = await recategorize()
     expect(result).toBeUndefined()
   })
+
+  it('resolves with both batch and dryRun options', async () => {
+    await expect(recategorize({ batch: 5, dryRun: true })).resolves.not.toThrow()
+  })
+
+  it('does not throw with batch=1', async () => {
+    await expect(recategorize({ batch: 1 })).resolves.not.toThrow()
+  })
+
+  it('does not throw with batch=100', async () => {
+    await expect(recategorize({ batch: 100 })).resolves.not.toThrow()
+  })
+
+  it('returns void (undefined)', async () => {
+    const result = await recategorize({ dryRun: true })
+    expect(result).toBeUndefined()
+  })
 })

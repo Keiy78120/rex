@@ -44,3 +44,27 @@ describe('injectContext', () => {
     expect(() => injectContext('/tmp/project-with-claude-md')).not.toThrow()
   })
 })
+
+// ── injectContext — additional tests ─────────────────────────────────────────
+
+describe('injectContext — edge cases', () => {
+  it('does not throw for empty string path', () => {
+    expect(() => injectContext('')).not.toThrow()
+  })
+
+  it('does not throw when called multiple times', () => {
+    expect(() => {
+      injectContext('/tmp/a')
+      injectContext('/tmp/b')
+      injectContext('/tmp/c')
+    }).not.toThrow()
+  })
+
+  it('accepts absolute path', () => {
+    expect(() => injectContext('/Users/test/project')).not.toThrow()
+  })
+
+  it('accepts relative path', () => {
+    expect(() => injectContext('./relative/path')).not.toThrow()
+  })
+})

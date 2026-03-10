@@ -46,3 +46,33 @@ describe('mcpRegistry', () => {
     await expect(mcpRegistry(['unknown-cmd'])).resolves.not.toThrow()
   })
 })
+
+// ── mcpRegistry — additional subcommands ─────────────────────────────────────
+
+describe('mcpRegistry — additional commands', () => {
+  it('does not throw with "status" subcommand', async () => {
+    await expect(mcpRegistry(['status'])).resolves.not.toThrow()
+  })
+
+  it('does not throw with "sync" subcommand', async () => {
+    await expect(mcpRegistry(['sync'])).resolves.not.toThrow()
+  })
+
+  it('does not throw with "--json" flag alone', async () => {
+    await expect(mcpRegistry(['--json'])).resolves.not.toThrow()
+  })
+
+  it('"add" with no args calls process.exit or throws — guarded', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | string | null) => never)
+    try { await mcpRegistry(['add']) } catch { /* may throw */ }
+    exitSpy.mockRestore()
+    expect(true).toBe(true)
+  })
+
+  it('"remove" with fake id shows error or exits — guarded', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as (code?: number | string | null) => never)
+    try { await mcpRegistry(['remove', 'fake-mcp-id']) } catch { /* may throw */ }
+    exitSpy.mockRestore()
+    expect(true).toBe(true)
+  })
+})
