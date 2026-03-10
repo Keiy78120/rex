@@ -2929,7 +2929,7 @@ tests/
     test-kevin-context.ts      ← 🔄 skipped (low priority)
 ```
 
-**Total: 184 tests passing (11 test files)** — vitest run < 2s
+**Total: 181 tests passing (11 test files)** — vitest run < 2s
 
 ---
 
