@@ -109,7 +109,7 @@ Tu ne le sauras même pas — jusqu'à ce qu'il te montre le résultat.
 
 ### État actuel — 15/03/2026
 
-**117+ fichiers TypeScript implémentés.** Phases 1-4 complètes. 385 tests vitest.
+**117+ fichiers TypeScript implémentés.** Phases 1-4 complètes. 400 tests vitest.
 
 Opérationnel :
 - Gateway Telegram (KeepAlive, streaming Qwen, guard Stop)
@@ -121,7 +121,7 @@ Opérationnel :
 - Flutter app macOS (26 pages)
 - Resource Hub (20+ ressources, catalog MCP/guards/skills)
 - Secrets vault (AES-256-GCM)
-- Suite de tests vitest (385 tests, 21 fichiers, < 2s — unit + integration)
+- Suite de tests vitest (400 tests, 22 fichiers, < 2s — unit + integration)
 - CI GitHub Actions (unit + build + security audit)
 
 Prochaine étape : déploiement VPS + migration Garry → `docs/garry-migration.md`
