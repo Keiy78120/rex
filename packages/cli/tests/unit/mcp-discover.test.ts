@@ -40,6 +40,7 @@ import {
   searchCatalog,
   listCatalog,
   listInstalled,
+  printCatalog,
 } from '../../src/mcp-discover.js'
 
 // ── REX_MCP_CATALOG ───────────────────────────────────────────────────────────
@@ -117,5 +118,49 @@ describe('listInstalled', () => {
     // readFileSync mocked to return {"servers":[]} → empty
     const installed = listInstalled()
     expect(Object.keys(installed).length).toBe(0)
+  })
+})
+
+// ── printCatalog ──────────────────────────────────────────────────────────────
+
+describe('printCatalog', () => {
+  it('does not throw with no args (uses full catalog)', () => {
+    expect(() => printCatalog()).not.toThrow()
+  })
+
+  it('does not throw with empty array', () => {
+    expect(() => printCatalog([])).not.toThrow()
+  })
+
+  it('does not throw with a single server', () => {
+    const catalog = listCatalog().slice(0, 1)
+    expect(() => printCatalog(catalog)).not.toThrow()
+  })
+
+  it('does not throw with verified-only servers', () => {
+    const verified = REX_MCP_CATALOG.filter(s => s.verified)
+    expect(() => printCatalog(verified)).not.toThrow()
+  })
+})
+
+// ── searchCatalog — additional edge cases ─────────────────────────────────────
+
+describe('searchCatalog — edge cases', () => {
+  it('returns array for empty string query', () => {
+    expect(Array.isArray(searchCatalog(''))).toBe(true)
+  })
+
+  it('search by tag returns relevant results', () => {
+    const results = searchCatalog('github')
+    expect(results.length).toBeGreaterThan(0)
+  })
+
+  it('all returned entries have required fields', () => {
+    const results = searchCatalog('docs')
+    for (const r of results) {
+      expect(typeof r.id).toBe('string')
+      expect(typeof r.name).toBe('string')
+      expect(typeof r.description).toBe('string')
+    }
   })
 })
