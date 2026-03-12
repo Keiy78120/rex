@@ -195,7 +195,7 @@ export function checkSpecialistLimits(
 // ── Provider Executors ─────────────────────────────────
 
 async function executeOllama(prompt: string, timeout: number): Promise<Omit<BackendResult, 'fallbackUsed'>> {
-  const model = await pickModel('gateway')
+  const model = await pickModel('background')
   const start = Date.now()
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: 'POST',
