@@ -7,3 +7,12 @@ target/
 .env.*
 *.dmg
 packages/memory/package-lock.json
+
+# Test coverage
+coverage/
+lcov.info
+.nyc_output/
+
+# Internal dev files
+CLAUDE.md.bak
+CLAUDE_TASK.md
