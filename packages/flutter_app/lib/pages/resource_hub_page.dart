@@ -48,12 +48,12 @@ class _ResourceHubPageState extends State<ResourceHubPage> {
   Future<void> _install(
       BuildContext context, Map<String, dynamic> resource) async {
     final id = resource['id'] as String;
+    final service = context.read<RexService>();
     setState(() => _installingId = id);
     try {
-      final result =
-          await context.read<RexService>().installHubResource(id);
+      final result = await service.installHubResource(id);
       if (!mounted) return;
-      _showToast(context, result.isNotEmpty ? result : '${resource['name']} installed.');
+      _showToast(this.context, result.isNotEmpty ? result : '${resource['name']} installed.');
     } finally {
       if (mounted) setState(() => _installingId = null);
     }

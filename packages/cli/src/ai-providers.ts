@@ -30,7 +30,7 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import OpenAI from 'openai'
-import type { LanguageModelV1 } from 'ai'
+import type { LanguageModel } from 'ai'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -88,16 +88,16 @@ export function makeAnthropicProvider() {
 export function getVercelModel(
   provider: 'openai' | 'anthropic',
   modelId?: string,
-): LanguageModelV1 | null {
+): LanguageModel | null {
   if (provider === 'openai') {
     const p = makeOpenAIProvider()
     if (!p) return null
-    return p(modelId ?? process.env.REX_OPENAI_MODEL ?? DEFAULT_GPT_MODEL)
+    return p(modelId ?? process.env.REX_OPENAI_MODEL ?? DEFAULT_GPT_MODEL) as unknown as LanguageModel
   }
   if (provider === 'anthropic') {
     const p = makeAnthropicProvider()
     if (!p) return null
-    return p(modelId ?? process.env.REX_ANTHROPIC_MODEL ?? DEFAULT_ANTHROPIC_MODEL)
+    return p(modelId ?? process.env.REX_ANTHROPIC_MODEL ?? DEFAULT_ANTHROPIC_MODEL) as unknown as LanguageModel
   }
   return null
 }

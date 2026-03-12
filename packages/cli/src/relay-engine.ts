@@ -156,17 +156,20 @@ Respond in JSON:
 async function detectOllamaModel(): Promise<string> {
   try {
     const res = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(5000) })
-    if (!res.ok) return 'qwen2.5:7b'
+    if (!res.ok) return 'qwen2.5:1.5b'
     const data = await res.json() as { models?: Array<{ name: string }> }
     const models = data.models ?? []
     // Exclude embedding-only models
     const chatModels = models.filter(m => !m.name.includes('embed') && !m.name.includes('nomic') && !m.name.includes('minilm'))
-    // Prefer qwen models (chat-capable), then first chat model
-    const preferred = chatModels.find(m => m.name.includes('qwen')) ?? chatModels[0]
-    if (preferred) return preferred.name
-    return 'qwen2.5:7b'
+    // Prefer smallest qwen model first (fast + free), cascade to bigger via relay stages
+    const small = chatModels.find(m => m.name.includes('qwen2.5:1.5b'))
+    if (small) return small.name
+    // Then any small qwen
+    const qwen = chatModels.find(m => m.name.includes('qwen'))
+    if (qwen) return qwen.name
+    return chatModels[0]?.name ?? 'qwen2.5:1.5b'
   } catch {
-    return 'qwen2.5:7b'
+    return 'qwen2.5:1.5b'
   }
 }
 
@@ -180,7 +183,7 @@ async function callOllama(prompt: string, model: string): Promise<string> {
       stream: false,
       options: { num_ctx: 4096 },
     }),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(120_000),
   })
   if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`)
   const data = await res.json() as { message?: { content?: string } }
@@ -197,6 +200,7 @@ async function runOllamaStage(
   if (doc.contributions.length === 0) {
     // First stage: initial analysis prompt
     prompt = `You are an expert analyst. Analyze the following task and context.
+IMPORTANT: Always respond in the same language as the task. If the task is in French, respond in French.
 
 Task: ${doc.task}
 

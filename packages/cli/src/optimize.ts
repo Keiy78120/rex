@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { llm, detectModel } from './llm.js'
+import { detectModel } from './llm.js'
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -15,6 +15,25 @@ const COLORS = {
 }
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
+
+/** Direct Ollama /api/chat call — bypasses Vercel AI SDK (v5 dropped v1 model spec) */
+async function ollamaChat(prompt: string, system: string, model: string): Promise<string> {
+  const messages: Array<{ role: string; content: string }> = []
+  if (system) messages.push({ role: 'system', content: system })
+  messages.push({ role: 'user', content: prompt })
+
+  const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, messages, stream: false }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Ollama /api/chat ${res.status}: ${body.slice(0, 200)}`)
+  }
+  const json = (await res.json()) as { message?: { content?: string } }
+  return json.message?.content?.trim() ?? ''
+}
 
 function collectImports(content: string, baseDir: string): string {
   // Find @import references in CLAUDE.md
@@ -83,7 +102,7 @@ export async function optimize(apply: boolean = false) {
 
   if (!apply) {
     // Analysis mode
-    const analysis = await llm(
+    const analysis = await ollamaChat(
       `Analyze this CLAUDE.md file and all its imported rules. Provide specific suggestions to reduce token count while keeping all important instructions. Focus on:
 1. Redundant or duplicate instructions (across main file AND imported rules)
 2. Overly verbose sections that could be shortened
@@ -115,7 +134,7 @@ Provide a concise analysis with specific, actionable suggestions. Format each su
     writeFileSync(backupPath, content)
     console.log(`  ${COLORS.green}✓${COLORS.reset} Backup saved to ${backupPath}`)
 
-    const optimized = await llm(
+    const optimized = await ollamaChat(
       `Rewrite this CLAUDE.md to be more concise while keeping ALL important instructions. Rules:
 - Remove redundancy and duplication
 - Shorten verbose explanations to bullet points

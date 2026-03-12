@@ -16,6 +16,8 @@ export type JournalEventType =
   | 'sync_event'
   | 'guard_trigger'
   | 'daemon_action'
+  | 'anti-vibe:completed'
+  | 'relay:completed'
 
 export interface JournalEvent {
   id: number

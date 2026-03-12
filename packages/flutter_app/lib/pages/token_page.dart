@@ -139,7 +139,7 @@ class _CompactSignalBanner extends StatelessWidget {
         ])),
         CupertinoButton(
           padding: EdgeInsets.zero,
-          minSize: 30,
+          minimumSize: const Size.square(30),
           onPressed: () => context.read<RexService>().clearCompactSignal(),
           child: Icon(CupertinoIcons.xmark_circle, size: 18, color: c.textTertiary),
         ),

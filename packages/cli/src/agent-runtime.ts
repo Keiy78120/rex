@@ -254,9 +254,9 @@ async function runWithOpenAI(
   const openaiTools = rexTools.map((t) => ({
     type: 'function' as const,
     function: {
-      name: t.name,
-      description: t.description,
-      parameters: t.input_schema,
+      name: t.function.name,
+      description: t.function.description,
+      parameters: t.function.parameters,
     },
   }))
 
@@ -293,19 +293,22 @@ async function runWithOpenAI(
 
       // Execute each tool and append results
       for (const tc of msg.tool_calls) {
-        const fnName = tc.function.name
+        if (tc.type !== 'function' || !('function' in tc)) continue
+        const fn = (tc as { function: { name: string; arguments: string }; id: string }).function
+        const fnName = fn.name
         let fnArgs: Record<string, unknown> = {}
-        try { fnArgs = JSON.parse(tc.function.arguments) } catch { /* malformed JSON */ }
+        try { fnArgs = JSON.parse(fn.arguments) } catch { /* malformed JSON */ }
 
         log.info(`agent-runtime/openai: tool → ${fnName}`)
         const toolResult = await executeToolCall(fnName, fnArgs)
-        allToolCalls.push({ name: fnName, args: fnArgs, result: toolResult })
+        const resultStr = toolResult.ok ? toolResult.output : `Error: ${toolResult.error}`
+        allToolCalls.push({ name: fnName, args: fnArgs, result: resultStr })
 
-        oaiMessages.push({ role: 'tool', content: toolResult, tool_call_id: tc.id })
+        oaiMessages.push({ role: 'tool', content: resultStr, tool_call_id: tc.id })
       }
     }
 
-    const last = oaiMessages.findLast((m) => m.role === 'assistant')
+    const last = [...oaiMessages].reverse().find((m: OAIMessage) => m.role === 'assistant')
     return {
       response: last?.content ?? '(max turns reached)',
       model,

@@ -74,14 +74,13 @@ export async function runAntiVibecoding(opts: AntiVibeOptions): Promise<void> {
       // TODO: déclencher le merge git si applicable
     }
 
-    appendEvent({
-      type: 'anti-vibe:completed',
+    appendEvent('anti-vibe:completed', 'anti-vibecoding', {
       task: opts.task.slice(0, 100),
       consensus: result.consensus,
       confidence: result.confidence,
       panesUsed: Object.keys(result.contributions).length,
       durationMs: result.durationMs,
-    } as any)
+    })
 
   } catch (err: any) {
     console.error(`${RED}✗ Relay failed: ${err.message}${RESET}`)

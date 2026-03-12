@@ -296,14 +296,13 @@ Lis tout le contexte ci-dessus, puis produis ta contribution.`
   const consensus = finalConfidence >= 0.85
   updateConsensus(docPath, consensus ? 'AGREED' : 'ESCALATED', finalConfidence, conclusion.slice(0, 200))
 
-  appendEvent({
-    type: 'relay:completed',
+  appendEvent('relay:completed', 'pane-relay', {
     sessionId,
     consensus,
     confidence: finalConfidence,
     panesUsed: Object.keys(contributions).length,
     durationMs: Date.now() - start,
-  } as any)
+  })
 
   return {
     conclusion,

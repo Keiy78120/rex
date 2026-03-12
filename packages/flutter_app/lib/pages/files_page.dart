@@ -322,7 +322,7 @@ class _NewFileRow extends StatelessWidget {
           const SizedBox(width: 8),
           CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            minSize: 0,
+            minimumSize: Size.zero,
             color: context.rex.accent,
             borderRadius: BorderRadius.circular(6),
             onPressed: onCreate,
@@ -331,7 +331,7 @@ class _NewFileRow extends StatelessWidget {
           const SizedBox(width: 6),
           CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            minSize: 0,
+            minimumSize: Size.zero,
             onPressed: onCancel,
             child: Text('Cancel', style: TextStyle(fontSize: 12, color: context.rex.textSecondary)),
           ),
