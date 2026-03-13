@@ -369,3 +369,62 @@ packages/flutter_app/lib/
 8. **Dynamic tool injection** — chaque requête reçoit les tools pertinents, pas tous
 9. **0 LLM pour le routing** — orchestration-policy.ts route par regex/rules
 10. **Additive only** — ne jamais casser du code qui marche
+11. **Dual memory — zero data loss** — voir section dédiée ci-dessous
+
+---
+
+## 🧠 MÉMOIRE DISTRIBUÉE — ZERO DATA LOSS
+
+### Principe
+Chaque device REX a **deux couches de mémoire** :
+- **Local** : SQLite sur le device (`~/.rex-memory/rex-memory.db`) — toujours disponible, même offline
+- **Brain** : SQLite sur le brain (VPS/Mac 24/7) — source de vérité, accessible par tous les nodes
+
+### Flow d'ingestion
+```
+Signal détecté (git commit, fichier, activité, etc.)
+  │
+  ▼
+Save local immédiat (pending/ → SQLite local)
+  │ ← zero LLM, zero réseau, instant
+  ▼
+Embed lazy (prochain cycle ingest, 30 chunks/run, 500ms throttle)
+  │
+  ▼
+Sync vers brain (prochain cycle daemon auto-sync, 5min)
+  │ ← bidirectionnel, brain wins en cas de conflit
+  ▼
+Brain redistribue aux autres nodes (push ou pull au prochain sync)
+```
+
+### Garanties
+- **Offline-first** : un device déconnecté continue d'ingérer en local. Rien ne se perd.
+- **Reconnect = catch-up** : au retour en ligne, diff local vs brain → sync les manquants
+- **Brain down** : les nodes continuent de fonctionner en autonomie locale. Quand le brain revient, tout se resync.
+- **Crash safety** : atomic writes (tmp→rename) + pending/ queue = si process kill mid-write, on reprend au dernier état cohérent
+- **Pas de duplication** : dedup par hash de contenu lors du sync (même signal détecté par 2 nodes → 1 seule entrée)
+
+### Ce que ça ingère automatiquement (fond, sans LLM)
+- Git : commits, branches, PR, merges → direct mémoire
+- Fichiers : créations/modifications significatives → pending/
+- Signaux système : disk pressure, RAM, services up/down → fact entries
+- Sessions Claude Code / Codex → ingest JSONL
+- Relay : chaque RELAY.md complété → indexé
+- Curious : découvertes (modèles, MCPs, repos trending) → mémoire
+- Patterns : erreurs récurrentes, lessons learned → auto-extracted
+
+### Architecture sync fleet
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Mac (node)    │     │  Brain (VPS)    │     │   PC (node)     │
+│                 │     │                 │     │                 │
+│ SQLite local    │────▶│ SQLite master   │◀────│ SQLite local    │
+│ pending/        │ sync│ = source truth  │sync │ pending/        │
+│ relay/          │     │ relay/          │     │ relay/          │
+│ mesh-cache.json │     │ fleet registry  │     │ mesh-cache.json │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                       │                       │
+        └───── Tailscale ───────┴───── Tailscale ───────┘
+```
+
+**Résultat : REX = mémoire distribuée qui ne perd jamais rien, sync tout, et optimise en fond.**
