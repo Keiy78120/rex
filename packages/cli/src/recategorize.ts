@@ -4,7 +4,6 @@ import * as sqliteVec from 'sqlite-vec'
 import { MEMORY_DB_PATH } from './paths.js'
 import { loadConfig } from './config.js'
 import { pickModel } from './router.js'
-import { llm } from './llm.js'
 import { createLogger } from './logger.js'
 
 const log = createLogger('recategorize')
@@ -32,7 +31,7 @@ ${content.slice(0, 1500)}
 
 JSON output: {"category": "<one of the above>", "summary": "<1-2 sentence summary>"}`
 
-async function classifyChunk(content: string, routing: string, claudeFallback: string): Promise<{ category: string; summary: string } | null> {
+async function classifyChunk(content: string, routing: string): Promise<{ category: string; summary: string } | null> {
   const prompt = CLASSIFY_PROMPT(content)
 
   // Try Ollama first
@@ -50,14 +49,6 @@ async function classifyChunk(content: string, routing: string, claudeFallback: s
         const parsed = parseJsonResponse(data.response)
         if (parsed) return parsed
       }
-    } catch {}
-  }
-
-  // Fallback to Claude
-  if (routing !== 'ollama-only') {
-    try {
-      const result = await llm(prompt, undefined, claudeFallback)
-      return parseJsonResponse(result)
     } catch {}
   }
 
@@ -121,7 +112,7 @@ export async function recategorize(options: { batch?: number; dryRun?: boolean }
   const stats: Record<string, number> = {}
 
   for (const row of rows) {
-    const result = await classifyChunk(row.content, config.llm.routing, config.llm.claudeFallback)
+    const result = await classifyChunk(row.content, config.llm.routing)
     if (result) {
       update.run(result.category, result.summary, row.id)
       stats[result.category] = (stats[result.category] || 0) + 1

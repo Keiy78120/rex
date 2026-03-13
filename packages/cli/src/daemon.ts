@@ -330,7 +330,6 @@ async function ingestCycle(): Promise<void> {
   // Normal mode: full pipeline
   runCmd('rex ingest')
   runCmd('rex categorize --batch=100', 180_000)
-  runCmd('rex recategorize --batch=20', 180_000)
   log.info('Ingest cycle done')
 
   // Stuck detection: if pending count hasn't improved after STUCK_WINDOW cycles, alert

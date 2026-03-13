@@ -147,21 +147,6 @@ class _MemoryPageState extends State<MemoryPage> {
       title: 'Memory',
       actions: [
         RexHeaderButton(
-          icon: CupertinoIcons.tray_arrow_down,
-          label: 'Ingest',
-          onPressed: () async {
-            await context.read<RexService>().runIngest();
-            _loadStats();
-          },
-          showLabel: true,
-        ),
-        RexHeaderButton(
-          icon: _categorizing ? CupertinoIcons.ellipsis : CupertinoIcons.sparkles,
-          label: _categorizing ? 'Classifying...' : 'Categorize',
-          onPressed: _categorizing ? null : _runCategorize,
-          showLabel: true,
-        ),
-        RexHeaderButton(
           icon: _consolidating ? CupertinoIcons.ellipsis : CupertinoIcons.arrow_merge,
           label: _consolidating ? 'Merging...' : 'Consolidate',
           onPressed: _consolidating ? null : _runConsolidate,

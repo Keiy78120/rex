@@ -168,11 +168,6 @@ class _AgentsPageState extends State<AgentsPage> {
           onPressed: () => setState(() => _showCreateForm = !_showCreateForm),
           showLabel: true,
         ),
-        RexHeaderButton(
-          icon: CupertinoIcons.refresh,
-          label: 'Refresh',
-          onPressed: _refresh,
-        ),
       ],
       builder: (context, scrollController) {
         return Consumer<RexService>(
