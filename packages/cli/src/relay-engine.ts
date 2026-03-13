@@ -13,9 +13,10 @@
  * @module BUDGET
  */
 
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, readdirSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { createLogger } from './logger.js'
+import { RELAY_DIR, relayFilePath, ensureRexDirs } from './paths.js'
 
 const log = createLogger('relay-engine')
 
@@ -499,6 +500,10 @@ export async function runRelay(
 
       log.info(`relay: ${stage.id} done — confidence ${contribution.confidence.toFixed(2)}`)
 
+      // Incremental persist after each stage — zero data loss on crash
+      doc.totalMs = Date.now() - startMs
+      persistRelay(doc, new Date(startMs))
+
       // Notify progress callback
       if (options.onProgress) {
         options.onProgress(stage.id, contribution)
@@ -532,7 +537,30 @@ export async function runRelay(
   }
 
   doc.totalMs = Date.now() - startMs
+
+  // Final persist (atomic write: temp → rename for crash safety)
+  persistRelay(doc, new Date(startMs))
+
   return doc
+}
+
+/**
+ * Atomic write: temp file → rename. Prevents data loss on crash/kill.
+ * Fleet sync picks up files from RELAY_DIR automatically.
+ */
+function persistRelay(doc: RelayDocument, startDate: Date): string | null {
+  try {
+    ensureRexDirs()
+    const filePath = relayFilePath(startDate)
+    const tmpPath = filePath + '.tmp'
+    writeFileSync(tmpPath, formatRelayDocument(doc))
+    renameSync(tmpPath, filePath)
+    log.info(`relay: persisted to ${filePath}`)
+    return filePath
+  } catch (err) {
+    log.warn(`relay: failed to persist — ${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
 }
 
 // ── Utility exports ─────────────────────────────────────
@@ -571,4 +599,63 @@ export function extractConclusion(doc: RelayDocument): string {
   if (doc.contributions.length === 0) return ''
   // Fallback: last contribution's analysis
   return doc.contributions[doc.contributions.length - 1].analysis
+}
+
+// ── Relay file management ────────────────────────────────
+
+/**
+ * List all relay files, newest first.
+ * Returns { name, path, date } for each relay.
+ */
+export function listRelays(limit = 20): Array<{ name: string; path: string; date: string }> {
+  try {
+    ensureRexDirs()
+    const files = readdirSync(RELAY_DIR)
+      .filter(f => f.startsWith('RELAY-') && f.endsWith('.md'))
+      .sort()
+      .reverse()
+      .slice(0, limit)
+
+    return files.map(f => {
+      // RELAY-2026-03-13-14h30.md → extract date
+      const match = f.match(/RELAY-(\d{4}-\d{2}-\d{2})-(\d{2})h(\d{2})/)
+      const date = match ? `${match[1]} ${match[2]}:${match[3]}` : 'unknown'
+      return { name: f, path: join(RELAY_DIR, f), date }
+    })
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Load a relay file's content for injection into context.
+ * Returns null if not found. Truncates to maxChars for context safety.
+ */
+export function loadRelay(nameOrPath: string, maxChars = 8000): string | null {
+  const filePath = nameOrPath.startsWith('/') ? nameOrPath : join(RELAY_DIR, nameOrPath)
+  if (!existsSync(filePath)) return null
+  const content = readFileSync(filePath, 'utf-8')
+  return content.length > maxChars ? content.slice(0, maxChars) + '\n\n[... truncated]' : content
+}
+
+/**
+ * Get the most recent relay for a given topic (fuzzy match on task line).
+ */
+export function findRelay(query: string, limit = 5): Array<{ name: string; path: string; preview: string }> {
+  const relays = listRelays(50)
+  const results: Array<{ name: string; path: string; preview: string }> = []
+  const q = query.toLowerCase()
+
+  for (const r of relays) {
+    if (results.length >= limit) break
+    try {
+      const content = readFileSync(r.path, 'utf-8')
+      if (content.toLowerCase().includes(q)) {
+        const firstLine = content.split('\n').find(l => l.startsWith('# ')) ?? r.name
+        results.push({ name: r.name, path: r.path, preview: firstLine.slice(0, 120) })
+      }
+    } catch { /* skip unreadable */ }
+  }
+
+  return results
 }

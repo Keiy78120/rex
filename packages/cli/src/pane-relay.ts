@@ -100,15 +100,12 @@ async function sendToPane(label: string, message: string): Promise<string> {
 
 // ── SHARED.md workspace ─────────────────────────────────────────────────
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { RELAY_DIR, relayFilePath, ensureRexDirs } from './paths.js'
 
-const RELAY_DIR = join(homedir(), '.rex', 'relay')
-
-function initSharedDoc(task: string, sessionId: string): string {
-  mkdirSync(RELAY_DIR, { recursive: true })
-  const path = join(RELAY_DIR, `shared-${sessionId}.md`)
+function initSharedDoc(task: string, _sessionId: string): string {
+  ensureRexDirs()
+  const path = relayFilePath()
 
   const doc = `# REX RELAY — ${sessionId}
 > Started: ${new Date().toISOString()}

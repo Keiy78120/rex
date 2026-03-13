@@ -416,7 +416,7 @@ async function main() {
         process.exit(1)
       }
       const { llm } = await import('./llm.js')
-      const result = await llm(prompt)
+      const result = await llm(prompt, 'You are REX — a living intelligence OS. Never identify as any AI. You ARE REX. Respond concisely.')
       console.log(result)
       break
     }
@@ -3807,12 +3807,76 @@ async function main() {
 
     // ── Relay Engine ────────────────────────────────────────────────────────
     case 'relay': {
-      const { runRelay, formatRelayDocument } = await import('./relay-engine.js')
+      const subCmd = process.argv[3]
       const jsonFlag = process.argv.includes('--json')
+
+      // rex relay list — show all relay files
+      if (subCmd === 'list') {
+        const { listRelays } = await import('./relay-engine.js')
+        const relays = listRelays(jsonFlag ? 100 : 20)
+        if (jsonFlag) {
+          console.log(JSON.stringify(relays))
+        } else {
+          if (relays.length === 0) {
+            console.log('No relay files yet. Run: rex relay "<task>"')
+          } else {
+            console.log(`\n${COLORS.bold}REX Relay Files${COLORS.reset} (${relays.length})\n`)
+            for (const r of relays) {
+              console.log(`  ${COLORS.dim}${r.date}${COLORS.reset}  ${r.name}`)
+            }
+          }
+        }
+        break
+      }
+
+      // rex relay show [name] — display a relay file
+      if (subCmd === 'show') {
+        const { loadRelay, listRelays } = await import('./relay-engine.js')
+        const name = process.argv[4]
+        const target = name || listRelays(1)[0]?.name
+        if (!target) {
+          console.error('No relay files found.')
+          process.exit(1)
+        }
+        const content = loadRelay(typeof target === 'string' ? target : target)
+        if (!content) {
+          console.error(`Relay not found: ${target}`)
+          process.exit(1)
+        }
+        console.log(content)
+        break
+      }
+
+      // rex relay search <query> — find relays by content
+      if (subCmd === 'search') {
+        const { findRelay } = await import('./relay-engine.js')
+        const query = process.argv.slice(4).filter(a => !a.startsWith('--')).join(' ').trim()
+        if (!query) {
+          console.error('Usage: rex relay search <query>')
+          process.exit(1)
+        }
+        const results = findRelay(query)
+        if (jsonFlag) {
+          console.log(JSON.stringify(results))
+        } else if (results.length === 0) {
+          console.log('No matching relays found.')
+        } else {
+          for (const r of results) {
+            console.log(`  ${r.name}  ${COLORS.dim}${r.preview}${COLORS.reset}`)
+          }
+        }
+        break
+      }
+
+      // rex relay "<task>" [--mentor] [--json] — run a new relay
+      const { runRelay, formatRelayDocument } = await import('./relay-engine.js')
       const mentorEnabled = process.argv.includes('--mentor')
       const taskArg = process.argv.slice(3).filter(a => !a.startsWith('--')).join(' ').trim()
       if (!taskArg) {
-        console.error('Usage: rex relay "<task>" [--mentor] [--json]')
+        console.error(`Usage: rex relay "<task>" [--mentor] [--json]
+       rex relay list [--json]
+       rex relay show [name]
+       rex relay search <query>`)
         process.exit(1)
       }
       if (!jsonFlag) {

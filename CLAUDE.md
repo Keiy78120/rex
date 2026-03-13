@@ -2,12 +2,17 @@
 
 ## Source Of Truth
 - **Repo :** `/Users/keiy/Documents/Developer/keiy/rex`
-- **Branche :** `main` et `feat/litellm-phase2`
+- **Branche :** `main`
 - **NE JAMAIS** utiliser `/_config/rex` (vieux clone)
 - Ce fichier = cap projet. `action.md` = comment exécuter (charger uniquement si tâche le demande)
 
 ## Projet en bref
-REX = organisme IA vivant. Orchestrateur universel. OS pour l'intelligence.
+REX = OS d'intelligence vivant. Architecture 3 couches :
+1. **REX Core** — cerveau toujours allumé (70% scripts / 30% LLM, intent, mémoire, signaux)
+2. **REX Code** — surcouche dev (REX Scan, contexte dynamique, améliore Claude Code + Codex)
+3. **REX Relay** — orchestration multi-AI (RELAY.md partagé, /loop d'IAs, fleet)
+
+Principes :
 - User parle à REX — pas à Claude/Qwen directement
 - Script-first : regex → Ollama → Groq → Claude (dernier recours)
 - Tokens = énergie, économiser comme des calories

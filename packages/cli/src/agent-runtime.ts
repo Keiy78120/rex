@@ -21,6 +21,7 @@ import { createLogger } from './logger.js'
 import { detectIntent } from './project-intent.js'
 import { pickModel } from './router.js'
 import { getRexTools, getToolsSummary, executeToolCall } from './tool-adapter.js'
+import { selectTools } from './tool-injector.js'
 import { REX_SYSTEM_PROMPT } from './rex-identity.js'
 
 const log = createLogger('AGENTS:agent-runtime')
@@ -249,9 +250,12 @@ async function runWithOpenAI(
     ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
   }))
 
-  // Convert REX tools → OpenAI function format
-  const rexTools = injectTools ? getRexTools() : []
-  const openaiTools = rexTools.map((t) => ({
+  // Dynamic tool selection for OpenAI provider
+  const { selectTools: selectToolsFn } = await import('./tool-injector.js')
+  const oaiToolSelection = injectTools
+    ? await selectToolsFn(detectTaskType(messages[messages.length - 1]?.content ?? '', config), model)
+    : { tools: [], summary: '', injectedCount: 0, skippedReasons: {} }
+  const openaiTools = oaiToolSelection.tools.map((t) => ({
     type: 'function' as const,
     function: {
       name: t.function.name,
@@ -534,14 +538,21 @@ export async function runAgent(
     log.info(`agent-runtime: task=${taskType} model=${model} provider=${provider}`)
   }
 
-  // 3. Build messages array
+  // 3. Dynamic tool selection based on intent + model capacity + system health
+  const toolSelection = injectTools
+    ? await selectTools(taskType, model)
+    : { tools: [], summary: '', injectedCount: 0, skippedReasons: {} }
+
+  // 4. Build messages array
   const messages: AgentMessage[] = []
 
-  // System prompt
-  const toolsSummary = injectTools ? `\n\nAvailable tools:\n${getToolsSummary()}` : ''
+  // System prompt with dynamically selected tools
+  const toolsSummary = toolSelection.injectedCount > 0
+    ? `\n\nAvailable tools (${toolSelection.injectedCount}):\n${toolSelection.summary}`
+    : ''
   messages.push({
     role: 'system',
-    content: `${REX_SYSTEM_PROMPT}\n\nAvailable tools:${toolsSummary}`,
+    content: `${REX_SYSTEM_PROMPT}${toolsSummary}`,
   })
 
   // Context injection (relevant memory snippets)
@@ -559,7 +570,7 @@ export async function runAgent(
   // User message
   messages.push({ role: 'user', content: userMessage })
 
-  // 4. Dispatch to the right provider
+  // 5. Dispatch to the right provider
   if (provider === 'claude') {
     return runWithClaude(userMessage, config)
   }
@@ -602,12 +613,19 @@ export async function streamAgent(
     return result
   }
 
+  // Dynamic tool selection
+  const toolSelection = injectTools
+    ? await selectTools(taskType, model)
+    : { tools: [], summary: '', injectedCount: 0, skippedReasons: {} }
+
   // Build messages
   const messages: AgentMessage[] = []
-  const toolsSummary = injectTools ? `\n\nAvailable tools:\n${getToolsSummary()}` : ''
+  const toolsSummary = toolSelection.injectedCount > 0
+    ? `\n\nAvailable tools (${toolSelection.injectedCount}):\n${toolSelection.summary}`
+    : ''
   messages.push({
     role: 'system',
-    content: `${REX_SYSTEM_PROMPT}\n\nAvailable tools:${toolsSummary}`,
+    content: `${REX_SYSTEM_PROMPT}${toolsSummary}`,
   })
   if (injectContext) {
     try {
@@ -636,7 +654,7 @@ export async function streamAgent(
       think: false,
       options: { temperature: config.temperature ?? 0.7 },
     }
-    if (injectTools) body.tools = getRexTools()
+    if (injectTools) body.tools = toolSelection.tools
 
     let res: Response
     try {

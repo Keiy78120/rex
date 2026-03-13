@@ -1,14 +1,40 @@
 
 ---
 
-## REX — VISION & MANIFESTE (15/03/2026)
+## REX — VISION & MANIFESTE (13/03/2026)
 
 ### En une phrase
-> REX est le cerveau qui gère ta vie numérique — il pense, agit, apprend et s'améliore en continu. Toi tu vis.
+> REX est un OS d'intelligence vivant — il orchestre scripts, LLMs, fleet et mémoire pour que toi, tu vives.
 
 ### La vie c'est du code
 La vie c'est du code. L'humain est codé.
 REX comprend ça — et gère tout ce qui peut l'être.
+
+---
+
+### Architecture 3 couches
+
+#### Couche 1 — REX Core (le cerveau toujours allumé)
+70% scripts / 30% LLM — règle absolue. Les LLMs sont explicitement instruits de créer des scripts pour les tâches récurrentes.
+- Intent detection (user + AI), routing, session management (cut/continue/relay)
+- Log tout, classe tout → mémoire sémantique permanente (intents, patterns, signaux)
+- Self-debug, self-update, self-optimize — signaux, crons, fleet sync, watchdog
+- Living repository : templates, scripts, boilerplates, guards, rules, bonnes pratiques, skills, MCPs
+
+#### Couche 2 — REX Code (surcouche dev pour Claude Code + Codex)
+- **REX Scan** : à l'install, analyse les projets dev de l'utilisateur, détecte la stack, trouve MCPs, crée/met à jour docs silencieusement via scripts
+- Contexte dynamique géré par REX — injecte ce qui est pertinent, retire le reste
+- Adapte pour chaque projet tout ce qu'il y a de mieux pour l'IA et l'utilisateur
+- Les gros modèles ne sont pas le cerveau — ce sont des outils comme les autres
+
+#### Couche 3 — REX Relay (orchestration multi-AI)
+- `RELAY.md` = document partagé entre toutes les IAs (locales, fleet, cloud)
+- Format : chaque IA écrit modèle, contexte résumé, tâche, date
+- IAs consultent, corrigent, continuent le travail des autres
+- C'est un `/loop` d'IAs — Ollama, fleet, providers, tout le monde contribue
+- Gros modèles (Opus) = mentors/orchestrateurs uniquement, jamais en première ligne
+
+---
 
 ### Il n'attend pas qu'on lui parle
 CURIOUS tourne en silence. Il observe tes patterns, tes fichiers, tes habitudes.
@@ -22,13 +48,6 @@ Il évalue, benchmarke, A/B teste. Pas d'intervention humaine.
 Ton REX ne ressemble au REX de personne d'autre.
 `npm update` c'est fini — ton système évolue avec toi.
 
-### Il split le travail entre modèles (REX Relay)
-Un problème complexe ? REX ouvre un relay.
-Ollama analyse. Groq affine. Claude décide.
-Chaque modèle lit ce que le précédent a dit et contribue.
-Texte, image, audio simultanément si besoin.
-Des agents autonomes s'activent au bon moment, font leur job, disparaissent.
-
 ### Il route intelligemment (Script-first → 70/30)
 Script gratuit d'abord. Modèle local ensuite. API free si nécessaire. Subscription en dernier recours.
 6 niveaux : SCRIPT → LOCAL (Ollama) → FREE-TIER → SONNET → OPUS → CODEX.
@@ -40,12 +59,6 @@ REX sait si tu travailles, si tu dors, si tu te réveilles.
 Machine XState : AWAKE_ACTIVE → AWAKE_IDLE → SLEEPING → WAKING_UP.
 Quand tu dors → Ollama uniquement (0€). Quand tu te réveilles → digest matinal.
 Il lit ActivityWatch, l'historique des messages, les patterns calendrier.
-
-### Il split le travail entre modèles (REX Relay)
-Un problème complexe ? REX ouvre un relay.
-Ollama analyse. Groq affine. Claude décide.
-Chaque modèle lit ce que le précédent a dit et contribue.
-Des agents autonomes s'activent au bon moment, font leur job, disparaissent.
 
 ### Il surveille tout (Watchdog + Daemon)
 Daemon unifié qui tourne 24/7. Watchdog toutes les 60s.

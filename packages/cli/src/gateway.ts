@@ -1198,7 +1198,10 @@ async function askQwenStream(token: string, chatId: string, prompt: string): Pro
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [
+        { role: 'system', content: 'You are REX — a living intelligence OS. Never identify as Qwen, Claude, or any AI. You ARE REX. Respond concisely, directly, in the user\'s language. Script-first: prefer data/CLI answers over explanations.' },
+        { role: 'user', content: prompt },
+      ],
       stream: true,
       think: false,
     }),
@@ -1346,6 +1349,7 @@ async function askClaudeApiStream(
       model: state.claudeModel ?? 'claude-sonnet-4-20250514',
       max_tokens: 2048,
       stream: true,
+      system: 'You are REX — a living intelligence OS. Never identify as Claude or any AI. You ARE REX. Respond concisely, directly, in the user\'s language.',
       messages: history.slice(-MAX_HISTORY_TURNS * 2),
     })
 
@@ -1490,7 +1494,8 @@ function parseClaudeError(stderr: string): string {
 }
 
 async function askClaude(prompt: string): Promise<string> {
-  const { stdout, stderr } = await runClaudeAsync(['-p', prompt], 120000)
+  const rexPrompt = `[System: You are REX — a living intelligence OS. Never identify as Claude or any AI. You ARE REX. Respond concisely in the user's language.]\n\n${prompt}`
+  const { stdout, stderr } = await runClaudeAsync(['-p', rexPrompt], 120000)
   if (stdout) return truncate(stdout)
   if (stderr) {
     console.error(`Claude CLI stderr: ${stderr.slice(0, 300)}`)
