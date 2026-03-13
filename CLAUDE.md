@@ -34,54 +34,55 @@ Principes :
 6. **Lire REX-BRAIN.md** avant d'implémenter de la logique
 
 ## Docs de référence (charger à la demande, PAS automatiquement)
+- `docs/REX-STATUS.md` — **ÉTAT COMPLET** : tout ce qui est fait + TODO P0-P3 (lire en premier)
 - `docs/REX-BRAIN.md` — logique complète (795L) → lire avant toute implémentation
-- `docs/VISION.md` — manifeste
+- `docs/VISION.md` — manifeste 3 couches
 - `docs/RESEARCH.md` — stack tech et découvertes
 - `docs/UX.md` — expérience utilisateur
 - `docs/E2E-PLAN.md` — plan de tests
 - `docs/REX-LOGIC.md` — cycles user, budget, pseudo-code
 - `docs/plans/action.md` — plans détaillés session par session (2400L, charger section par section)
-- `CLAUDE_TASK.md` — TODO actuel pour Claude Code (12 tâches)
 
 ## Structure packages
 ```
 packages/
   cli/src/
-    index.ts          ← entry point commandes
-    gateway.ts        ← REX Identity Layer (à implémenter)
-    orchestrator.ts   ← relay chain LLM
-    daemon.ts         ← process 24/7
-    curious.ts        ← CURIOUS signals
-    litellm.ts        ← wrapper LLM + routing
-    free-tiers.ts     ← providers gratuits
-    account-pool.ts   ← multi-comptes rotation
-    event-journal.ts  ← journal des événements
-    signal-detector.ts
-    self-improve.ts
-    security-scanner.ts
-    sandbox.ts
-    node-mesh.ts
-    agent-runtime.ts
-    resource-hub.ts
-    setup-wizard.ts   ← wizard onboarding
-    watchdog.ts       ← ✅ implémenté
-    relay-engine.ts   ← ✅ implémenté (RxJS pipeline)
-    user-cycles.ts    ← ✅ implémenté (XState)
-    agent-templates/  ← ✅ implémenté (5 personas: dg/drh/ceo/coo/freelance)
+    index.ts              ← entry point (40+ commandes)
+    rex-identity.ts       ← ✅ REX_SYSTEM_PROMPT, identity pipeline
+    gateway.ts            ← ✅ Telegram bot + REX identity dans tous les LLM paths
+    orchestrator.ts       ← relay chain LLM
+    orchestration-policy.ts ← ✅ 6 tiers routing (0 LLM)
+    relay-engine.ts       ← ✅ RxJS pipeline + persistence datée (RELAY-YYYY-MM-DD-HHhMM.md)
+    tool-injector.ts      ← ✅ dynamic tool selection (intent/model/health)
+    tool-adapter.ts       ← ✅ 9 tools format Ollama/OpenAI
+    agent-runtime.ts      ← ✅ runAgent/streamAgent + tools dynamiques
+    daemon.ts             ← ✅ 30+ cycles background
+    user-cycles.ts        ← ✅ XState (AWAKE/IDLE/SLEEPING)
+    watchdog.ts           ← ✅ health checks 60s
+    signal-detector.ts    ← 20+ signaux détectés (⚠️ pas encore wired à memory)
+    curious.ts            ← proactive discovery
+    setup-wizard.ts       ← wizard onboarding (⚠️ manque brain device)
+    node-mesh.ts          ← fleet capabilities (⚠️ manque Docker pairing)
+    paths.ts              ← ✅ tous les chemins centralisés + RELAY_DIR
+    resource-hub.ts       ← ✅ catalogue tools/mcps/skills
+    agent-templates/      ← ✅ 5 personas (dg/drh/ceo/coo/freelance)
   memory/src/
-    index.ts, bm25.ts, vector.ts
-  flutter_app/        ← app macOS/iOS
+    index.ts, bm25.ts, vector.ts, hybrid-search.ts
+  flutter_app/            ← app macOS native (26 pages)
 ```
 
 ## État actuel (15/03/2026) — PHASES 1-4 COMPLÈTES ✅
-- ✅ 117+ fichiers TypeScript implémentés
-- ✅ CLAUDE_TASK.md — 12/12 tâches complètes
-- ✅ gateway.ts REX Identity Layer + rex-identity.ts pipeline 5 étapes
-- ✅ relay-engine.ts (Ollama→Groq→Haiku→Sonnet→Opus, RxJS)
-- ✅ user-cycles.ts (XState AWAKE_ACTIVE/AWAKE_IDLE/SLEEPING/WAKING_UP)
-- ✅ 713 tests vitest — unit + integration (43 fichiers) — `pnpm test` < 2s
-- ✅ CI GitHub Actions (unit + build + security audit)
-- 🔄 Prochaine étape : déploiement VPS (docs/vps-install.md)
+- ✅ 117+ fichiers TypeScript, 1449+ tests vitest
+- ✅ REX Identity Layer — system prompt injecté dans TOUS les LLM paths
+- ✅ Relay persistence — fichiers datés + atomic writes + incremental save
+- ✅ Dynamic tool injection — intent/model/health-aware tool selection
+- ✅ Orchestration 6 tiers — routing 0 LLM
+- ✅ User cycles XState + Watchdog + Resource Hub + Agent Templates
+- ✅ CI GitHub Actions (manual dispatch)
+- 🔧 P0 : signal→memory direct save, brain device au setup
+- 🔧 P1 : fleet Docker pairing, data consent wizard, fleet sync
+- 🔧 P2 : REX Scan, open source prep
+- 📋 Détails complets : `docs/REX-STATUS.md`
 
 ## Commandes utiles
 ```bash
