@@ -43,6 +43,62 @@ for item in CLAUDE.md commands rules agents skills templates; do
   fi
 done
 
+# 1b. Sync skills + AGENTS.md to ~/.codex/ (Codex integration)
+CODEX_DIR="$HOME/.codex"
+if [ -d "$CODEX_DIR" ]; then
+  echo "→ Syncing REX to Codex (~/.codex/)..."
+
+  # Symlink skills (same format as Claude)
+  for item in skills; do
+    src="$REX_DIR/dotfiles/$item"
+    dest="$CODEX_DIR/$item"
+    if [ -e "$src" ]; then
+      if [ -L "$dest" ]; then rm "$dest"
+      elif [ -e "$dest" ]; then
+        echo "  Backing up existing $dest → ${dest}.bak"
+        mv "$dest" "${dest}.bak"
+      fi
+      ln -sf "$src" "$dest"
+      echo "  Linked $item → ~/.codex/$item"
+    fi
+  done
+
+  # Symlink AGENTS.md (Codex equivalent of CLAUDE.md)
+  agents_src="$REX_DIR/dotfiles/AGENTS.md"
+  agents_dest="$CODEX_DIR/AGENTS.md"
+  if [ -e "$agents_src" ]; then
+    [ -L "$agents_dest" ] && rm "$agents_dest"
+    ln -sf "$agents_src" "$agents_dest"
+    echo "  Linked AGENTS.md → ~/.codex/AGENTS.md"
+  fi
+
+  # Register rex-memory MCP in config.toml (smart merge — preserves existing)
+  CODEX_CONFIG="$CODEX_DIR/config.toml"
+  if [ -f "$CODEX_CONFIG" ]; then
+    if ! grep -q 'rex-memory' "$CODEX_CONFIG"; then
+      # Find built memory server path (same as used for Claude)
+      MEMORY_SERVER="$REX_DIR/memory/dist/server.js"
+      if [ -f "$MEMORY_SERVER" ]; then
+        cat >> "$CODEX_CONFIG" << TOML
+
+[mcp_servers.rex-memory]
+command = "node"
+args = ["$MEMORY_SERVER"]
+TOML
+        echo "  Registered rex-memory in ~/.codex/config.toml"
+      else
+        echo "  ⚠️  Memory server not built yet — run 'rex install' after build"
+      fi
+    else
+      echo "  rex-memory already in config.toml"
+    fi
+  else
+    echo "  ℹ️  ~/.codex/config.toml not found — skipping MCP merge"
+  fi
+else
+  echo "→ Codex not installed — skipping ~/.codex/ integration (install codex-cli to enable)"
+fi
+
 # 2. Install MCP server dependencies
 echo "→ Installing memory server..."
 cd "$REX_DIR/memory"
@@ -135,6 +191,7 @@ echo ""
 echo "=== REX installed ==="
 echo "  Dotfiles: $REX_DIR/dotfiles/ → ~/.claude/"
 echo "  MCP:      rex-memory server registered in $SETTINGS"
+echo "  Codex:    rex-memory + skills synced to ~/.codex/"
 if $IS_MACOS; then
   echo "  Activity: Hammerspoon logger configured"
 else

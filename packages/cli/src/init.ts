@@ -1,5 +1,6 @@
 /** @module OPTIMIZE — setup wizard, guards install, project init, CI/review config */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, chmodSync, unlinkSync, readdirSync, statSync } from 'node:fs'
+import { syncCodexConfig } from './codex-sync.js'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { execSync } from 'node:child_process'
@@ -976,10 +977,14 @@ fi
     }
   }
 
-  // 10. Save settings
+  // 10. Sync to Codex (~/.codex/) if installed
+  const codexResult = await syncCodexConfig()
+  if (codexResult) ok(codexResult)
+
+  // 11. Save settings
   writeJson(settingsPath, settings)
 
-  // 11. Generate pairing code (store in settings for other nodes to use)
+  // 12. Generate pairing code (store in settings for other nodes to use)
   let pairingCode = ''
   {
     try {
