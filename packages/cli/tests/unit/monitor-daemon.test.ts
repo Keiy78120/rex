@@ -43,7 +43,7 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-import { getMonitorStatus } from '../../src/monitor-daemon.js'
+import { getMonitorStatus, printMonitorStatus } from '../../src/monitor-daemon.js'
 
 // ── getMonitorStatus ──────────────────────────────────────────────────────────
 
@@ -62,7 +62,6 @@ describe('getMonitorStatus', () => {
   })
 
   it('hammerAvailable is false when events.jsonl does not exist', () => {
-    // existsSync mocked to false
     expect(getMonitorStatus().hammerAvailable).toBe(false)
   })
 
@@ -74,5 +73,31 @@ describe('getMonitorStatus', () => {
 
   it('does not throw', () => {
     expect(() => getMonitorStatus()).not.toThrow()
+  })
+
+  it('lastRunAt is a string', () => {
+    expect(typeof getMonitorStatus().lastRunAt).toBe('string')
+  })
+
+  it('returns consistent shape on repeated calls', () => {
+    const s1 = getMonitorStatus()
+    const s2 = getMonitorStatus()
+    expect(Object.keys(s1)).toEqual(Object.keys(s2))
+  })
+})
+
+// ── printMonitorStatus ────────────────────────────────────────────────────────
+
+describe('printMonitorStatus', () => {
+  it('does not throw in JSON mode', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect(() => printMonitorStatus(true)).not.toThrow()
+    spy.mockRestore()
+  })
+
+  it('does not throw in text mode', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect(() => printMonitorStatus(false)).not.toThrow()
+    spy.mockRestore()
   })
 })
