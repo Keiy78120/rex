@@ -3,8 +3,11 @@ import 'package:flutter/cupertino.dart';
 import '../theme.dart';
 import 'rex_nav.dart';
 
-class RexTopBar extends StatelessWidget {
-  const RexTopBar({
+/// Horizontal row of section tabs — intended for use inside a [ToolBar]
+/// via CustomToolbarItem. No Container/height/padding needed here; the
+/// ToolBar handles toolbar chrome and traffic-light spacing natively.
+class RexSectionTabRow extends StatelessWidget {
+  const RexSectionTabRow({
     super.key,
     required this.sections,
     required this.selectedIndex,
@@ -17,40 +20,21 @@ class RexTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 52,
-      decoration: BoxDecoration(
-        color: context.rex.surface,
-        border: Border(
-          bottom: BorderSide(color: context.rex.separator, width: 0.5),
-        ),
-      ),
-      padding: const EdgeInsets.only(top: 28, left: 12, right: 12),
-      child: Row(
-        children: [
-          const SizedBox(width: 72), // space for macOS traffic lights
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: sections.asMap().entries.map((e) {
-                  return _TopBarPill(
-                    label: e.value.label,
-                    selected: e.key == selectedIndex,
-                    onTap: () => onChanged(e.key),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: sections.asMap().entries.map((e) {
+        return _SectionTab(
+          label: e.value.label,
+          selected: e.key == selectedIndex,
+          onTap: () => onChanged(e.key),
+        );
+      }).toList(),
     );
   }
 }
 
-class _TopBarPill extends StatefulWidget {
-  const _TopBarPill({
+class _SectionTab extends StatefulWidget {
+  const _SectionTab({
     required this.label,
     required this.selected,
     required this.onTap,
@@ -61,10 +45,10 @@ class _TopBarPill extends StatefulWidget {
   final VoidCallback onTap;
 
   @override
-  State<_TopBarPill> createState() => _TopBarPillState();
+  State<_SectionTab> createState() => _SectionTabState();
 }
 
-class _TopBarPillState extends State<_TopBarPill> {
+class _SectionTabState extends State<_SectionTab> {
   bool _hovered = false;
 
   @override
@@ -79,21 +63,22 @@ class _TopBarPillState extends State<_TopBarPill> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          margin: const EdgeInsets.only(right: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
             color: widget.selected
-                ? accent.withValues(alpha: 0.12)
+                ? accent.withValues(alpha: 0.10)
                 : _hovered
                     ? context.rex.text.withValues(alpha: 0.05)
                     : const Color(0x00000000),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(6),
           ),
           child: Text(
             widget.label,
             style: TextStyle(
               fontSize: 13,
-              fontWeight: widget.selected ? FontWeight.w600 : FontWeight.w400,
+              fontWeight:
+                  widget.selected ? FontWeight.w600 : FontWeight.w400,
               color: widget.selected ? accent : context.rex.textSecondary,
             ),
           ),

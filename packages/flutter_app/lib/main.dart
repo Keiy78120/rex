@@ -122,36 +122,40 @@ class _RexMainWindowState extends State<RexMainWindow> {
   Widget build(BuildContext context) {
     final section = kRexSections[_sectionIndex];
 
-    return MediaQuery(
-      data: MediaQuery.of(context).copyWith(
-        platformBrightness: Brightness.light,
-      ),
-      child: MacosTheme(
-        data: RexApp._lightTheme,
-        child: Column(
-          children: [
-            RexTopBar(
-              sections: kRexSections,
-              selectedIndex: _sectionIndex,
-              onChanged: _onSectionChanged,
-            ),
-            Expanded(
-              child: Row(
-                children: [
-                  if (section.hasSidebar)
-                    RexContextualSidebar(
-                      section: section,
-                      selectedPageIndex: _pageIndex,
-                      onPageChanged: (i) => setState(() => _pageIndex = i),
-                    ),
-                  Expanded(child: _buildPage(_pageIndex)),
-                ],
+    return MacosWindow(
+      child: MacosScaffold(
+        toolBar: ToolBar(
+          height: 52,
+          title: null,
+          titleWidth: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          centerTitle: true,
+          actions: [
+            CustomToolbarItem(
+              inToolbarBuilder: (ctx) => RexSectionTabRow(
+                sections: kRexSections,
+                selectedIndex: _sectionIndex,
+                onChanged: _onSectionChanged,
               ),
             ),
           ],
         ),
+        children: [
+          ContentArea(
+            builder: (ctx, _) => Row(
+              children: [
+                if (section.hasSidebar)
+                  RexContextualSidebar(
+                    section: section,
+                    selectedPageIndex: _pageIndex,
+                    onPageChanged: (i) => setState(() => _pageIndex = i),
+                  ),
+                Expanded(child: _buildPage(_pageIndex)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
-
