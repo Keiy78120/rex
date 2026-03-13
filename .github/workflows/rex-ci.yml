@@ -1,10 +1,7 @@
 name: REX CI
 
 on:
-  push:
-    branches: [main, master, 'feat/**', 'fix/**']
-  pull_request:
-    branches: [main, master]
+  workflow_dispatch: # manual only — auto CI disabled
 
 jobs:
   # ── Type check — zero TS errors ────────────────────────────────────────────
