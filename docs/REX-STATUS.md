@@ -126,42 +126,49 @@ RELAY.md partagé, dated files, /loop d'IAs, fleet. LLMs collaborent, pas compé
 ## 🔧 CE QUI RESTE À FAIRE
 
 ### P0 — Script→Memory direct save (no LLM)
-**Fichiers :** `signal-detector.ts`, `daemon.ts`, `packages/memory/`
+**Fichiers :** `signal-detector.ts` (319L, 7 APIs publiques), `daemon.ts` (952L), `packages/memory/`
 
-Signal detector détecte 20+ signaux système via scripts purs MAIS ne les sauvegarde PAS automatiquement en mémoire. Actuellement les signaux sont détectés et loggés, mais pas persistés.
+Signal detector est **complet** : hardware (CPU/RAM/disk + pressure levels), services (Ollama/Hub/Daemon/Gateway/Tailscale), dev (git repo/branch/uncommitted/pending chunks/last commit), providers (13 API keys). Cache 30s.
+
+Le gap : les signaux sont **exposés via API** (`detectSignals()`, `isUnderPressure()`, `hasLLMBackend()`, etc.) et **lus par le daemon** pour gating — mais **jamais persistés en mémoire**. Un commit git, une alerte disk, un changement de branche → ça disparaît après 30s de cache.
 
 **À implémenter :**
-- [ ] Quand `signal-detector.ts` détecte un signal (git commit, file change, disk alert, etc.) → écrire directement en mémoire SQLite via `packages/memory/` sans appeler aucun LLM
-- [ ] Créer une fonction `saveSignalToMemory(signal)` qui fait le mapping signal → memory entry
-- [ ] Wire dans daemon cycles : chaque signal détecté = 1 insert mémoire (subject, observation, type=fact)
-- [ ] Pas besoin d'embeddings pour ces saves — ils seront embeddés au prochain cycle ingest
+- [ ] `saveSignalToMemory(signal)` — mapping signal → memory entry (subject, observation, type=fact)
+- [ ] Wire dans daemon : après chaque `detectSignals()` cycle, diff avec le précédent → save les changements significatifs (nouveau commit, nouvelle branche, pressure change, provider down/up)
+- [ ] Pas d'embeddings à ce stade — save en pending/, embed au prochain cycle ingest
+- [ ] Dedup : ne pas sauver le même signal 2x (hash du contenu ou timestamp guard)
 
 ### P0 — Brain device obligatoire au setup
-**Fichiers :** `setup-wizard.ts`
+**Fichiers :** `setup-wizard.ts` (569L, 4 phases complètes)
 
-Le wizard a 4 phases (Discovery→Wow→Organize→Summary) mais AUCUNE sélection de "brain device" (VPS/Mac 24/7).
+Le wizard Discovery détecte déjà : Ollama, hardware (CPU/RAM/GPU/disk), Claude/Codex, Tailscale, free-tier APIs (Groq/Cerebras/Together/Mistral/OpenRouter/DeepSeek), git repos, LaunchAgents, MCPs, sessions. Organize écrit config.json.
+
+Le gap : **aucune notion de "brain device"**. Tout est local-only. Pas de question "quel device est le cerveau 24/7 ?"
 
 **À implémenter :**
-- [ ] Ajouter dans Phase 1 (Discovery) : détection/sélection du brain device
-- [ ] Options : VPS (IP/SSH), Mac Mini (local), PC (Tailscale), "Setup later"
-- [ ] Si "Setup later" → warning que REX tourne en mode dégradé (pas de daemon 24/7)
-- [ ] Persister le choix dans `~/.claude/rex/config.json` → `brain: { type, host, port }`
-- [ ] Vérifier connectivité au brain avant de continuer le wizard
+- [ ] Phase 1 (Discovery) : ajouter brain device probe — détecter si on est sur le brain ou un fleet node
+- [ ] Si Tailscale actif : scanner les peers pour trouver un hub existant (port 7420)
+- [ ] Options : "Ce Mac = le brain" / VPS (IP/SSH) / "Rejoindre un brain existant" / "Setup later"
+- [ ] Si "Setup later" → warning mode dégradé (pas de daemon 24/7, pas de fleet)
+- [ ] Persister dans `config.json` → `brain: { type, host, port, isSelf }`
+- [ ] Si brain = remote → tester connectivité avant de continuer
 
 ### P1 — Fleet pairing via Docker
-**Fichiers :** `node-mesh.ts`, nouveau `fleet-pairing.ts`
+**Fichiers :** `node-mesh.ts` (634L), Dockerfile (62L), docker-compose.yml (87L), docker-compose.vps.yml (53L)
 
-Node mesh gère capabilities/routing/score MAIS pas de pairing Docker automatique.
+Node mesh est **complet** : capability detection (13 types), scoring, thermal gating, Tailscale auto-discovery, task routing (`routeTask(type)`), hub registration, mesh-cache offline. Docker **existe** déjà : multi-stage build, 3 services (hub/daemon/gateway), compose dev + VPS + sandbox.
+
+Le gap : **pas de pairing automatique**. Un admin doit manuellement configurer Docker sur chaque node. Pas de `rex fleet pair`.
 
 **À implémenter :**
-- [ ] `fleet-pairing.ts` — Docker-based fleet node installer
-- [ ] Auto-detect env du node cible (OS, RAM, GPU, disque)
-- [ ] Générer `docker-compose.yml` adapté au node (lightweight pour RPi, full pour PC GPU)
-- [ ] `rex fleet pair <host>` CLI → SSH au host, installe Docker, pull image REX, configure
-- [ ] `rex fleet unpair <host>` → supprime le container + config
-- [ ] `rex fleet disconnect <host>` → stop temporaire (ne supprime rien)
-- [ ] `rex fleet reconnect <host>` → restart le container
-- [ ] Dockerfile REX multi-arch (amd64/arm64)
+- [ ] `fleet-pairing.ts` — orchestre le pairing depuis le brain
+- [ ] `rex fleet pair <host>` → SSH au host, vérifie Docker, pull image REX, lance compose
+- [ ] `rex fleet unpair <host>` → SSH, docker-compose down --volumes, supprime config
+- [ ] `rex fleet disconnect <host>` → docker-compose stop (données conservées)
+- [ ] `rex fleet reconnect <host>` → docker-compose start
+- [ ] Auto-detect env du node cible (via `signal-detector` over SSH)
+- [ ] Générer compose adapté : RPi=lightweight (hub only), PC GPU=full (hub+daemon+ollama)
+- [ ] Le Dockerfile existant est déjà multi-stage Node 22 Alpine — juste ajouter multi-arch build
 
 ### P1 — Wizard UI — Consent data sources
 **Fichiers :** `setup-wizard.ts`, nouveau `data-sources.ts`
@@ -268,6 +275,32 @@ rex agents          # liste agents
 rex client:create   # créer un client
 rex client:list     # lister clients
 ```
+
+---
+
+## 📊 MODULES — ÉTAT DÉTAILLÉ
+
+| Module | Lignes | Status | Notes |
+|--------|--------|--------|-------|
+| `index.ts` | ~2000 | ✅ | 40+ CLI commands |
+| `hub.ts` | 994 | ✅ | 50+ API endpoints, port 7420 |
+| `daemon.ts` | 952 | ✅ | 13 background cycles, circuit breaker |
+| `curious.ts` | 736 | ✅ | 6 discovery sources, Telegram dispatch |
+| `node-mesh.ts` | 634 | ✅ | Fleet discovery/routing/scoring |
+| `setup-wizard.ts` | 569 | ✅ | 4-phase setup, zero LLM |
+| `security-scanner.ts` | 420 | ✅ | MCP threat detection, 24h cache |
+| `mcp-discover.ts` | 392 | ✅ | 20+ curated MCPs, offline-first |
+| `tool-injector.ts` | 335 | ✅ | Dynamic tool selection |
+| `signal-detector.ts` | 319 | ✅ | 20+ signals, 7 public APIs |
+| `sandbox.ts` | 309 | ✅ | macOS seatbelt + Docker isolation |
+| `relay-engine.ts` | ~400 | ✅ | RxJS pipeline + persistence |
+| `self-improve.ts` | 213 | ✅ | Lesson extraction + patterns |
+| `orchestration-policy.ts` | ~200 | ✅ | 6-tier routing, zero LLM |
+| `user-cycles.ts` | ~200 | ✅ | XState AWAKE/SLEEPING |
+| `watchdog.ts` | ~150 | ✅ | 60s health checks |
+| **Docker** | ~210 | ✅ | Dockerfile + 3 compose files |
+
+**Total : ~9000+ lignes TypeScript implémentées, 0 stubs**
 
 ---
 
