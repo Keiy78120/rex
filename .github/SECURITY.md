@@ -8,7 +8,7 @@ Only the latest release on the `main` branch is actively maintained.
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Report security issues privately by emailing: **kevin@dstudio.company**
+Report security issues privately by emailing: **rex@dstudio.company**
 
 Include:
 - A clear description of the vulnerability

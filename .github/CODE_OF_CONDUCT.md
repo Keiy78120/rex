@@ -22,7 +22,7 @@ We pledge to act and interact in ways that contribute to an open, welcoming, div
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainer at **kevin@dstudio.company**. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainer at **rex@dstudio.company**. All complaints will be reviewed and investigated promptly and fairly.
 
 ## Attribution
 
