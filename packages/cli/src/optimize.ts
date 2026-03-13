@@ -72,6 +72,7 @@ export async function optimize(apply: boolean = false) {
   } catch {
     console.error(`${COLORS.red}Ollama not running.${COLORS.reset} Start it: ollama serve`)
     process.exit(1)
+    return
   }
 
   // Find CLAUDE.md
@@ -82,6 +83,7 @@ export async function optimize(apply: boolean = false) {
   if (!existsSync(target)) {
     console.error(`${COLORS.red}No CLAUDE.md found.${COLORS.reset}`)
     process.exit(1)
+    return
   }
 
   const content = readFileSync(target, 'utf-8')
