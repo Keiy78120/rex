@@ -29,7 +29,9 @@ import 'pages/files_page.dart';
 import 'pages/training_page.dart';
 import 'pages/terminal_page.dart';
 import 'pages/clients_page.dart';
-import 'widgets/rex_sidebar.dart';
+import 'widgets/rex_nav.dart';
+import 'widgets/rex_topbar.dart';
+import 'widgets/rex_contextual_sidebar.dart';
 
 void main() {
   runApp(
@@ -64,7 +66,8 @@ class RexMainWindow extends StatefulWidget {
 }
 
 class _RexMainWindowState extends State<RexMainWindow> {
-  int _pageIndex = 0;
+  int _sectionIndex = 0;
+  int _pageIndex = kCockpitPageIndex;
 
   Widget _buildPage(int index) {
     switch (index) {
@@ -98,6 +101,14 @@ class _RexMainWindowState extends State<RexMainWindow> {
     }
   }
 
+  void _onSectionChanged(int section) {
+    setState(() {
+      _sectionIndex = section;
+      final items = kRexSections[section].items;
+      _pageIndex = items.isNotEmpty ? items.first.pageIndex : kCockpitPageIndex;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -109,20 +120,33 @@ class _RexMainWindowState extends State<RexMainWindow> {
 
   @override
   Widget build(BuildContext context) {
+    final section = kRexSections[_sectionIndex];
+
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(
         platformBrightness: Brightness.light,
       ),
       child: MacosTheme(
         data: RexApp._lightTheme,
-        child: Row(
+        child: Column(
           children: [
-            RexSidebar(
-              currentIndex: _pageIndex,
-              onChanged: (i) => setState(() => _pageIndex = i),
+            RexTopBar(
+              sections: kRexSections,
+              selectedIndex: _sectionIndex,
+              onChanged: _onSectionChanged,
             ),
             Expanded(
-              child: _buildPage(_pageIndex),
+              child: Row(
+                children: [
+                  if (section.hasSidebar)
+                    RexContextualSidebar(
+                      section: section,
+                      selectedPageIndex: _pageIndex,
+                      onPageChanged: (i) => setState(() => _pageIndex = i),
+                    ),
+                  Expanded(child: _buildPage(_pageIndex)),
+                ],
+              ),
             ),
           ],
         ),
