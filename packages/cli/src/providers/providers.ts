@@ -35,6 +35,11 @@ interface RegisteredProvider extends Provider {
   check: () => Promise<boolean>
 }
 
+interface ProviderCooldownState {
+  until: number
+  failures: number
+}
+
 // ── Cost tier priority (lower = preferred) ─────────────
 
 const COST_PRIORITY: Record<CostTier, number> = {
@@ -53,6 +58,7 @@ const STATUS_PRIORITY: Record<ProviderStatus, number> = {
 
 export class ProviderRegistry {
   private providers = new Map<string, RegisteredProvider>()
+  private cooldownMap = new Map<string, ProviderCooldownState>()
 
   register(
     name: string,
@@ -61,14 +67,45 @@ export class ProviderRegistry {
     this.providers.set(name, { ...config, status: 'unavailable' })
   }
 
+  private getActiveCooldown(name: string): ProviderCooldownState | null {
+    const cooldown = this.cooldownMap.get(name)
+    if (!cooldown) return null
+    if (Date.now() >= cooldown.until) {
+      this.cooldownMap.delete(name)
+      return null
+    }
+    return cooldown
+  }
+
+  private markFailure(name: string): void {
+    const previousFailures = this.cooldownMap.get(name)?.failures ?? 0
+    const failures = previousFailures + 1
+    const cooldownMs = Math.min(30_000, 2_000 * (2 ** previousFailures))
+    this.cooldownMap.set(name, { failures, until: Date.now() + cooldownMs })
+  }
+
+  private clearCooldown(name: string): void {
+    this.cooldownMap.delete(name)
+  }
+
   async checkAll(opts?: { silent?: boolean }): Promise<void> {
     const entries = [...this.providers.entries()]
     const results = await Promise.all(
       entries.map(async ([name, p]) => {
+        const cooldown = this.getActiveCooldown(name)
+        if (cooldown) {
+          return [name, 'unavailable'] as const
+        }
         try {
           const ok = await p.check()
+          if (ok) {
+            this.clearCooldown(name)
+          } else {
+            this.markFailure(name)
+          }
           return [name, ok ? 'available' : 'unavailable'] as const
         } catch {
+          this.markFailure(name)
           return [name, 'unavailable'] as const
         }
       }),
@@ -86,6 +123,7 @@ export class ProviderRegistry {
   async select(capability: string): Promise<Provider | null> {
     const candidates = [...this.providers.values()]
       .filter(p => p.capabilities.includes(capability) && p.status !== 'unavailable')
+      .filter(p => !this.getActiveCooldown(p.name))
 
     if (candidates.length === 0) return null
 

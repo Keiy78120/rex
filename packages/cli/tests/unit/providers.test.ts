@@ -3,7 +3,7 @@
  * Tests the registry logic without network calls.
  * @module CORE
  */
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../src/logger.js', () => ({
   createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
@@ -30,6 +30,10 @@ import {
   loadCodexToken,
   type Provider,
 } from '../../src/providers.js'
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -201,6 +205,57 @@ describe('ProviderRegistry.checkAll', () => {
     })
     await r.checkAll({ silent: true })
     expect(r.getByName('throwing-provider')?.status).toBe('unavailable')
+  })
+
+  it('applies cooldown after a failed check before retrying', async () => {
+    vi.useFakeTimers()
+    const check = vi.fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+    const r = makeRegistry()
+    r.register('flaky-provider', {
+      name: 'flaky-provider',
+      type: 'llm',
+      costTier: 'free',
+      capabilities: ['chat'],
+      check,
+    })
+
+    await r.checkAll({ silent: true })
+    expect(check).toHaveBeenCalledTimes(1)
+    expect(r.getByName('flaky-provider')?.status).toBe('unavailable')
+
+    await r.checkAll({ silent: true })
+    expect(check).toHaveBeenCalledTimes(1)
+
+    vi.advanceTimersByTime(2000)
+    await r.checkAll({ silent: true })
+    expect(check).toHaveBeenCalledTimes(2)
+    expect(r.getByName('flaky-provider')?.status).toBe('available')
+  })
+
+  it('resets cooldown after a successful recovery', async () => {
+    vi.useFakeTimers()
+    const check = vi.fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+    const r = makeRegistry()
+    r.register('recovering-provider', {
+      name: 'recovering-provider',
+      type: 'llm',
+      costTier: 'free',
+      capabilities: ['chat'],
+      check,
+    })
+
+    await r.checkAll({ silent: true })
+    vi.advanceTimersByTime(2000)
+    await r.checkAll({ silent: true })
+    await r.checkAll({ silent: true })
+
+    expect(check).toHaveBeenCalledTimes(3)
+    expect(r.getByName('recovering-provider')?.status).toBe('available')
   })
 })
 
