@@ -385,15 +385,16 @@ packages/flutter_app/lib/
 
 1. **70/30 rule** — 70% scripts, 30% LLM. Jamais l'inverse.
 2. **Script-first** — si un script peut répondre, 0 LLM appelé
-3. **Dated relay files** — RELAY-YYYY-MM-DD-HHhMM.md, jamais un fichier qui grossit
-4. **Atomic writes** — tmp→rename pour tout fichier critique
-5. **Brain = source of truth** — fleet nodes = replicas, brain wins conflicts
-6. **Privacy-first** — user choisit CE QUE REX peut lire, jamais plus
-7. **REX identity everywhere** — tout LLM call a le system prompt REX
-8. **Dynamic tool injection** — chaque requête reçoit les tools pertinents, pas tous
-9. **0 LLM pour le routing** — orchestration-policy.ts route par regex/rules
-10. **Additive only** — ne jamais casser du code qui marche
-11. **Dual memory — zero data loss** — voir section dédiée ci-dessous
+3. **REX = root layer** — s'installe à la racine, merge et possède `~/.claude/` + `~/.codex/`. REX EST le système de config, pas un plugin
+4. **Dated relay files** — RELAY-YYYY-MM-DD-HHhMM.md, jamais un fichier qui grossit
+5. **Atomic writes** — tmp→rename pour tout fichier critique
+6. **Brain = source of truth** — fleet nodes = replicas, brain wins conflicts
+7. **Privacy-first** — user choisit CE QUE REX peut lire, jamais plus
+8. **REX identity everywhere** — tout LLM call a le system prompt REX
+9. **Dynamic tool injection** — chaque requête reçoit les tools pertinents, pas tous
+10. **0 LLM pour le routing** — orchestration-policy.ts route par regex/rules
+11. **Additive only** — ne jamais casser du code qui marche
+12. **Dual memory — zero data loss** — voir section dédiée ci-dessous
 
 ---
 
