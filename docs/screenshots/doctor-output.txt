@@ -1,0 +1,88 @@
+^D
+═════════════════════════════════════════════
+        REX DOCTOR — Health Check
+═════════════════════════════════════════════
+
+  ⚙ Config  3/3
+    ✓ CLAUDE.md — Present and non-empty
+    ✓ settings.json — Valid JSON
+    ✓ vault.md — Present
+
+  📏 Rules  9/9
+    ✓ api-design.md — Present and non-empty
+    ✓ defensive-engineering.md — Present and non-empty
+    ✓ docs-first.md — Present and non-empty
+    ✓ frontend.md — Present and non-empty
+    ✓ git-workflow.md — Present and non-empty
+    ✓ latest-versions.md — Present and non-empty
+    ✓ never-assume.md — Present and non-empty
+    ✓ security.md — Present and non-empty
+    ✓ testing.md — Present and non-empty
+
+  🧠 Memory  15/15
+    ✓ -Users-keiy-Documents-Developer-telegram-app-vhash94-bot/memory/MEMORY.md — Present and non-empty
+    ✓ audit-findings.md — Linked file exists
+    ✓ audit-findings.md — Linked file exists
+    ✓ audit-findings.md — Linked file exists
+    ✓ audit-findings.md — Linked file exists
+    ✓ -Users-keiy-Documents-Developer-telegram-app-greenhouse-bot/memory/MEMORY.md — Present and non-empty
+    ✓ -Users-keiy-Documents-Developer-telegram-app-SwapYX/memory/MEMORY.md — Present and non-empty
+    ✓ -Users-keiy-Documents-Developer-keiy-life/memory/MEMORY.md — Present and non-empty
+    ✓ -Users-keiy-Documents-Developer-dstudio-landing/memory/MEMORY.md — Present and non-empty
+    ✓ -Users-keiy-Documents-Developer-KeiyOS/memory/MEMORY.md — Present and non-empty
+    ✓ -Users-keiy/memory/MEMORY.md — Present and non-empty
+    ✓ projects.md — Linked file exists
+    ✓ patterns.md — Linked file exists
+    ✓ debugging.md — Linked file exists
+    ✓ openclaw.md — Linked file exists
+
+  🔌 MCP Servers  1/1
+    ✓ rex-memory — node found
+
+  🧩 Plugins  3/3
+    ✓ claude-plugins-official — Installed
+    ✓ superpowers-marketplace — Installed
+    ✓ trailofbits — Installed
+
+  🪝 Hooks  6/6
+    ✓ UserPromptSubmit — 1 handler(s)
+    ✓ PreToolUse — 2 handler(s)
+    ✓ Stop — 4 handler(s)
+    ✓ SessionStart — 1 handler(s)
+    ✓ SessionEnd — 1 handler(s)
+    ✓ PostToolUse — Custom hook
+
+  🛡 Guards  8/8
+    ✓ completion-guard.sh — Installed
+    ✓ dangerous-cmd-guard.sh — Installed
+    ✓ test-protect-guard.sh — Installed
+    ✓ session-summary.sh — Installed
+    ✓ ui-checklist-guard.sh — Installed
+    ✓ scope-guard.sh — Installed
+    ✓ error-pattern-guard.sh — Installed
+    ✓ notify-telegram.sh — Installed
+
+  📚 Docs Cache  10/10
+    ✓ cloudflare.md — 2KB
+    ✓ discordjs-voice.md — 5KB
+    ✓ nextjs.md — 3KB
+    ✓ openclaw.md — 3KB
+    ✓ react.md — 2KB
+    ✓ screencapturekit-rs.md — 2KB
+    ✓ tailwind.md — 1KB
+    ✓ tauri-updater.md — 4KB
+    ✓ telegram-bot.md — 2KB
+    ✓ whisper-rs.md — 2KB
+
+  💻 Environment  5/5
+    ✓ Claude Code — 2.1.69 (Claude Code)
+    ✓ Node.js — v22.20.0
+    ✓ Git — git version 2.50.1 (Apple Git-155)
+    ✓ OS — darwin 25.4.0 (arm64)
+    ✓ Shell — /bin/zsh
+
+─────────────────────────────────────────────
+  Summary: 60/60 checks passed
+  Status:  HEALTHY
+═════════════════════════════════════════════
+
