@@ -240,7 +240,7 @@ export function syncCodexRules(rulesDir: string): void {
         if (!seen.has(normalized)) {
           seen.add(normalized)
           const parts = normalized.split(/\s+/).map(p => `"${p}"`).join(', ')
-          rules.push(`prefix_rule(pattern=[${parts}], decision="deny")`)
+          rules.push(`prefix_rule(pattern=[${parts}], decision="prompt")`)
         }
       }
     } catch {
