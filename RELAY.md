@@ -1,204 +1,302 @@
-# REX RELAY — Opus → Codex Collaboration
+# REX RELAY — Opus → Codex
 
-> Ce fichier est la passerelle entre Opus (architecte) et Codex (exécutant).
-> **Codex : lis ce fichier EN PREMIER avant de coder quoi que ce soit.**
-> Opus : mets à jour ce fichier avant de lancer Codex.
-
----
-
-## QUI PARLE
-
-**Opus** (Claude Opus 4.6) — architecte, planificateur, décisionnaire.
-Je conçois, j'audite, je décide. Je ne code pas les features — je les planifie.
-
-**Codex** (OpenAI gpt-5.4) — exécutant, worker précis.
-Tu lis ce fichier, tu exécutes les tâches, tu commites. Pas de décisions d'archi.
+> **Codex : lis ce fichier EN ENTIER avant de coder.**
+> Chaque tâche a le fichier exact, le code exact, le test exact, le commit exact.
+> Pas de décision d'archi à prendre — tout est décidé. Exécute.
 
 ---
 
-## CONTEXTE PROJET
+## SETUP
 
-- **Repo** : `/Users/keiy/Documents/Developer/keiy/rex`
-- **Branche** : `main`
-- **Build** : `cd packages/cli && pnpm build`
-- **Tests** : `cd packages/cli && pnpm test` → doit rester ≥ 1445/1449
-- **OpenClaw local** : `~/Documents/Developer/keiy/openclaw/` (patterns à consulter)
+```bash
+cd ~/Documents/Developer/keiy/rex
+git checkout -b fix/sprint1-token-economy
+```
 
-## RÈGLES ABSOLUES
-
-1. **Additive only** — ne jamais casser du code qui marche
-2. **Tests verts** après CHAQUE commit
-3. **Pas de Co-Authored-By** dans les commits
-4. **Pas de mention AI** dans commits/PR
-5. **Conventional commits** : `feat:`, `fix:`, `refactor:`
-6. **Lire avant d'écrire** — toujours
-7. **OpenClaw-first** — vérifier `~/Documents/Developer/keiy/openclaw/` avant de coder
-
-## DOCS DE RÉFÉRENCE
-
-- `docs/REX-STATUS.md` — état complet
-- `docs/plans/2026-03-14-audit-complet-openclaw-vs-rex.md` — audit à suivre
-- `docs/plans/2026-03-14-gateway-improvements.md` — améliorations gateway
-- `docs/plans/2026-03-14-rex-worker-model.md` — plan fine-tune
+Lis aussi `~/.codex/agents.md` — il contient tes règles, patterns, et checklist.
 
 ---
 
 ## SPRINT 1 — Token Economy + Error Handling
 
-### Tâche 1.1 — Cacher REX_SYSTEM_PROMPT au niveau provider
-**Fichier** : `src/agents/runtime.ts` (lignes 555, 628)
-**Problème** : REX_SYSTEM_PROMPT (1027 tokens) envoyé à CHAQUE appel LLM.
-**Fix** :
-- Dans `runAgent()` et `streamAgent()`, ne PAS injecter REX_SYSTEM_PROMPT si le provider l'a déjà (gateway paths).
-- Créer un flag `systemPromptInjected: boolean` dans le context pour éviter les doubles.
-- Le system prompt doit être envoyé UNE SEULE FOIS par conversation, pas par message.
-**Test** : `pnpm test -- tests/unit/agent-runtime.test.ts`
-**Commit** : `fix(agents): deduplicate REX_SYSTEM_PROMPT injection — save ~1K tokens/call`
+Objectif : économiser ~200-600K tokens/mois + rendre les erreurs visibles.
 
-### Tâche 1.2 — Remplacer 33 catch {} silencieux dans gateway
-**Fichier** : `src/gateway/telegram.ts`
-**Problème** : 33 `catch {}` qui swallow les erreurs sans logging.
-**Fix** :
-- `grep -n "catch {}" src/gateway/telegram.ts` pour les trouver tous
-- Remplacer chaque `catch {}` par `catch (e) { log.warn('...context...', e instanceof Error ? e.message : e) }`
-- Ne PAS changer la logique — juste ajouter le log
-**Pattern OpenClaw** : `~/Documents/Developer/keiy/openclaw/extensions/telegram/src/polling-session.ts` — voir comment ils loggent les erreurs
-**Test** : `pnpm build` (pas de test unitaire pour ça, juste vérifier build)
-**Commit** : `fix(gateway): replace 33 silent catch blocks with proper logging`
+---
 
-### Tâche 1.3 — Remplacer console.log par logger dans gateway
-**Fichier** : `src/gateway/telegram.ts`
-**Problème** : 13 `console.log()` qui polluent stdout et cassent JSON.
-**Fix** :
-- `grep -n "console.log" src/gateway/telegram.ts`
-- Remplacer par `log.info(...)` ou `log.debug(...)`
-- Import `createLogger` si pas déjà fait
-**Test** : `pnpm build`
-**Commit** : `fix(gateway): replace console.log with logger — fix JSON output pollution`
+### TÂCHE 1.1 — Dédupliquer REX_SYSTEM_PROMPT
 
-### Tâche 1.4 — Token pre-flight check
-**Fichier** : `src/agents/runtime.ts`
-**Problème** : REX envoie au LLM sans vérifier si le contexte dépasse la fenêtre.
-**Fix** :
-- Avant l'appel LLM dans `runAgent()`, estimer la taille : `chars / 4 * 1.2` (safety margin 20%)
-- Si > contextWindow du modèle → compacter (couper les messages anciens) ou warn
-- Ajouter dans `MODEL_BUDGETS` (tool-injector.ts) la `maxContextTokens` par modèle
+**Problème** : `REX_SYSTEM_PROMPT` (1027 chars) est injecté dans CHAQUE appel LLM via `runAgent()` ET `streamAgent()`. Si le gateway l'a déjà injecté (askQwenStream, askClaudeApiStream), c'est envoyé 2x = gaspillage.
+
+**Fichier** : `packages/cli/src/agents/runtime.ts`
+
+**Étapes** :
+
+1. Lire le fichier entier
+2. Trouver `runAgent()` (~ligne 540-570) et `streamAgent()` (~ligne 620-640)
+3. Dans les deux fonctions, le system prompt est ajouté inconditionnellement :
+   ```typescript
+   messages.push({ role: 'system', content: `${REX_SYSTEM_PROMPT}${toolsSummary}` })
+   ```
+4. Ajouter un paramètre optionnel `skipSystemPrompt?: boolean` à `AgentConfig` :
+   ```typescript
+   // Dans l'interface AgentConfig (chercher dans le fichier)
+   skipSystemPrompt?: boolean
+   ```
+5. Conditionner l'injection :
+   ```typescript
+   if (!config.skipSystemPrompt) {
+     messages.push({ role: 'system', content: `${REX_SYSTEM_PROMPT}${toolsSummary}` })
+   } else if (toolsSummary) {
+     messages.push({ role: 'system', content: toolsSummary })
+   }
+   ```
+6. Dans `gateway/telegram.ts`, quand `runAgent()` est appelé après `askQwenStream` ou `askClaudeApiStream` (qui injectent déjà le prompt), passer `skipSystemPrompt: true`
+
+**Test** :
+```bash
+pnpm build && pnpm test -- tests/unit/agent-runtime.test.ts
+```
+
+**Commit** :
+```bash
+git add packages/cli/src/agents/runtime.ts
+git commit -m "fix(agents): deduplicate REX_SYSTEM_PROMPT — skip if already injected"
+```
+
+---
+
+### TÂCHE 1.2 — Remplacer les catch {} silencieux dans gateway
+
+**Problème** : 33 `catch {}` ou `catch { }` dans `gateway/telegram.ts` — erreurs invisibles.
+
+**Fichier** : `packages/cli/src/gateway/telegram.ts`
+
+**Étapes** :
+
+1. Lire le fichier entier
+2. Trouver tous les `catch {}` et `catch { }` :
+   ```bash
+   grep -n "catch {" packages/cli/src/gateway/telegram.ts
+   ```
+3. Pour CHAQUE occurrence, remplacer par un log contextuel. Exemples :
+
+   ```typescript
+   // AVANT
+   } catch {}
+
+   // APRÈS — adapter le message au contexte de chaque catch
+   } catch (e) {
+     log.warn('failed to [description of what was attempted]', e instanceof Error ? e.message : String(e))
+   }
+   ```
+
+4. Le `log` doit être importé en haut du fichier. Vérifier que `createLogger` est importé :
+   ```typescript
+   import { createLogger } from '../utils/logger.js'
+   const log = createLogger('gateway')
+   ```
+   Si `log` existe déjà, ne pas le recréer.
+
+5. NE PAS changer la logique — juste ajouter le log dans le catch. Le comportement doit rester identique (continuer après l'erreur).
+
+**Test** :
+```bash
+pnpm build
+```
+Pas de test unitaire pour ça — juste vérifier que le build passe.
+
+**Commit** :
+```bash
+git add packages/cli/src/gateway/telegram.ts
+git commit -m "fix(gateway): replace 33 silent catch blocks with proper logging"
+```
+
+---
+
+### TÂCHE 1.3 — Remplacer console.log par logger dans gateway
+
+**Problème** : 13 `console.log()` dans gateway polluent stdout et cassent la sortie JSON.
+
+**Fichier** : `packages/cli/src/gateway/telegram.ts`
+
+**Étapes** :
+
+1. Trouver tous les console.log :
+   ```bash
+   grep -n "console.log" packages/cli/src/gateway/telegram.ts
+   ```
+2. Remplacer chaque `console.log(...)` par `log.info(...)` ou `log.debug(...)`
+   - Messages de démarrage (ports, URLs) → `log.info`
+   - Messages de debug → `log.debug`
+3. Aussi remplacer `console.error(...)` par `log.error(...)`
+4. Vérifier que `log` est défini (tâche 1.2 l'a ajouté si nécessaire)
+
+**Test** :
+```bash
+pnpm build
+```
+
+**Commit** :
+```bash
+git add packages/cli/src/gateway/telegram.ts
+git commit -m "fix(gateway): replace console.log with logger — fix JSON output pollution"
+```
+
+---
+
+### TÂCHE 1.4 — Token pre-flight check
+
+**Problème** : REX envoie au LLM sans vérifier si le contexte dépasse la fenêtre. Résultat : erreurs d'overflow inattendues.
+
+**Fichier** : `packages/cli/src/agents/runtime.ts`
+
+**Étapes** :
+
+1. Ajouter une constante en haut du fichier :
+   ```typescript
+   const TOKEN_SAFETY_MARGIN = 1.2  // 20% buffer pour sous-estimation
+   ```
+
+2. Ajouter une fonction helper :
+   ```typescript
+   function estimateTokens(messages: Array<{ role: string; content: string }>): number {
+     return messages.reduce((sum, m) => sum + (m.content?.length ?? 0) / 4, 0) * TOKEN_SAFETY_MARGIN
+   }
+   ```
+
+3. Dans `runAgent()`, AVANT l'appel LLM, ajouter la vérification :
+   ```typescript
+   const estimated = estimateTokens(messages)
+   const maxContext = toolSelection?.budget?.maxContextTokens ?? 200_000
+   if (estimated > maxContext) {
+     log.warn(`Context too large: ~${Math.round(estimated)} tokens > ${maxContext} max. Truncating oldest messages.`)
+     // Retirer les messages les plus anciens (garder system + dernier user)
+     while (estimateTokens(messages) > maxContext && messages.length > 2) {
+       messages.splice(1, 1)  // Retirer le 2e message (garder le system en [0])
+     }
+   }
+   ```
+
+4. Faire pareil dans `streamAgent()`
+
 **Pattern OpenClaw** : `~/Documents/Developer/keiy/openclaw/src/agents/compaction.ts` — `SAFETY_MARGIN = 1.2`
-**Test** : ajouter un test unitaire `token-preflight.test.ts`
-**Commit** : `feat(agents): add token pre-flight check — prevent context overflow`
 
-### Tâche 1.5 — Auth profile cooldown
-**Fichier** : `src/providers/providers.ts`
-**Problème** : Quand un provider crash/rate-limit, REX réessaie immédiatement.
-**Fix** :
-- Ajouter un `cooldownMap: Map<string, { until: number, failures: number }>`
-- Après failure : `cooldownMs = Math.min(30000, 2000 * 2^failures)`
-- Skip provider si `Date.now() < cooldownMap.get(provider).until`
-- Reset cooldown sur succès
+**Test** :
+```bash
+pnpm build && pnpm test -- tests/unit/agent-runtime.test.ts
+```
+
+**Commit** :
+```bash
+git add packages/cli/src/agents/runtime.ts
+git commit -m "feat(agents): add token pre-flight check — prevent context overflow"
+```
+
+---
+
+### TÂCHE 1.5 — Provider cooldown exponentiel
+
+**Problème** : Quand un provider crash ou rate-limit, REX réessaie immédiatement → boucle d'échecs.
+
+**Fichier** : `packages/cli/src/providers/providers.ts`
+
+**Étapes** :
+
+1. Lire le fichier entier
+2. Ajouter en haut du fichier :
+   ```typescript
+   // Provider cooldown — exponential backoff on failures
+   const providerCooldowns = new Map<string, { until: number; failures: number }>()
+
+   export function isProviderAvailable(provider: string): boolean {
+     const cd = providerCooldowns.get(provider)
+     if (!cd) return true
+     if (Date.now() >= cd.until) {
+       providerCooldowns.delete(provider)  // expired, reset
+       return true
+     }
+     return false
+   }
+
+   export function markProviderFailed(provider: string): void {
+     const cd = providerCooldowns.get(provider) ?? { until: 0, failures: 0 }
+     cd.failures++
+     cd.until = Date.now() + Math.min(30_000, 2000 * Math.pow(2, cd.failures))
+     providerCooldowns.set(provider, cd)
+     log.warn(`Provider ${provider} marked failed (attempt ${cd.failures}, cooldown ${Math.round((cd.until - Date.now()) / 1000)}s)`)
+   }
+
+   export function markProviderSuccess(provider: string): void {
+     if (providerCooldowns.has(provider)) {
+       log.info(`Provider ${provider} recovered — cooldown cleared`)
+       providerCooldowns.delete(provider)
+     }
+   }
+   ```
+
+3. Vérifier que `log` est importé (`createLogger`)
+4. Ajouter les exports au shim `src/providers.ts` si nécessaire
+
 **Pattern OpenClaw** : `~/Documents/Developer/keiy/openclaw/src/agents/auth-profiles/usage.ts`
-**Test** : ajouter un test unitaire
-**Commit** : `feat(providers): add exponential cooldown on provider failures`
+
+**Test** : ajouter dans `tests/unit/providers.test.ts` :
+```typescript
+describe('provider cooldown', () => {
+  it('marks provider unavailable after failure', () => {
+    markProviderFailed('test-provider')
+    expect(isProviderAvailable('test-provider')).toBe(false)
+  })
+  it('makes provider available after cooldown expires', () => {
+    // Would need to mock Date.now or wait
+    markProviderSuccess('test-provider')
+    expect(isProviderAvailable('test-provider')).toBe(true)
+  })
+})
+```
+
+```bash
+pnpm build && pnpm test
+```
+
+**Commit** :
+```bash
+git add packages/cli/src/providers/providers.ts tests/unit/providers.test.ts
+git commit -m "feat(providers): add exponential cooldown on failures — prevent retry storms"
+```
 
 ---
 
-## SPRINT 2 — Resilience
+## APRÈS SPRINT 1
 
-### Tâche 2.1 — Graceful shutdown
-**Fichiers** : `src/daemon.ts`, `src/gateway/telegram.ts`
-**Fix** :
-1. Flag `let shuttingDown = false`
-2. `process.on('SIGTERM', async () => { ... })` et `SIGINT`
-3. Stop polling / stop accepting
-4. `await Promise.allSettled([...inFlight])` avec timeout 15s
-5. Release locks, save state, log "shutdown complete"
-6. `process.exit(0)`
-**Pattern OpenClaw** : `~/Documents/Developer/keiy/openclaw/extensions/telegram/src/polling-session.ts`
-**Commit** : `feat(daemon): add graceful shutdown with 15s drain timeout`
+Quand les 5 tâches sont terminées :
 
-### Tâche 2.2 — Exponential backoff + stall detection
-**Fichier** : `src/gateway/telegram.ts`
-**Fix** :
-- Remplacer `setTimeout(3000)` hardcodé par : `delay = Math.min(30000, 2000 * 2^retryCount) + jitter`
-- Ajouter watchdog : si aucun message reçu depuis 90s et polling actif → force restart cycle
-- Classifier d'erreurs : `isRecoverableError(e)` → retry, sinon log + stop
-**Pattern OpenClaw** : polling-session.ts `TELEGRAM_POLL_RESTART_POLICY`
-**Commit** : `feat(gateway): add exponential backoff with jitter + stall detection watchdog`
+1. Vérifie une dernière fois :
+   ```bash
+   pnpm build && pnpm test
+   ```
+2. Push la branche :
+   ```bash
+   git push origin fix/sprint1-token-economy
+   ```
+3. Écris dans ce fichier (RELAY.md) sous "QUESTIONS POUR OPUS" :
+   ```
+   Sprint 1 terminé. 5/5 tâches complétées. Tests: XXXX/1449. Prêt pour review.
+   ```
+4. Commit + push le RELAY.md mis à jour
 
-### Tâche 2.3 — Delivery decoupling
-**Fichier** : nouveau `src/gateway/delivery.ts`
-**Fix** :
-- Interface `DeliveryTarget = { type: 'telegram' | 'webhook' | 'log', config: ... }`
-- `dispatchDelivery(output, target)` — envoie le résultat
-- Retry queue avec 3 tentatives + backoff
-- Outputs persistés dans event-journal pour re-delivery
-**Pattern OpenClaw** : `src/cron/isolated-agent/delivery-dispatch.ts`
-**Commit** : `feat(gateway): decouple delivery from execution — retry + persistence`
-
----
-
-## SPRINT 3 — UX + Context
-
-### Tâche 3.1 — Help structuré par domaine
-**Fichier** : `src/index.ts`
-**Fix** :
-- `rex --help` → affiche UNIQUEMENT les catégories (Core, Memory, Fleet, Dev, etc.)
-- `rex memory --help` → affiche les commandes memory (ingest, search, categorize, etc.)
-- `rex <cmd> --help` → affiche usage + description de la commande
-- Garder le switch tel quel, juste ajouter un `case '--help':` et `case 'memory':` avec sous-help
-**Commit** : `feat(cli): add structured help by domain — rex memory --help`
-
-### Tâche 3.2 — Workspace templates
-**Fichiers** : nouveaux dans `~/.claude/rex/`
-**Fix** :
-- Créer `SOUL.md` (personnalité REX, extrait de `brain/identity.ts`)
-- Créer `USER.md` (profil Kevin — timezone, stack, préférences)
-- Modifier `brain/identity.ts` pour lire SOUL.md au lieu d'avoir le prompt hardcodé
-- Session type detection : si Telegram group → NE PAS charger MEMORY.md
-**Pattern OpenClaw** : `docs/reference/templates/AGENTS.md`
-**Commit** : `feat(brain): load identity from SOUL.md — editable without rebuild`
-
-### Tâche 3.3 — Cost tracking par provider
-**Fichier** : `src/providers/budget.ts`
-**Fix** :
-- Ajouter metadata coût par modèle : `{ model, cost: { input, output } }`
-- Tracker cumul jour/mois dans SQLite
-- Alerte Telegram si > 80% budget mensuel (`REX_MONTHLY_BUDGET` dans config)
-**Pattern OpenClaw** : `src/infra/provider-usage.ts`
-**Commit** : `feat(providers): add per-model cost tracking + monthly budget alert`
-
----
-
-## SPRINT 4 — rex-worker + Training
-
-### Tâche 4.1 — Collecteurs de dataset
-**Fichier** : `src/training/pipeline.ts`
-**Fix** : Ajouter les collecteurs spécialisés :
-- `collectRoutingExamples()` → depuis orchestration-policy.ts
-- `collectToolSelectionExamples()` → depuis tool-injector.ts
-- `collectSignalExamples()` → depuis signal-detector.ts
-- `collectCategorizeExamples()` → depuis memory DB
-- `collectGuardExamples()` → depuis security-scanner.ts
-**Format** : JSONL chat-ml compatible
-**Commit** : `feat(training): add specialized dataset collectors for rex-worker`
-
-### Tâche 4.2 — Deploy pipeline
-**Fichier** : `src/training/pipeline.ts`
-**Fix** :
-- `rex train deploy` → merge adapter + base → GGUF → Modelfile Ollama → `ollama create rex-worker`
-- Support multi-size : 0.8B (VPS) + 4B (Mac/PC)
-**Commit** : `feat(training): add deploy pipeline — adapter → GGUF → Ollama rex-worker`
+Kevin ou Opus fera la review et préparera Sprint 2.
 
 ---
 
 ## QUESTIONS POUR OPUS
 
-_(Codex écrit ses questions ici si doute sur un choix d'implémentation)_
+_(Codex écrit ici si doute — commit + push)_
 
 ---
 
-## ÉTAT DU RELAY
+## ÉTAT
 
-- **Créé par** : Opus, 14/03/2026
-- **Dernière mise à jour** : 14/03/2026 18:30
-- **Statut** : Sprint 1 prêt pour Codex
-- **Priorité** : Sprint 1 d'abord (token economy), puis Sprint 2 (resilience)
+- **Sprint 1** : 5 tâches, prêt pour exécution
+- **Sprint 2** : resilience (graceful shutdown, backoff, delivery) — après validation Sprint 1
+- **Sprint 3** : UX (help, workspace templates, cost tracking)
+- **Sprint 4** : rex-worker (dataset, training, deploy)
