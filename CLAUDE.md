@@ -33,6 +33,10 @@ Principes :
 5. **Ne pas merger sur main** sans validation Kevin
 6. **Lire REX-BRAIN.md** avant d'implémenter de la logique
 
+## Relay multi-agent
+- `RELAY.md` — **LIRE EN PREMIER** si tu es Codex ou un agent délégué. Tâches, contexte, règles.
+- Opus = architecte, Codex = exécutant. Ne pas inverser les rôles.
+
 ## Docs de référence (charger à la demande, PAS automatiquement)
 - `docs/REX-STATUS.md` — **ÉTAT COMPLET** : tout ce qui est fait + TODO P0-P3 (lire en premier)
 - `docs/REX-BRAIN.md` — logique complète (795L) → lire avant toute implémentation
