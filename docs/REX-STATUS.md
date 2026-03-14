@@ -200,6 +200,30 @@ L'user doit choisir CE QUE REX peut lire/sync. Privacy-first.
 - [ ] Conflict resolution : brain always wins
 - [ ] Bandwidth-aware : compress avant sync, skip si réseau lent
 
+### P1 — REX Worker Model (fine-tune dédié)
+**Plan complet :** `docs/plans/rex-worker-model.md`
+
+Modèle Qwen 3.5 fine-tuné spécialisé pour toutes les fonctions autonomes REX.
+
+**Architecture multi-taille :**
+- **rex-worker-mini (0.8B Q4, ~500MB)** → VPS CPU, RPi — routing, signals, guards
+- **rex-worker (4B Q4, ~2.5GB)** → Mac, PC — toutes les tâches REX
+
+**6 tâches :** intent routing, tool selection, signal→action, memory categorize, fleet dispatch, guard check.
+
+**Dataset :** 2000-3000 exemples générés depuis REX (orchestration-policy, tool-injector, signal-detector, memory DB, security-scanner).
+
+**Training :** Unsloth QLoRA (RTX 3090, ~15min) ou mlx-lm LoRA (Mac, ~30min).
+
+**Self-improvement :** corrections Claude/Opus → re-train weekly → convergence.
+
+**À implémenter :**
+- [ ] Collecteurs de dataset spécialisés dans `training.ts`
+- [ ] Pipeline `rex train collect/validate/split/run/eval/deploy`
+- [ ] Intégration dans `orchestration-policy.ts` (tier LOCAL = rex-worker)
+- [ ] Self-improvement loop dans `daemon.ts`
+- [ ] Fleet deploy (`rex train deploy --fleet`)
+
 ### P2 — REX Scan (Couche 2 — Code)
 **Fichiers :** nouveau `rex-scan.ts`
 
