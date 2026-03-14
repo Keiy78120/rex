@@ -5,31 +5,38 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 
+const { mockBackend, mockLitellm } = vi.hoisted(() => ({
+  mockBackend: {
+    getBackend: vi.fn(() => ({
+      listModels: vi.fn(async () => ['qwen2.5:7b', 'nomic-embed-text']),
+      generate: vi.fn(async () => 'mocked llm response'),
+      isAvailable: vi.fn(async () => true),
+      name: 'ollama',
+    })),
+    resetBackendCache: vi.fn(),
+    createBackend: vi.fn(),
+    BACKEND_INFO: {},
+  },
+  mockLitellm: {
+    callWithFallback: vi.fn(async () => ({
+      text: 'mocked response',
+      provider: 'ollama',
+      tokensIn: 5,
+      tokensOut: 10,
+      durationMs: 50,
+    })),
+  },
+}))
+
 vi.mock('../../src/logger.js', () => ({
   createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
 }))
 
-vi.mock('../../src/llm-backend.js', () => ({
-  getBackend: vi.fn(() => ({
-    listModels: vi.fn(async () => ['qwen2.5:7b', 'nomic-embed-text']),
-    generate: vi.fn(async () => 'mocked llm response'),
-    isAvailable: vi.fn(async () => true),
-    name: 'ollama',
-  })),
-  resetBackendCache: vi.fn(),
-  createBackend: vi.fn(),
-  BACKEND_INFO: {},
-}))
+vi.mock('../../src/llm-backend.js', () => mockBackend)
+vi.mock('../../src/providers/llm-backend.js', () => mockBackend)
 
-vi.mock('../../src/litellm.js', () => ({
-  callWithFallback: vi.fn(async () => ({
-    text: 'mocked response',
-    provider: 'ollama',
-    tokensIn: 5,
-    tokensOut: 10,
-    durationMs: 50,
-  })),
-}))
+vi.mock('../../src/litellm.js', () => mockLitellm)
+vi.mock('../../src/providers/litellm.js', () => mockLitellm)
 
 import { detectModel, llm } from '../../src/llm.js'
 

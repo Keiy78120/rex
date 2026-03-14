@@ -33,6 +33,10 @@ Principes :
 5. **Ne pas merger sur main** sans validation Kevin
 6. **Lire REX-BRAIN.md** avant d'implémenter de la logique
 
+## Relay multi-agent
+- `RELAY.md` — **LIRE EN PREMIER** si tu es Codex ou un agent délégué. Tâches, contexte, règles.
+- Opus = architecte, Codex = exécutant. Ne pas inverser les rôles.
+
 ## Docs de référence (charger à la demande, PAS automatiquement)
 - `docs/REX-STATUS.md` — **ÉTAT COMPLET** : tout ce qui est fait + TODO P0-P3 (lire en premier)
 - `docs/REX-BRAIN.md` — logique complète (795L) → lire avant toute implémentation
@@ -43,32 +47,27 @@ Principes :
 - `docs/REX-LOGIC.md` — cycles user, budget, pseudo-code
 - `docs/plans/action.md` — plans détaillés session par session (2400L, charger section par section)
 
-## Structure packages
+## Structure packages (refactored — 13 domaines)
 ```
-packages/
-  cli/src/
-    index.ts              ← entry point (40+ commandes)
-    rex-identity.ts       ← ✅ REX_SYSTEM_PROMPT, identity pipeline
-    gateway.ts            ← ✅ Telegram bot + REX identity dans tous les LLM paths
-    orchestrator.ts       ← relay chain LLM
-    orchestration-policy.ts ← ✅ 6 tiers routing (0 LLM)
-    relay-engine.ts       ← ✅ RxJS pipeline + persistence datée (RELAY-YYYY-MM-DD-HHhMM.md)
-    tool-injector.ts      ← ✅ dynamic tool selection (intent/model/health)
-    tool-adapter.ts       ← ✅ 9 tools format Ollama/OpenAI
-    agent-runtime.ts      ← ✅ runAgent/streamAgent + tools dynamiques
-    daemon.ts             ← ✅ 30+ cycles background
-    user-cycles.ts        ← ✅ XState (AWAKE/IDLE/SLEEPING)
-    watchdog.ts           ← ✅ health checks 60s
-    signal-detector.ts    ← 20+ signaux détectés (⚠️ pas encore wired à memory)
-    curious.ts            ← proactive discovery
-    setup-wizard.ts       ← wizard onboarding (⚠️ manque brain device)
-    node-mesh.ts          ← fleet capabilities (⚠️ manque Docker pairing)
-    paths.ts              ← ✅ tous les chemins centralisés + RELAY_DIR
-    resource-hub.ts       ← ✅ catalogue tools/mcps/skills
-    agent-templates/      ← ✅ 5 personas (dg/drh/ceo/coo/freelance)
-  memory/src/
-    index.ts, bm25.ts, vector.ts, hybrid-search.ts
-  flutter_app/            ← app macOS native (26 pages)
+packages/cli/src/
+  brain/           ← identity, routing 6-tier, orchestrator, relay, tool-injector
+  gateway/         ← Telegram bot, hub API, adapter, MCP server
+  fleet/           ← mesh Tailscale, sync, deploy
+  signals/         ← detector 20+, watchdog, journal, patterns
+  agents/          ← runtime, factory, pool, curious, templates
+  providers/       ← LLM registry, backend, budget, free-tiers
+  security/        ← scanner, guards, session, secrets
+  tools/           ← registry, adapter, resources, MCPs, skills
+  training/        ← pipeline, improve, reflector, recategorize
+  setup/           ← wizard, install
+  ui/              ← dashboard, TUI
+  utils/           ← config, paths, logger, docker, db
+  index.ts         ← entry point (40+ commandes)
+  daemon.ts        ← 30+ cycles background
+packages/memory/src/
+  ingest, categorize, hybrid-search, embed, vector, search
+packages/flutter_app/
+  26 pages macOS native
 ```
 
 ## État actuel (15/03/2026) — PHASES 1-4 COMPLÈTES ✅
