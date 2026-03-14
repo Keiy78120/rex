@@ -333,6 +333,7 @@ export async function rexIdentityPipeline(
     const result = await streamAgent(brief, {
       model: opts.model,
       injectContext: false, // Context already injected in brief
+      systemPromptInjected: true,
       onChunk: (chunk) => {
         accumulated += chunk
         opts.onChunk?.(chunk)
@@ -480,6 +481,7 @@ export function rexIdentityEffect(
               const result = await streamAgent(outcome.brief, {
                 model: opts.model,
                 injectContext: false,
+                systemPromptInjected: true,
                 onChunk: (chunk: string) => { accumulated += chunk },
               })
               return {

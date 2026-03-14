@@ -22,6 +22,7 @@ import { detectIntent } from '../project-intent.js'
 import { pickModel } from '../router.js'
 import { getRexTools, getToolsSummary, executeToolCall } from '../tool-adapter.js'
 import { selectTools } from '../tool-injector.js'
+import { getModelBudget } from '../tool-injector.js'
 import { REX_SYSTEM_PROMPT } from '../rex-identity.js'
 
 const log = createLogger('AGENTS:agent-runtime')
@@ -51,6 +52,8 @@ export interface AgentConfig {
   injectTools?: boolean
   /** Inject project/memory context as system message (default: true) */
   injectContext?: boolean
+  /** Upstream already injected the REX system prompt in the conversation context */
+  systemPromptInjected?: boolean
   /** Print model selection and tool call decisions to logs */
   verbose?: boolean
 }
@@ -90,6 +93,12 @@ interface OllamaStreamChunk {
   message?: { content?: string }
   done?: boolean
   eval_count?: number
+}
+
+interface TokenPreflightResult {
+  messages: AgentMessage[]
+  estimatedTokens: number
+  compacted: boolean
 }
 
 // ─── Intent → task type mapping ───────────────────────────────
@@ -178,6 +187,75 @@ function detectProvider(model: string): ProviderKind {
   if (m.includes('claude')) return 'claude'
   if (m.includes('gpt') || m.includes('openai')) return 'openai'
   return 'ollama'
+}
+
+function buildSystemPromptMessage(
+  config: AgentConfig,
+  toolsSummary: string,
+): AgentMessage | null {
+  if (config.systemPromptInjected) return null
+  return {
+    role: 'system',
+    content: `${REX_SYSTEM_PROMPT}${toolsSummary}`,
+  }
+}
+
+function estimateMessageTokens(message: AgentMessage): number {
+  return Math.ceil((message.content.length / 4) * 1.2)
+}
+
+function estimateMessagesTokens(messages: AgentMessage[]): number {
+  return messages.reduce((sum, message) => sum + estimateMessageTokens(message), 0)
+}
+
+function compactMessagesToFit(messages: AgentMessage[], maxContextTokens: number): AgentMessage[] {
+  if (messages.length === 0) return messages
+
+  const systemPrompt = messages.find((message) => message.role === 'system') ?? null
+  const reversedNonSystem = [...messages]
+    .filter((message) => message !== systemPrompt)
+    .reverse()
+
+  const kept: AgentMessage[] = []
+  let usedTokens = 0
+
+  for (const message of reversedNonSystem) {
+    const messageTokens = estimateMessageTokens(message)
+    if (kept.length > 0 && usedTokens + messageTokens > maxContextTokens) {
+      continue
+    }
+    kept.unshift(message)
+    usedTokens += messageTokens
+  }
+
+  if (systemPrompt) {
+    const systemTokens = estimateMessageTokens(systemPrompt)
+    if (usedTokens + systemTokens <= maxContextTokens || kept.length === 0) {
+      kept.unshift(systemPrompt)
+    }
+  }
+
+  return kept.length > 0 ? kept : [messages[messages.length - 1]!]
+}
+
+export function applyTokenPreflight(messages: AgentMessage[], model: string): TokenPreflightResult {
+  const { maxContextTokens } = getModelBudget(model)
+  const estimatedTokens = estimateMessagesTokens(messages)
+  if (estimatedTokens <= maxContextTokens) {
+    return { messages, estimatedTokens, compacted: false }
+  }
+
+  const compactedMessages = compactMessagesToFit(messages, maxContextTokens)
+  const compactedTokens = estimateMessagesTokens(compactedMessages)
+  log.warn(
+    `agent-runtime: estimated context ${estimatedTokens} exceeds ${maxContextTokens} for ${model}; compacted to ${compactedTokens}`,
+  )
+
+  return {
+    messages: compactedMessages,
+    estimatedTokens: compactedTokens,
+    compacted: true,
+  }
 }
 
 // ─── Claude dispatch ──────────────────────────────────────────
@@ -550,10 +628,10 @@ export async function runAgent(
   const toolsSummary = toolSelection.injectedCount > 0
     ? `\n\nAvailable tools (${toolSelection.injectedCount}):\n${toolSelection.summary}`
     : ''
-  messages.push({
-    role: 'system',
-    content: `${REX_SYSTEM_PROMPT}${toolsSummary}`,
-  })
+  const systemPromptMessage = buildSystemPromptMessage(config, toolsSummary)
+  if (systemPromptMessage) {
+    messages.push(systemPromptMessage)
+  }
 
   // Context injection (relevant memory snippets)
   if (injectContext) {
@@ -569,6 +647,7 @@ export async function runAgent(
 
   // User message
   messages.push({ role: 'user', content: userMessage })
+  const tokenPreflight = applyTokenPreflight(messages, model)
 
   // 5. Dispatch to the right provider
   if (provider === 'claude') {
@@ -576,11 +655,11 @@ export async function runAgent(
   }
 
   if (provider === 'openai') {
-    return runWithOpenAI(messages, model, config)
+    return runWithOpenAI(tokenPreflight.messages, model, config)
   }
 
   // Ollama — tool-calling loop
-  return runOllamaLoop(messages, model, config)
+  return runOllamaLoop(tokenPreflight.messages, model, config)
 }
 
 // ─── Streaming variant ────────────────────────────────────────
@@ -623,10 +702,10 @@ export async function streamAgent(
   const toolsSummary = toolSelection.injectedCount > 0
     ? `\n\nAvailable tools (${toolSelection.injectedCount}):\n${toolSelection.summary}`
     : ''
-  messages.push({
-    role: 'system',
-    content: `${REX_SYSTEM_PROMPT}${toolsSummary}`,
-  })
+  const systemPromptMessage = buildSystemPromptMessage(config, toolsSummary)
+  if (systemPromptMessage) {
+    messages.push(systemPromptMessage)
+  }
   if (injectContext) {
     try {
       const contextMsg = await buildContextMessage(userMessage)
@@ -634,6 +713,7 @@ export async function streamAgent(
     } catch {}
   }
   messages.push({ role: 'user', content: userMessage })
+  const tokenPreflight = applyTokenPreflight(messages, model)
 
   // Run non-streaming tool turns first (handle all tool_calls), then stream final response
   const maxTurns = config.maxTurns ?? 10
@@ -642,7 +722,7 @@ export async function streamAgent(
   let totalTokens = 0
 
   const ollamaMessages: Array<{ role: string; content: string }> =
-    messages.map((m) => ({ role: m.role, content: m.content }))
+    tokenPreflight.messages.map((m) => ({ role: m.role, content: m.content }))
 
   // Tool-calling pre-pass (non-streaming, may have 0 turns if model doesn't use tools)
   while (turns < maxTurns - 1) {

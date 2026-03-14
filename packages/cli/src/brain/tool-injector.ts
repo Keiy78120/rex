@@ -158,7 +158,7 @@ const MODEL_BUDGETS: Record<string, ModelBudget> = {
   'claude-opus':       { maxTools: 9, maxContextTokens: 200000, toolTokenBudget: 800 },
 }
 
-function getModelBudget(model: string): ModelBudget {
+export function getModelBudget(model: string): ModelBudget {
   // Exact match first
   if (MODEL_BUDGETS[model]) return MODEL_BUDGETS[model]
 

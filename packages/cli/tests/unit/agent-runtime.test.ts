@@ -3,7 +3,7 @@
  * All dependencies mocked — no real LLM calls.
  * @module TOOLS
  */
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../src/logger.js', () => ({
   createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
@@ -29,21 +29,27 @@ vi.mock('../../src/rex-identity.js', () => ({
   REX_SYSTEM_PROMPT: 'You are REX.',
 }))
 
-// Mock fetch for Ollama API calls
-global.fetch = vi.fn(async () => ({
+const fetchMock = vi.fn(async () => ({
   ok: true,
   json: async () => ({
     message: { content: 'mocked ollama response', role: 'assistant' },
     done: true,
   }),
   body: null,
-})) as typeof fetch
+}))
+
+// Mock fetch for Ollama API calls
+global.fetch = fetchMock as typeof fetch
 
 import { runAgent } from '../../src/agent-runtime.js'
 
 // ── runAgent ──────────────────────────────────────────────────────────────────
 
 describe('runAgent', () => {
+  beforeEach(() => {
+    fetchMock.mockClear()
+  })
+
   it('returns an object', async () => {
     const result = await runAgent('hello')
     expect(typeof result).toBe('object')
@@ -85,5 +91,23 @@ describe('runAgent', () => {
   it('accepts AgentConfig with model override', async () => {
     const result = await runAgent('hello', { model: 'custom:model' })
     expect(result.model).toBe('custom:model')
+  })
+
+  it('injects the REX system prompt by default', async () => {
+    await runAgent('hello')
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(String(init.body)) as { messages: Array<{ role: string; content: string }> }
+
+    expect(body.messages.some((msg) => msg.role === 'system' && msg.content.includes('You are REX.'))).toBe(true)
+  })
+
+  it('skips the REX system prompt when upstream already injected it', async () => {
+    await runAgent('hello', { systemPromptInjected: true })
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(String(init.body)) as { messages: Array<{ role: string; content: string }> }
+
+    expect(body.messages.some((msg) => msg.role === 'system' && msg.content.includes('You are REX.'))).toBe(false)
   })
 })
