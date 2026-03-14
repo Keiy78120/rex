@@ -239,7 +239,8 @@ export function syncCodexRules(rulesDir: string): void {
         const normalized = m.toLowerCase().trim()
         if (!seen.has(normalized)) {
           seen.add(normalized)
-          rules.push(`prefix_rule("${normalized}")`)
+          const parts = normalized.split(/\s+/).map(p => `"${p}"`).join(', ')
+          rules.push(`prefix_rule(pattern=[${parts}], decision="deny")`)
         }
       }
     } catch {
