@@ -292,11 +292,18 @@ Kevin ou Opus fera la review et préparera Sprint 2.
 
 _(Codex écrit ici si doute — commit + push)_
 
+Sprint 1 terminé. 5/5 tâches complétées. Tests: 1451/1455.
+Échecs restants préexistants dans `tests/integration/config.test.ts` :
+- `default routing is ollama-first` (reçu `claude-only`)
+- `default embedModel is nomic-embed-text` (reçu `custom-model`)
+- `default daemon.healthCheckInterval is 300` (reçu `120`)
+- `default notifications.daily is true` (reçu `false`)
+
 ---
 
 ## ÉTAT
 
-- **Sprint 1** : 5 tâches, prêt pour exécution
+- **Sprint 1** : 5/5 tâches complétées, prêt pour review
 - **Sprint 2** : resilience (graceful shutdown, backoff, delivery) — après validation Sprint 1
 - **Sprint 3** : UX (help, workspace templates, cost tracking)
 - **Sprint 4** : rex-worker (dataset, training, deploy)
