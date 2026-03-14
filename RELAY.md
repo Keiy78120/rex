@@ -1,7 +1,7 @@
 # REX RELAY — Opus → Codex Collaboration
 
 > Ce fichier est la passerelle entre Opus (architecte) et Codex (exécutant).
-> Codex : lis ce fichier EN PREMIER avant de coder quoi que ce soit.
+> **Codex : lis ce fichier EN PREMIER avant de coder quoi que ce soit.**
 > Opus : mets à jour ce fichier avant de lancer Codex.
 
 ---
@@ -9,123 +9,196 @@
 ## QUI PARLE
 
 **Opus** (Claude Opus 4.6) — architecte, planificateur, décisionnaire.
-Je conçois l'architecture, je fais les audits, je prends les décisions de design.
-Je ne code pas les features — je les planifie et je délègue.
+Je conçois, j'audite, je décide. Je ne code pas les features — je les planifie.
 
-**Codex** (OpenAI) — exécutant background, worker silencieux.
-Tu lis ce fichier, tu exécutes les tâches listées ci-dessous, tu commites.
-Tu ne prends PAS de décisions d'architecture. Si tu as un doute, tu le notes dans `RELAY-QUESTIONS.md`.
+**Codex** (OpenAI gpt-5.4) — exécutant, worker précis.
+Tu lis ce fichier, tu exécutes les tâches, tu commites. Pas de décisions d'archi.
 
 ---
 
 ## CONTEXTE PROJET
 
 - **Repo** : `/Users/keiy/Documents/Developer/keiy/rex`
-- **Branche** : `refactor/domain-structure` (à merger sur main après validation)
-- **Stack** : TypeScript/Node 22, tsup, pnpm, vitest
-- **Tests** : `cd packages/cli && pnpm test` — doit rester ≥ 1445/1449
-- **Build** : `cd packages/cli && pnpm build` — doit passer
+- **Branche** : `main`
+- **Build** : `cd packages/cli && pnpm build`
+- **Tests** : `cd packages/cli && pnpm test` → doit rester ≥ 1445/1449
+- **OpenClaw local** : `~/Documents/Developer/keiy/openclaw/` (patterns à consulter)
 
 ## RÈGLES ABSOLUES
 
 1. **Additive only** — ne jamais casser du code qui marche
-2. **Tests verts** — `pnpm test` après CHAQUE commit
-3. **Pas de Co-Authored-By** — jamais dans les commits
-4. **Pas de mention AI** — jamais dans commits/PR/issues
-5. **Conventional commits** — `feat:`, `fix:`, `refactor:`, `docs:`
-6. **Lire avant d'écrire** — toujours lire le fichier existant avant de modifier
-7. **OpenClaw-first** — avant de coder, vérifier si OpenClaw a déjà le pattern dans `~/Documents/Developer/keiy/openclaw/`
-
-## STRUCTURE ACTUELLE (post-refactoring)
-
-```
-packages/cli/src/
-  brain/      (11) — identity, routing, orchestrator, relay, tool-injector
-  gateway/     (5) — telegram, hub, adapter, mcp-server
-  fleet/       (7) — mesh, sync, deploy
-  signals/     (8) — detector, watchdog, journal, patterns
-  agents/      (8) — runtime, factory, curious, templates
-  providers/  (12) — registry, backend, budget
-  security/    (5) — scanner, guards, secrets
-  tools/       (8) — registry, resources, MCPs, skills
-  training/    (5) — pipeline, improve, reflector
-  setup/       (5) — wizard, install
-  ui/          (3) — dashboard, TUI
-  utils/       (7) — config, paths, logger, db
-  index.ts     — entry point (40+ commandes, switch géant)
-  daemon.ts    — 30+ cycles background
-```
+2. **Tests verts** après CHAQUE commit
+3. **Pas de Co-Authored-By** dans les commits
+4. **Pas de mention AI** dans commits/PR
+5. **Conventional commits** : `feat:`, `fix:`, `refactor:`
+6. **Lire avant d'écrire** — toujours
+7. **OpenClaw-first** — vérifier `~/Documents/Developer/keiy/openclaw/` avant de coder
 
 ## DOCS DE RÉFÉRENCE
 
-- `docs/REX-STATUS.md` — état complet de ce qui est fait et à faire
-- `docs/REX-MODULES.md` — inventaire 155 fichiers avec descriptions
-- `docs/plans/2026-03-14-rex-refactoring-design.md` — design du refactoring
-- `docs/plans/2026-03-14-rex-worker-model.md` — plan fine-tune rex-worker
-- `docs/plans/2026-03-14-stack-audit.md` — Node.js 90% + Rust 10%
-- `docs/plans/2026-03-14-openclaw-fork-strategy.md` — ce qu'on aspire d'OpenClaw
+- `docs/REX-STATUS.md` — état complet
+- `docs/plans/2026-03-14-audit-complet-openclaw-vs-rex.md` — audit à suivre
 - `docs/plans/2026-03-14-gateway-improvements.md` — améliorations gateway
+- `docs/plans/2026-03-14-rex-worker-model.md` — plan fine-tune
 
 ---
 
-## TÂCHES POUR CODEX
+## SPRINT 1 — Token Economy + Error Handling
 
-### Tâche 1 — Déplacer les fichiers restants vers leurs domaines
+### Tâche 1.1 — Cacher REX_SYSTEM_PROMPT au niveau provider
+**Fichier** : `src/agents/runtime.ts` (lignes 555, 628)
+**Problème** : REX_SYSTEM_PROMPT (1027 tokens) envoyé à CHAQUE appel LLM.
+**Fix** :
+- Dans `runAgent()` et `streamAgent()`, ne PAS injecter REX_SYSTEM_PROMPT si le provider l'a déjà (gateway paths).
+- Créer un flag `systemPromptInjected: boolean` dans le context pour éviter les doubles.
+- Le system prompt doit être envoyé UNE SEULE FOIS par conversation, pas par message.
+**Test** : `pnpm test -- tests/unit/agent-runtime.test.ts`
+**Commit** : `fix(agents): deduplicate REX_SYSTEM_PROMPT injection — save ~1K tokens/call`
 
-~35 fichiers encore à plat dans `src/`. Les déplacer vers le domaine approprié avec shim re-export.
+### Tâche 1.2 — Remplacer 33 catch {} silencieux dans gateway
+**Fichier** : `src/gateway/telegram.ts`
+**Problème** : 33 `catch {}` qui swallow les erreurs sans logging.
+**Fix** :
+- `grep -n "catch {}" src/gateway/telegram.ts` pour les trouver tous
+- Remplacer chaque `catch {}` par `catch (e) { log.warn('...context...', e instanceof Error ? e.message : e) }`
+- Ne PAS changer la logique — juste ajouter le log
+**Pattern OpenClaw** : `~/Documents/Developer/keiy/openclaw/extensions/telegram/src/polling-session.ts` — voir comment ils loggent les erreurs
+**Test** : `pnpm build` (pas de test unitaire pour ça, juste vérifier build)
+**Commit** : `fix(gateway): replace 33 silent catch blocks with proper logging`
 
-Mapping :
-- `daemon.ts` → reste à plat (entry point daemon, comme index.ts)
-- `init.ts` → `setup/init.ts`
-- `sandbox.ts` → `utils/sandbox.ts`
-- `context.ts` + `context-loader.ts` + `preload.ts` → `brain/context.ts` (ou garder séparés dans brain/)
-- `inventory.ts` + `projects.ts` + `project-init.ts` + `project-intent.ts` → `tools/projects/`
-- `audio.ts` + `voice.ts` + `audio-logger.ts` → `utils/media/`
-- `meeting.ts` → `utils/meeting.ts`
-- `review.ts` + `workflow.ts` → `tools/workflow.ts`
-- `backup.ts` + `prune.ts` + `optimize.ts` → `utils/maintenance/`
-- `rex-runner.ts` + `rex-launcher.ts` → `brain/runner.ts`
-- `user-cycles.ts` + `user-state.ts` → `signals/user-cycles.ts`
-- `memory-check.ts` → `signals/memory-check.ts`
-- `living-cache.ts` → `utils/cache.ts`
-- `app.ts` → `utils/app.ts`
-- `metrics.ts` → `utils/metrics.ts`
-- `mcp.ts` → `tools/mcp-cli.ts`
+### Tâche 1.3 — Remplacer console.log par logger dans gateway
+**Fichier** : `src/gateway/telegram.ts`
+**Problème** : 13 `console.log()` qui polluent stdout et cassent JSON.
+**Fix** :
+- `grep -n "console.log" src/gateway/telegram.ts`
+- Remplacer par `log.info(...)` ou `log.debug(...)`
+- Import `createLogger` si pas déjà fait
+**Test** : `pnpm build`
+**Commit** : `fix(gateway): replace console.log with logger — fix JSON output pollution`
 
-Chaque fichier : `cp → fix imports (./x → ../x) → shim at old path → build → test → commit`.
+### Tâche 1.4 — Token pre-flight check
+**Fichier** : `src/agents/runtime.ts`
+**Problème** : REX envoie au LLM sans vérifier si le contexte dépasse la fenêtre.
+**Fix** :
+- Avant l'appel LLM dans `runAgent()`, estimer la taille : `chars / 4 * 1.2` (safety margin 20%)
+- Si > contextWindow du modèle → compacter (couper les messages anciens) ou warn
+- Ajouter dans `MODEL_BUDGETS` (tool-injector.ts) la `maxContextTokens` par modèle
+**Pattern OpenClaw** : `~/Documents/Developer/keiy/openclaw/src/agents/compaction.ts` — `SAFETY_MARGIN = 1.2`
+**Test** : ajouter un test unitaire `token-preflight.test.ts`
+**Commit** : `feat(agents): add token pre-flight check — prevent context overflow`
 
-### Tâche 2 — Graceful shutdown (P1)
+### Tâche 1.5 — Auth profile cooldown
+**Fichier** : `src/providers/providers.ts`
+**Problème** : Quand un provider crash/rate-limit, REX réessaie immédiatement.
+**Fix** :
+- Ajouter un `cooldownMap: Map<string, { until: number, failures: number }>`
+- Après failure : `cooldownMs = Math.min(30000, 2000 * 2^failures)`
+- Skip provider si `Date.now() < cooldownMap.get(provider).until`
+- Reset cooldown sur succès
+**Pattern OpenClaw** : `~/Documents/Developer/keiy/openclaw/src/agents/auth-profiles/usage.ts`
+**Test** : ajouter un test unitaire
+**Commit** : `feat(providers): add exponential cooldown on provider failures`
 
-Implémenter le drain propre dans `daemon.ts` et `gateway/telegram.ts` :
-- SIGTERM/SIGINT handler
-- Stop accepting (arrêter polling)
-- Drain in-flight (attendre ops en cours, max 15s timeout)
-- Cleanup (release locks, save state)
-- `process.exit(0)` au lieu de `process.exit(1)`
+---
 
-Pattern OpenClaw : voir `~/Documents/Developer/keiy/openclaw/extensions/telegram/src/polling-session.ts`
+## SPRINT 2 — Resilience
 
-### Tâche 3 — Exponential backoff + stall detection (P1)
+### Tâche 2.1 — Graceful shutdown
+**Fichiers** : `src/daemon.ts`, `src/gateway/telegram.ts`
+**Fix** :
+1. Flag `let shuttingDown = false`
+2. `process.on('SIGTERM', async () => { ... })` et `SIGINT`
+3. Stop polling / stop accepting
+4. `await Promise.allSettled([...inFlight])` avec timeout 15s
+5. Release locks, save state, log "shutdown complete"
+6. `process.exit(0)`
+**Pattern OpenClaw** : `~/Documents/Developer/keiy/openclaw/extensions/telegram/src/polling-session.ts`
+**Commit** : `feat(daemon): add graceful shutdown with 15s drain timeout`
 
-Dans `gateway/telegram.ts` :
-- Remplacer les intervals fixes par exponential backoff avec jitter (2s → 30s)
-- Ajouter stall detection watchdog (90s threshold, 30s check interval)
-- Classifier d'erreurs : recoverable vs fatal
+### Tâche 2.2 — Exponential backoff + stall detection
+**Fichier** : `src/gateway/telegram.ts`
+**Fix** :
+- Remplacer `setTimeout(3000)` hardcodé par : `delay = Math.min(30000, 2000 * 2^retryCount) + jitter`
+- Ajouter watchdog : si aucun message reçu depuis 90s et polling actif → force restart cycle
+- Classifier d'erreurs : `isRecoverableError(e)` → retry, sinon log + stop
+**Pattern OpenClaw** : polling-session.ts `TELEGRAM_POLL_RESTART_POLICY`
+**Commit** : `feat(gateway): add exponential backoff with jitter + stall detection watchdog`
 
-Pattern OpenClaw : voir polling-session.ts `TELEGRAM_POLL_RESTART_POLICY`
+### Tâche 2.3 — Delivery decoupling
+**Fichier** : nouveau `src/gateway/delivery.ts`
+**Fix** :
+- Interface `DeliveryTarget = { type: 'telegram' | 'webhook' | 'log', config: ... }`
+- `dispatchDelivery(output, target)` — envoie le résultat
+- Retry queue avec 3 tentatives + backoff
+- Outputs persistés dans event-journal pour re-delivery
+**Pattern OpenClaw** : `src/cron/isolated-agent/delivery-dispatch.ts`
+**Commit** : `feat(gateway): decouple delivery from execution — retry + persistence`
+
+---
+
+## SPRINT 3 — UX + Context
+
+### Tâche 3.1 — Help structuré par domaine
+**Fichier** : `src/index.ts`
+**Fix** :
+- `rex --help` → affiche UNIQUEMENT les catégories (Core, Memory, Fleet, Dev, etc.)
+- `rex memory --help` → affiche les commandes memory (ingest, search, categorize, etc.)
+- `rex <cmd> --help` → affiche usage + description de la commande
+- Garder le switch tel quel, juste ajouter un `case '--help':` et `case 'memory':` avec sous-help
+**Commit** : `feat(cli): add structured help by domain — rex memory --help`
+
+### Tâche 3.2 — Workspace templates
+**Fichiers** : nouveaux dans `~/.claude/rex/`
+**Fix** :
+- Créer `SOUL.md` (personnalité REX, extrait de `brain/identity.ts`)
+- Créer `USER.md` (profil Kevin — timezone, stack, préférences)
+- Modifier `brain/identity.ts` pour lire SOUL.md au lieu d'avoir le prompt hardcodé
+- Session type detection : si Telegram group → NE PAS charger MEMORY.md
+**Pattern OpenClaw** : `docs/reference/templates/AGENTS.md`
+**Commit** : `feat(brain): load identity from SOUL.md — editable without rebuild`
+
+### Tâche 3.3 — Cost tracking par provider
+**Fichier** : `src/providers/budget.ts`
+**Fix** :
+- Ajouter metadata coût par modèle : `{ model, cost: { input, output } }`
+- Tracker cumul jour/mois dans SQLite
+- Alerte Telegram si > 80% budget mensuel (`REX_MONTHLY_BUDGET` dans config)
+**Pattern OpenClaw** : `src/infra/provider-usage.ts`
+**Commit** : `feat(providers): add per-model cost tracking + monthly budget alert`
+
+---
+
+## SPRINT 4 — rex-worker + Training
+
+### Tâche 4.1 — Collecteurs de dataset
+**Fichier** : `src/training/pipeline.ts`
+**Fix** : Ajouter les collecteurs spécialisés :
+- `collectRoutingExamples()` → depuis orchestration-policy.ts
+- `collectToolSelectionExamples()` → depuis tool-injector.ts
+- `collectSignalExamples()` → depuis signal-detector.ts
+- `collectCategorizeExamples()` → depuis memory DB
+- `collectGuardExamples()` → depuis security-scanner.ts
+**Format** : JSONL chat-ml compatible
+**Commit** : `feat(training): add specialized dataset collectors for rex-worker`
+
+### Tâche 4.2 — Deploy pipeline
+**Fichier** : `src/training/pipeline.ts`
+**Fix** :
+- `rex train deploy` → merge adapter + base → GGUF → Modelfile Ollama → `ollama create rex-worker`
+- Support multi-size : 0.8B (VPS) + 4B (Mac/PC)
+**Commit** : `feat(training): add deploy pipeline — adapter → GGUF → Ollama rex-worker`
 
 ---
 
 ## QUESTIONS POUR OPUS
 
-Si Codex a des questions ou des doutes, les écrire ici :
-
-_(vide pour l'instant)_
+_(Codex écrit ses questions ici si doute sur un choix d'implémentation)_
 
 ---
 
 ## ÉTAT DU RELAY
 
 - **Créé par** : Opus, 14/03/2026
-- **Dernière mise à jour** : 14/03/2026
-- **Statut** : prêt pour Codex
+- **Dernière mise à jour** : 14/03/2026 18:30
+- **Statut** : Sprint 1 prêt pour Codex
+- **Priorité** : Sprint 1 d'abord (token economy), puis Sprint 2 (resilience)
