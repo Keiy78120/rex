@@ -1,8 +1,7 @@
 name: Release
 
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch: # manual only — auto triggers disabled
 
 permissions:
   contents: write
